@@ -11,7 +11,8 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.util.*;
 import java.util.List;
-import javax.imageio.ImageIO;
+import javax.imageio.*;
+import javax.imageio.stream.*;
 
 /**
  * HousePlan CAD Desktop Studio
@@ -360,8 +361,8 @@ public class HousePlanCADApp extends JFrame {
             else if (idx == 3) loadPreset20x30();
         });
 
-        ModernButton exportBtn = new ModernButton("Export Drawing...", new Color(2, 132, 199), Color.WHITE, new Color(56, 189, 248));
-        exportBtn.setToolTipText("Export architectural PNG or PDF in standard sheet sizes");
+        ModernButton exportBtn = new ModernButton("Export PDF...", new Color(2, 132, 199), Color.WHITE, new Color(56, 189, 248));
+        exportBtn.setToolTipText("Export architectural drawing as A4 or A3 PDF");
         exportBtn.addActionListener(e -> showExportDialog());
         ModernButton clearBtn = new ModernButton("Clear All", new Color(127, 29, 29), new Color(254, 205, 211), new Color(244, 63, 94));
         clearBtn.addActionListener(e -> clearCanvas());
@@ -5580,15 +5581,16 @@ public class HousePlanCADApp extends JFrame {
      * monochrome working drawing style or color presentation style, and PDF or PNG format.
      */
     public void showExportDialog() {
-        JDialog dlg = new JDialog(this, "Export Architectural Drawing - HDE Studio", true);
+        JDialog dlg = new JDialog(this, "Export PDF — HDE Architectural CAD Studio", true);
         dlg.setLayout(new BorderLayout());
         dlg.getContentPane().setBackground(new Color(15, 23, 42));
 
-        // Main Container: Split into Left Settings Form and Right Live Interactive Preview Panel
+        // Main Container: Left Settings + Right Live Preview
         JPanel mainContainer = new JPanel(new BorderLayout(16, 0));
         mainContainer.setOpaque(false);
         mainContainer.setBorder(new EmptyBorder(16, 20, 16, 20));
 
+        // ─── LEFT: SETTINGS FORM ───
         JPanel form = new JPanel(new GridBagLayout());
         form.setOpaque(false);
         form.setBorder(BorderFactory.createCompoundBorder(
@@ -5596,152 +5598,108 @@ public class HousePlanCADApp extends JFrame {
                 new EmptyBorder(14, 16, 14, 16)));
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.insets = new Insets(6, 5, 6, 5);
 
-        // Header info
-        JLabel titleLbl = new JLabel("ARCHITECTURAL PLAN EXPORT");
-        titleLbl.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        // Header
+        JLabel titleLbl = new JLabel("EXPORT PDF");
+        titleLbl.setFont(new Font("Segoe UI", Font.BOLD, 15));
         titleLbl.setForeground(Color.WHITE);
         gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
         form.add(titleLbl, gbc);
-
-        JLabel descLbl = new JLabel("Export high-precision drawings with furniture, finishes, and live aspect preview.");
-        descLbl.setFont(new Font("Segoe UI", Font.PLAIN, 11));
-        descLbl.setForeground(new Color(148, 163, 184));
-        gbc.gridy = 1;
-        form.add(descLbl, gbc);
-
         gbc.gridwidth = 1;
 
-        // 1. Format (PNG vs PDF)
+        // 1. Paper Size
+        gbc.gridx = 0; gbc.gridy = 1;
+        JLabel paperLbl = new JLabel("Paper Size:");
+        paperLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        paperLbl.setForeground(new Color(203, 213, 225));
+        form.add(paperLbl, gbc);
+
+        JComboBox<String> paperCombo = new JComboBox<>(new String[]{
+                "A4 (210 \u00d7 297 mm)",
+                "A3 (297 \u00d7 420 mm)"
+        });
+        styleComboBox(paperCombo);
+        gbc.gridx = 1;
+        form.add(paperCombo, gbc);
+
+        // 2. Orientation
         gbc.gridx = 0; gbc.gridy = 2;
-        JLabel fmtLbl = new JLabel("File Format:");
-        fmtLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        fmtLbl.setForeground(new Color(203, 213, 225));
-        form.add(fmtLbl, gbc);
+        JLabel orientLbl = new JLabel("Orientation:");
+        orientLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        orientLbl.setForeground(new Color(203, 213, 225));
+        form.add(orientLbl, gbc);
 
-        JComboBox<String> fmtCombo = new JComboBox<>(new String[]{
-                "PDF Document (*.pdf) - Printable Vector Sheet",
-                "PNG Image (*.png) - High-Res Raster Graphic"
+        JComboBox<String> orientCombo = new JComboBox<>(new String[]{
+                "Landscape",
+                "Portrait"
         });
-        styleComboBox(fmtCombo);
+        styleComboBox(orientCombo);
         gbc.gridx = 1;
-        form.add(fmtCombo, gbc);
+        form.add(orientCombo, gbc);
 
-        // 2. Preset Sizes & Aspect Ratios (Social Media & Architectural)
+        // 3. Plot Scale: Fit to paper
         gbc.gridx = 0; gbc.gridy = 3;
-        JLabel sizeLbl = new JLabel("Target Preset / Ratio:");
-        sizeLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        sizeLbl.setForeground(new Color(203, 213, 225));
-        form.add(sizeLbl, gbc);
+        JLabel scaleLbl = new JLabel("Plot Scale:");
+        scaleLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        scaleLbl.setForeground(new Color(203, 213, 225));
+        form.add(scaleLbl, gbc);
 
-        String[] sizePresets = new String[]{
-                "Pinterest Pin (2:3) - 1200 \u00d7 1800 (Maximized Viral Clean)",
-                "LinkedIn / Instagram Post (4:5) - 1080 \u00d7 1350",
-                "Square Post (1:1) - 1200 \u00d7 1200",
-                "YouTube Video / Thumbnail (16:9) - 1920 \u00d7 1080 Full HD",
-                "YouTube 4K UHD (16:9) - 3840 \u00d7 2160",
-                "YouTube Shorts / Reels (9:16) - 1080 \u00d7 1920",
-                "A4 Landscape Sheet (2480 \u00d7 1754 @ 300DPI)",
-                "A4 Portrait Sheet (1754 \u00d7 2480 @ 300DPI)",
-                "A3 Architectural Sheet (3508 \u00d7 2480 @ 300DPI)",
-                "Custom Size..."
-        };
-        JComboBox<String> sizeCombo = new JComboBox<>(sizePresets);
-        styleComboBox(sizeCombo);
+        JCheckBox fitScaleBox = new JCheckBox("Fit to paper", true);
+        fitScaleBox.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        fitScaleBox.setForeground(new Color(56, 189, 248));
+        fitScaleBox.setOpaque(false);
+        fitScaleBox.setSelected(true);
+        fitScaleBox.setEnabled(false);
         gbc.gridx = 1;
-        form.add(sizeCombo, gbc);
+        form.add(fitScaleBox, gbc);
 
-        // Custom Width & Height fields
+        // 4. Drawing Style
         gbc.gridx = 0; gbc.gridy = 4;
-        JLabel dimLbl = new JLabel("Dimensions (W \u00d7 H px):");
-        dimLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        dimLbl.setForeground(new Color(203, 213, 225));
-        form.add(dimLbl, gbc);
-
-        JPanel dimPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
-        dimPanel.setOpaque(false);
-        JTextField wField = new JTextField("1200", 6);
-        JTextField hField = new JTextField("1800", 6);
-        wField.setBackground(new Color(30, 41, 59)); wField.setForeground(Color.WHITE);
-        wField.setCaretColor(Color.WHITE); wField.setBorder(BorderFactory.createLineBorder(new Color(71, 85, 105)));
-        hField.setBackground(new Color(30, 41, 59)); hField.setForeground(Color.WHITE);
-        hField.setCaretColor(Color.WHITE); hField.setBorder(BorderFactory.createLineBorder(new Color(71, 85, 105)));
-
-        JLabel xLbl = new JLabel("\u00d7");
-        xLbl.setForeground(Color.WHITE);
-        dimPanel.add(wField); dimPanel.add(xLbl); dimPanel.add(hField);
-        gbc.gridx = 1;
-        form.add(dimPanel, gbc);
-
-        // 3. Layout Mode (Social Media Clean vs Contractor Working Drawing Sheet)
-        gbc.gridx = 0; gbc.gridy = 5;
-        JLabel layoutLbl = new JLabel("Layout Framing Mode:");
-        layoutLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        layoutLbl.setForeground(new Color(203, 213, 225));
-        form.add(layoutLbl, gbc);
-
-        JComboBox<String> layoutCombo = new JComboBox<>(new String[]{
-                "Social Media Clean (Maximized Plan — 92% Canvas Fill, Slim Margins)",
-                "Contractor Working Drawing (Full Sheet with Title Block Stamp & Double Border)"
-        });
-        styleComboBox(layoutCombo);
-        gbc.gridx = 1;
-        form.add(layoutCombo, gbc);
-
-        // 4. Drawing Style (Monochrome vs Color)
-        gbc.gridx = 0; gbc.gridy = 6;
         JLabel styleLbl = new JLabel("Drawing Style:");
         styleLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
         styleLbl.setForeground(new Color(203, 213, 225));
         form.add(styleLbl, gbc);
 
-        JComboBox<String> styleExportCombo = new JComboBox<>(new String[]{
-                "Monochrome - Technical Architectural Drawing (White Paper, Crisp Black Lines)",
-                "Color - Architectural Presentation (White Paper, Polished Colors)"
+        JComboBox<String> styleCombo = new JComboBox<>(new String[]{
+                "Monochrome (Black Lines on White)",
+                "Color (Architectural Presentation)"
         });
-        styleComboBox(styleExportCombo);
+        styleComboBox(styleCombo);
         gbc.gridx = 1;
-        form.add(styleExportCombo, gbc);
+        form.add(styleCombo, gbc);
 
-        // 5. Wall Hatching Pattern
-        gbc.gridx = 0; gbc.gridy = 7;
-        JLabel hatchLbl = new JLabel("Wall Hatch Pattern:");
+        // 5. Wall Hatch
+        gbc.gridx = 0; gbc.gridy = 5;
+        JLabel hatchLbl = new JLabel("Wall Hatch:");
         hatchLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
         hatchLbl.setForeground(new Color(203, 213, 225));
         form.add(hatchLbl, gbc);
 
-        JComboBox<String> hatchExportCombo = new JComboBox<>(new String[]{
-                "45\u00b0 Diagonal Masonry Hatch (ANSI31 Technical Standard)",
-                "Solid Black / Dark Poch\u00e9 (Bold Architectural Cut)",
-                "Hollow Wall (Double Hairline Contour)"
+        JComboBox<String> hatchCombo = new JComboBox<>(new String[]{
+                "45\u00b0 Diagonal (ANSI31)",
+                "Solid Black Poch\u00e9",
+                "Hollow"
         });
-        if ("SOLID".equals(wallHatchStyle)) hatchExportCombo.setSelectedIndex(1);
-        else if ("HOLLOW".equals(wallHatchStyle)) hatchExportCombo.setSelectedIndex(2);
-        else hatchExportCombo.setSelectedIndex(0);
-        styleComboBox(hatchExportCombo);
+        if ("SOLID".equals(wallHatchStyle)) hatchCombo.setSelectedIndex(1);
+        else if ("HOLLOW".equals(wallHatchStyle)) hatchCombo.setSelectedIndex(2);
+        else hatchCombo.setSelectedIndex(0);
+        styleComboBox(hatchCombo);
         gbc.gridx = 1;
-        form.add(hatchExportCombo, gbc);
+        form.add(hatchCombo, gbc);
 
-        // ─── RIGHT SIDE: LIVE EXPORT PREVIEW PANEL ───
+        // ─── RIGHT: LIVE PREVIEW ───
         JPanel previewContainer = new JPanel(new BorderLayout(0, 8));
         previewContainer.setOpaque(false);
-        previewContainer.setPreferredSize(new Dimension(380, 480));
+        previewContainer.setPreferredSize(new Dimension(380, 420));
         previewContainer.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new Color(30, 41, 59)),
                 new EmptyBorder(12, 14, 12, 14)));
 
-        JPanel previewHeader = new JPanel(new BorderLayout());
-        previewHeader.setOpaque(false);
         JLabel prevTitle = new JLabel("\u25c8 LIVE SHEET PREVIEW");
         prevTitle.setFont(new Font("Segoe UI", Font.BOLD, 12));
         prevTitle.setForeground(new Color(56, 189, 248));
-        JLabel prevSubtitle = new JLabel("Orientation & Framing Preview");
-        prevSubtitle.setFont(new Font("Segoe UI", Font.PLAIN, 10));
-        prevSubtitle.setForeground(new Color(148, 163, 184));
-        previewHeader.add(prevTitle, BorderLayout.NORTH);
-        previewHeader.add(prevSubtitle, BorderLayout.SOUTH);
-        previewContainer.add(previewHeader, BorderLayout.NORTH);
+        previewContainer.add(prevTitle, BorderLayout.NORTH);
 
         final BufferedImage[] cachedThumb = new BufferedImage[1];
         JPanel previewCanvas = new JPanel() {
@@ -5751,36 +5709,20 @@ public class HousePlanCADApp extends JFrame {
                 Graphics2D g2 = (Graphics2D) g;
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-
-                int panelW = getWidth(), panelH = getHeight();
-                // Dark drafting mat background
+                int pw = getWidth(), ph = getHeight();
                 g2.setColor(new Color(11, 17, 32));
-                g2.fillRect(0, 0, panelW, panelH);
-
+                g2.fillRect(0, 0, pw, ph);
                 if (cachedThumb[0] != null) {
                     BufferedImage thumb = cachedThumb[0];
-                    int tw = thumb.getWidth(), th = thumb.getHeight();
-                    double scale = Math.min((double) (panelW - 24) / tw, (double) (panelH - 24) / th);
-                    int drawW = (int) (tw * scale);
-                    int drawH = (int) (th * scale);
-                    int drawX = (panelW - drawW) / 2;
-                    int drawY = (panelH - drawH) / 2;
-
-                    // Sheet drop shadow
+                    double sc = Math.min((double)(pw - 24) / thumb.getWidth(), (double)(ph - 24) / thumb.getHeight());
+                    int dw = (int)(thumb.getWidth() * sc), dh = (int)(thumb.getHeight() * sc);
+                    int dx = (pw - dw) / 2, dy = (ph - dh) / 2;
                     g2.setColor(new Color(0, 0, 0, 90));
-                    g2.fillRoundRect(drawX + 4, drawY + 4, drawW, drawH, 4, 4);
-
-                    // Sheet image
-                    g2.drawImage(thumb, drawX, drawY, drawW, drawH, null);
-
-                    // Sheet outline border
+                    g2.fillRoundRect(dx + 4, dy + 4, dw, dh, 4, 4);
+                    g2.drawImage(thumb, dx, dy, dw, dh, null);
                     g2.setColor(new Color(71, 85, 105));
                     g2.setStroke(new BasicStroke(1.2f));
-                    g2.drawRect(drawX, drawY, drawW, drawH);
-                } else {
-                    g2.setColor(new Color(148, 163, 184));
-                    g2.setFont(new Font("Segoe UI", Font.ITALIC, 11));
-                    g2.drawString("Generating plan preview...", panelW / 2 - 70, panelH / 2);
+                    g2.drawRect(dx, dy, dw, dh);
                 }
             }
         };
@@ -5788,78 +5730,51 @@ public class HousePlanCADApp extends JFrame {
         previewCanvas.setBorder(BorderFactory.createLineBorder(new Color(30, 41, 59)));
         previewContainer.add(previewCanvas, BorderLayout.CENTER);
 
-        JLabel previewFooter = new JLabel("Fits 1:1 scale with all furniture & hatches", JLabel.CENTER);
+        JLabel previewFooter = new JLabel("", JLabel.CENTER);
         previewFooter.setFont(new Font("Consolas", Font.PLAIN, 10));
         previewFooter.setForeground(new Color(100, 116, 139));
         previewContainer.add(previewFooter, BorderLayout.SOUTH);
 
-        // Preview Updater method
+        // Helper: get pixel dims for current paper+orientation selection
+        // A4 @300DPI: 2480×3508, A3 @300DPI: 3508×4960
         Runnable updatePreview = () -> {
-            int tw, th;
-            try {
-                tw = Integer.parseInt(wField.getText().trim());
-                th = Integer.parseInt(hField.getText().trim());
-                if (tw < 200 || th < 200) { tw = 1200; th = 1800; }
-            } catch (Exception ex) {
-                tw = 1200; th = 1800;
-            }
-            double aspect = (double) tw / th;
-            int prevW, prevH;
-            if (aspect >= 1.0) {
-                prevW = 640;
-                prevH = (int) Math.max(200, 640 / aspect);
-            } else {
-                prevH = 640;
-                prevW = (int) Math.max(200, 640 * aspect);
-            }
-            boolean isMono = (styleExportCombo.getSelectedIndex() == 0);
-            boolean isSocial = (layoutCombo.getSelectedIndex() == 0);
-            String hStyle = hatchExportCombo.getSelectedIndex() == 0 ? "DIAGONAL_45" :
-                           (hatchExportCombo.getSelectedIndex() == 1 ? "SOLID" : "HOLLOW");
+            boolean isA3 = (paperCombo.getSelectedIndex() == 1);
+            boolean isLandscape = (orientCombo.getSelectedIndex() == 0);
+            int baseW, baseH;
+            if (isA3) { baseW = 3508; baseH = 4960; }
+            else       { baseW = 2480; baseH = 3508; }
+            int targetW = isLandscape ? Math.max(baseW, baseH) : Math.min(baseW, baseH);
+            int targetH = isLandscape ? Math.min(baseW, baseH) : Math.max(baseW, baseH);
 
-            cachedThumb[0] = renderArchitecturalDrawing(prevW, prevH, isMono, isSocial, hStyle);
-            previewFooter.setText("Aspect Ratio: " + tw + " \u00d7 " + th + " px (" + (isSocial ? "Social Media Clean" : "Contractor Sheet") + ")");
+            boolean isMono = (styleCombo.getSelectedIndex() == 0);
+            String hStyle = hatchCombo.getSelectedIndex() == 0 ? "DIAGONAL_45" :
+                           (hatchCombo.getSelectedIndex() == 1 ? "SOLID" : "HOLLOW");
+
+            // Generate scaled-down preview
+            double aspect = (double) targetW / targetH;
+            int prevW, prevH;
+            if (aspect >= 1.0) { prevW = 640; prevH = (int)(640 / aspect); }
+            else               { prevH = 640; prevW = (int)(640 * aspect); }
+
+            cachedThumb[0] = renderArchitecturalDrawing(prevW, prevH, isMono, false, hStyle);
+            String paperName = isA3 ? "A3" : "A4";
+            String orientName = isLandscape ? "Landscape" : "Portrait";
+            previewFooter.setText(paperName + " " + orientName + " | " + targetW + " \u00d7 " + targetH + " px @ 300 DPI | Fit to Paper");
             previewCanvas.repaint();
         };
 
-        // Wire event listeners to trigger live preview refresh
-        sizeCombo.addActionListener(e -> {
-            int idx = sizeCombo.getSelectedIndex();
-            switch (idx) {
-                case 0: wField.setText("1200"); hField.setText("1800"); layoutCombo.setSelectedIndex(0); break; // Pinterest
-                case 1: wField.setText("1080"); hField.setText("1350"); layoutCombo.setSelectedIndex(0); break; // LinkedIn/Insta
-                case 2: wField.setText("1200"); hField.setText("1200"); layoutCombo.setSelectedIndex(0); break; // Square
-                case 3: wField.setText("1920"); hField.setText("1080"); break; // YouTube 16:9
-                case 4: wField.setText("3840"); hField.setText("2160"); break; // 4K
-                case 5: wField.setText("1080"); hField.setText("1920"); layoutCombo.setSelectedIndex(0); break; // Shorts
-                case 6: wField.setText("2480"); hField.setText("1754"); layoutCombo.setSelectedIndex(1); break; // A4 L
-                case 7: wField.setText("1754"); hField.setText("2480"); layoutCombo.setSelectedIndex(1); break; // A4 P
-                case 8: wField.setText("3508"); hField.setText("2480"); layoutCombo.setSelectedIndex(1); break; // A3
-                default: break;
-            }
-            updatePreview.run();
-        });
+        paperCombo.addActionListener(e -> updatePreview.run());
+        orientCombo.addActionListener(e -> updatePreview.run());
+        styleCombo.addActionListener(e -> updatePreview.run());
+        hatchCombo.addActionListener(e -> updatePreview.run());
 
-        layoutCombo.addActionListener(e -> updatePreview.run());
-        styleExportCombo.addActionListener(e -> updatePreview.run());
-        hatchExportCombo.addActionListener(e -> updatePreview.run());
-
-        javax.swing.event.DocumentListener docListener = new javax.swing.event.DocumentListener() {
-            public void insertUpdate(javax.swing.event.DocumentEvent e) { updatePreview.run(); }
-            public void removeUpdate(javax.swing.event.DocumentEvent e) { updatePreview.run(); }
-            public void changedUpdate(javax.swing.event.DocumentEvent e) { updatePreview.run(); }
-        };
-        wField.getDocument().addDocumentListener(docListener);
-        hField.getDocument().addDocumentListener(docListener);
-
-        // Initial preview generation
         updatePreview.run();
 
         mainContainer.add(form, BorderLayout.CENTER);
         mainContainer.add(previewContainer, BorderLayout.EAST);
         dlg.add(mainContainer, BorderLayout.CENTER);
 
-        // Buttons
+        // ─── BUTTONS ───
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 14));
         btnPanel.setOpaque(false);
         btnPanel.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(30, 41, 59)));
@@ -5867,30 +5782,50 @@ public class HousePlanCADApp extends JFrame {
         ModernButton cancelBtn = new ModernButton("Cancel", new Color(30, 41, 59), new Color(203, 213, 225), new Color(71, 85, 105));
         cancelBtn.addActionListener(e -> dlg.dispose());
 
-        ModernButton doExportBtn = new ModernButton("\u2913 Export Drawing", new Color(2, 132, 199), Color.WHITE, new Color(56, 189, 248));
-        doExportBtn.setPreferredSize(new Dimension(140, 32));
+        ModernButton doExportBtn = new ModernButton("\u2913 Export PDF", new Color(2, 132, 199), Color.WHITE, new Color(56, 189, 248));
+        doExportBtn.setPreferredSize(new Dimension(130, 32));
         doExportBtn.addActionListener(e -> {
-            int targetW, targetH;
-            try {
-                targetW = Integer.parseInt(wField.getText().trim());
-                targetH = Integer.parseInt(hField.getText().trim());
-                if (targetW < 200 || targetH < 200 || targetW > 8000 || targetH > 8000) {
-                    JOptionPane.showMessageDialog(dlg, "Please specify dimensions between 200 and 8000 pixels.", "Invalid Size", JOptionPane.WARNING_MESSAGE);
-                    return;
-                }
-            } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(dlg, "Invalid width or height numeric value.", "Invalid Input", JOptionPane.ERROR_MESSAGE);
-                return;
-            }
+            boolean isA3 = (paperCombo.getSelectedIndex() == 1);
+            boolean isLandscape = (orientCombo.getSelectedIndex() == 0);
+            int baseW, baseH;
+            if (isA3) { baseW = 3508; baseH = 4960; }
+            else       { baseW = 2480; baseH = 3508; }
+            int targetW = isLandscape ? Math.max(baseW, baseH) : Math.min(baseW, baseH);
+            int targetH = isLandscape ? Math.min(baseW, baseH) : Math.max(baseW, baseH);
 
-            boolean isMonochrome = (styleExportCombo.getSelectedIndex() == 0);
-            boolean isPdf = (fmtCombo.getSelectedIndex() == 0);
-            boolean isSocialClean = (layoutCombo.getSelectedIndex() == 0);
-            String exportWallHatch = hatchExportCombo.getSelectedIndex() == 0 ? "DIAGONAL_45" :
-                                    (hatchExportCombo.getSelectedIndex() == 1 ? "SOLID" : "HOLLOW");
+            boolean isMono = (styleCombo.getSelectedIndex() == 0);
+            String hatch = hatchCombo.getSelectedIndex() == 0 ? "DIAGONAL_45" :
+                          (hatchCombo.getSelectedIndex() == 1 ? "SOLID" : "HOLLOW");
+
+            String paperName = isA3 ? "A3" : "A4";
+            String orientName = isLandscape ? "Landscape" : "Portrait";
+            String styleTag = isMono ? "Mono" : "Color";
+            String defName = "HDE_Plan_" + paperName + "_" + orientName + "_" + styleTag + ".pdf";
 
             dlg.dispose();
-            performArchitecturalExport(targetW, targetH, isMonochrome, isPdf, isSocialClean, exportWallHatch);
+
+            JFileChooser fc = new JFileChooser();
+            fc.setSelectedFile(new File(defName));
+            if (fc.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+                File dest = fc.getSelectedFile();
+                if (!dest.getName().toLowerCase().endsWith(".pdf")) {
+                    dest = new File(dest.getParentFile(), dest.getName() + ".pdf");
+                }
+                try {
+                    BufferedImage img = renderArchitecturalDrawing(targetW, targetH, isMono, false, hatch);
+                    writeImageToPdf(img, dest);
+                    JOptionPane.showMessageDialog(this,
+                            "PDF exported successfully:\n" + dest.getAbsolutePath() +
+                            "\n\nPaper: " + paperName + " " + orientName +
+                            "\nSize: " + targetW + " \u00d7 " + targetH + " px (300 DPI)" +
+                            "\nScale: Fit to Paper",
+                            "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(this,
+                            "Export failed: " + ex.getMessage(),
+                            "Export Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
         });
 
         btnPanel.add(cancelBtn);
@@ -5900,40 +5835,6 @@ public class HousePlanCADApp extends JFrame {
         dlg.pack();
         dlg.setLocationRelativeTo(this);
         dlg.setVisible(true);
-    }
-
-    private void performArchitecturalExport(int targetW, int targetH, boolean isMonochrome, boolean isPdf, boolean isSocialClean, String hatchStyle) {
-        String ext = isPdf ? "pdf" : "png";
-        String layoutTag = isSocialClean ? "SocialClean" : "WorkingSheet";
-        String styleTag = isMonochrome ? "Monochrome" : "Color";
-        String defName = "HDE_Plan_" + layoutTag + "_" + styleTag + "_" + targetW + "x" + targetH + "." + ext;
-
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setSelectedFile(new File(defName));
-        if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
-            File dest = fileChooser.getSelectedFile();
-            if (!dest.getName().toLowerCase().endsWith("." + ext)) {
-                dest = new File(dest.getParentFile(), dest.getName() + "." + ext);
-            }
-
-            try {
-                BufferedImage renderedImage = renderArchitecturalDrawing(targetW, targetH, isMonochrome, isSocialClean, hatchStyle);
-                if (isPdf) {
-                    writeImageToPdf(renderedImage, dest);
-                } else {
-                    ImageIO.write(renderedImage, "png", dest);
-                }
-                JOptionPane.showMessageDialog(this,
-                        "Successfully exported architectural drawing:\n" + dest.getAbsolutePath() +
-                        "\n\nSize: " + targetW + " \u00d7 " + targetH + " px (" + ext.toUpperCase() + ")" +
-                        "\nLayout: " + (isSocialClean ? "Social Media Clean (92% Canvas Fill)" : "Contractor Sheet (Title Block)"),
-                        "Export Complete", JOptionPane.INFORMATION_MESSAGE);
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this,
-                        "Failed to export drawing: " + ex.getMessage(),
-                        "Export Error", JOptionPane.ERROR_MESSAGE);
-            }
-        }
     }
 
 
@@ -6439,12 +6340,15 @@ public class HousePlanCADApp extends JFrame {
             double c3X = tbX + col1W + col2W + 14;
             g2.setFont(new Font("Segoe UI", Font.BOLD, Math.max(9, (int) (titleBlockHeight * 0.18))));
             g2.setColor(isMonochrome ? Color.BLACK : new Color(15, 23, 42));
-            g2.drawString("SHEET NO: WD-01", (float) c3X, (float) (titleBlockY + titleBlockHeight * 0.34));
+            boolean isLandscape = targetW >= targetH;
+            boolean isA3 = Math.max(targetW, targetH) >= 4000;
+            String sheetTag = (isA3 ? "A3" : "A4") + " " + (isLandscape ? "LANDSCAPE" : "PORTRAIT");
+            g2.drawString("SHEET : " + sheetTag + " (WD-01)", (float) c3X, (float) (titleBlockY + titleBlockHeight * 0.34));
             g2.setFont(new Font("Consolas", Font.PLAIN, Math.max(9, (int) (titleBlockHeight * 0.14))));
             g2.setColor(isMonochrome ? Color.BLACK : new Color(71, 85, 105));
-            g2.drawString("SCALE: 1/4\" = 1'-0\" (N.T.S.)", (float) c3X, (float) (titleBlockY + titleBlockHeight * 0.58));
+            g2.drawString("SCALE : FIT TO PAPER", (float) c3X, (float) (titleBlockY + titleBlockHeight * 0.58));
             String dateStr = new java.text.SimpleDateFormat("yyyy-MM-dd").format(new Date());
-            g2.drawString("DATE : " + dateStr + " | RES: " + targetW + "x" + targetH, (float) c3X, (float) (titleBlockY + titleBlockHeight * 0.82));
+            g2.drawString("DATE  : " + dateStr + " | 300 DPI", (float) c3X, (float) (titleBlockY + titleBlockHeight * 0.82));
         }
 
         g2.dispose();
@@ -6456,21 +6360,42 @@ public class HousePlanCADApp extends JFrame {
      * Generates a fully compliant, self-contained PDF 1.4 file with high-definition DCTDecode raster image.
      */
     private void writeImageToPdf(BufferedImage img, File pdfFile) throws IOException {
+        boolean isLandscape = img.getWidth() >= img.getHeight();
+        boolean isA3 = Math.max(img.getWidth(), img.getHeight()) >= 4000;
+        int pagePtW = isA3 ? (isLandscape ? 1191 : 842) : (isLandscape ? 842 : 595);
+        int pagePtH = isA3 ? (isLandscape ? 842 : 1191) : (isLandscape ? 595 : 842);
+        writeImageToPdf(img, pdfFile, pagePtW, pagePtH);
+    }
+
+    private void writeImageToPdf(BufferedImage img, File pdfFile, int pagePtW, int pagePtH) throws IOException {
         ByteArrayOutputStream imgBaos = new ByteArrayOutputStream();
-        ImageIO.write(img, "jpeg", imgBaos);
+        Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("jpeg");
+        if (writers.hasNext()) {
+            ImageWriter writer = writers.next();
+            ImageWriteParam param = writer.getDefaultWriteParam();
+            param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+            param.setCompressionQuality(0.95f);
+            try (ImageOutputStream ios = ImageIO.createImageOutputStream(imgBaos)) {
+                writer.setOutput(ios);
+                writer.write(null, new IIOImage(img, null, null), param);
+            }
+            writer.dispose();
+        } else {
+            ImageIO.write(img, "jpeg", imgBaos);
+        }
         byte[] imgBytes = imgBaos.toByteArray();
 
-        int w = img.getWidth();
-        int h = img.getHeight();
+        int imgW = img.getWidth();
+        int imgH = img.getHeight();
 
         String obj1 = "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n";
         String obj2 = "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n";
-        String obj3 = "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + w + " " + h + "] /Resources << /XObject << /Im1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n";
+        String obj3 = "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + pagePtW + " " + pagePtH + "] /Resources << /XObject << /Im1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n";
 
-        String obj4Header = "4 0 obj\n<< /Type /XObject /Subtype /Image /Width " + w + " /Height " + h + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + imgBytes.length + " >>\nstream\n";
+        String obj4Header = "4 0 obj\n<< /Type /XObject /Subtype /Image /Width " + imgW + " /Height " + imgH + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + imgBytes.length + " >>\nstream\n";
         String obj4Footer = "\nendstream\nendobj\n";
 
-        String contentStream = "q\n" + w + " 0 0 " + h + " 0 0 cm\n/Im1 Do\nQ\n";
+        String contentStream = "q\n" + pagePtW + " 0 0 " + pagePtH + " 0 0 cm\n/Im1 Do\nQ\n";
         byte[] contentBytes = contentStream.getBytes(java.nio.charset.StandardCharsets.US_ASCII);
         String obj5 = "5 0 obj\n<< /Length " + contentBytes.length + " >>\nstream\n" + contentStream + "endstream\nendobj\n";
 
