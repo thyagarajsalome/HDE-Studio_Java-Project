@@ -1,0 +1,13 @@
+# Compiled class files
+*.class
+cadstudio/
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+
+# OS and temp files
+*.log
+Thumbs.db
+Desktop.ini
