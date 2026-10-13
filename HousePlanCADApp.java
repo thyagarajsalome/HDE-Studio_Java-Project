@@ -5862,40 +5862,49 @@ public class HousePlanCADApp extends JFrame {
         g2.fillRect(0, 0, targetW, targetH);
 
         // Margins & Framing
+        double baseDim = Math.min(targetW, targetH);
         double padOuter, padInner;
         double titleBlockHeight = 0;
         double titleBlockY = targetH;
 
         if (isSocialClean) {
-            // Tight margins for maximized visual impact on Pinterest / YouTube / LinkedIn / Instagram
-            padOuter = Math.min(targetW, targetH) * 0.018;
-            padInner = Math.min(targetW, targetH) * 0.024;
-            // Clean subtle hairline outer frame
+            padOuter = baseDim * 0.018;
+            padInner = baseDim * 0.024;
             g2.setColor(isMonochrome ? new Color(180, 180, 180) : new Color(203, 213, 225));
             g2.setStroke(new BasicStroke(1.0f));
             g2.draw(new Rectangle2D.Double(padInner, padInner, targetW - 2 * padInner, targetH - 2 * padInner));
         } else {
-            // Contractor sheet: Double architectural border & full title stamp table
-            padOuter = Math.min(targetW, targetH) * 0.025;
-            padInner = Math.min(targetW, targetH) * 0.035;
-            titleBlockHeight = Math.max(68.0, targetH * 0.085);
+            // Standard AutoCAD border & slim, perfectly proportional title block strip
+            padOuter = baseDim * 0.018;
+            padInner = baseDim * 0.026;
+            titleBlockHeight = Math.max(48.0, baseDim * 0.046);
             titleBlockY = targetH - padInner - titleBlockHeight;
 
             g2.setColor(isMonochrome ? Color.BLACK : new Color(30, 41, 59));
-            g2.setStroke(new BasicStroke(1.2f));
+            g2.setStroke(new BasicStroke(1.0f));
             g2.draw(new Rectangle2D.Double(padOuter, padOuter, targetW - 2 * padOuter, targetH - 2 * padOuter));
-            g2.setStroke(new BasicStroke(2.4f));
+            g2.setStroke(new BasicStroke(2.0f));
             g2.draw(new Rectangle2D.Double(padInner, padInner, targetW - 2 * padInner, targetH - 2 * padInner));
         }
 
-        // 2. Compute Drawing Bounding Box
-        double minX = Double.MAX_VALUE, maxX = -Double.MAX_VALUE;
-        double minY = Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
+        // 2. Compute Drawing Bounding Box & Architectural Footprint
+        double rawMinX = Double.MAX_VALUE, rawMaxX = -Double.MAX_VALUE;
+        double rawMinY = Double.MAX_VALUE, rawMaxY = -Double.MAX_VALUE;
 
         for (Wall w : walls) {
-            minX = Math.min(minX, Math.min(w.x1, w.x2)); maxX = Math.max(maxX, Math.max(w.x1, w.x2));
-            minY = Math.min(minY, Math.min(w.y1, w.y2)); maxY = Math.max(maxY, Math.max(w.y1, w.y2));
+            rawMinX = Math.min(rawMinX, Math.min(w.x1, w.x2)); rawMaxX = Math.max(rawMaxX, Math.max(w.x1, w.x2));
+            rawMinY = Math.min(rawMinY, Math.min(w.y1, w.y2)); rawMaxY = Math.max(rawMaxY, Math.max(w.y1, w.y2));
         }
+        for (CADElement el : elements) {
+            if (el.type.startsWith("floor-") || el.type.equals("room") || el.type.equals("wall")) {
+                rawMinX = Math.min(rawMinX, el.x); rawMaxX = Math.max(rawMaxX, el.x + el.w);
+                rawMinY = Math.min(rawMinY, el.y); rawMaxY = Math.max(rawMinY, el.y + el.h);
+            }
+        }
+
+        double minX = rawMinX, maxX = rawMaxX;
+        double minY = rawMinY, maxY = rawMaxY;
+
         for (CADElement el : elements) {
             minX = Math.min(minX, el.x); maxX = Math.max(maxX, el.x + el.w);
             minY = Math.min(minY, el.y); maxY = Math.max(maxY, el.y + el.h);
@@ -5907,9 +5916,20 @@ public class HousePlanCADApp extends JFrame {
 
         if (walls.isEmpty() && elements.isEmpty()) {
             minX = 0; maxX = 800; minY = 0; maxY = 600;
+            rawMinX = 0; rawMaxX = 800; rawMinY = 0; rawMaxY = 600;
         }
 
-        double modelMargin = isSocialClean ? (1.5 * FT_PX) : (3.0 * FT_PX);
+        // Calculate building footprint size in feet and area in sq ft
+        double footprintW_Px = (rawMaxX > rawMinX && rawMaxX < Double.MAX_VALUE / 2) ? (rawMaxX - rawMinX) : (30.0 * FT_PX);
+        double footprintH_Px = (rawMaxY > rawMinY && rawMaxY < Double.MAX_VALUE / 2) ? (rawMaxY - rawMinY) : (40.0 * FT_PX);
+        int planWidthFt = Math.max(1, (int) Math.round(footprintW_Px / FT_PX));
+        int planDepthFt = Math.max(1, (int) Math.round(footprintH_Px / FT_PX));
+        long totalAreaSqFt = (long) planWidthFt * (long) planDepthFt;
+
+        String planSizeText = planWidthFt + "' \u00d7 " + planDepthFt + "' FT";
+        String totalAreaText = String.format("%,d SQ.FT.", totalAreaSqFt);
+
+        double modelMargin = isSocialClean ? (1.5 * FT_PX) : (2.5 * FT_PX);
         minX -= modelMargin; maxX += modelMargin;
         minY -= modelMargin; maxY += modelMargin;
 
@@ -5923,8 +5943,8 @@ public class HousePlanCADApp extends JFrame {
             availDrawW = targetW - 2.0 * padInner - 16.0;
             availDrawH = targetH - 2.0 * padInner - 16.0;
         } else {
-            availDrawW = targetW - 2.0 * padInner - 24.0;
-            availDrawH = (titleBlockY - padInner) - 24.0;
+            availDrawW = targetW - 2.0 * padInner - 20.0;
+            availDrawH = (titleBlockY - padInner) - 20.0;
         }
 
         double scale = Math.min(availDrawW / boxW, availDrawH / boxH);
@@ -6275,80 +6295,103 @@ public class HousePlanCADApp extends JFrame {
         // 4. Branding & Title Treatment
         if (isSocialClean) {
             // Sleek architectural brand watermark in bottom-right corner (leaves maximum space for plan)
-            String brandTitle = "HDE STUDIO \u00b7 ARCHITECTURAL CAD";
-            String brandSub = "WALL LAYOUT & TECHNICAL WORKING DRAWING";
-            g2.setFont(new Font("Segoe UI", Font.BOLD, Math.max(11, (int) (Math.min(targetW, targetH) * 0.016))));
+            String brandTitle = "HDE STUDIO";
+            String brandSub = "PLAN: " + planSizeText + "  |  " + totalAreaText;
+            int brandFontSize = Math.max(10, (int) (baseDim * 0.007));
+            g2.setFont(new Font("Segoe UI", Font.BOLD, brandFontSize));
             FontMetrics fmB = g2.getFontMetrics();
-            int bW = fmB.stringWidth(brandTitle);
+            int bW = Math.max(fmB.stringWidth(brandTitle), fmB.stringWidth(brandSub));
             float bx = (float) (targetW - padInner - bW - 16);
             float by = (float) (targetH - padInner - 24);
 
-            g2.setColor(new Color(255, 255, 255, 220));
-            g2.fillRoundRect((int) bx - 8, (int) by - fmB.getAscent() - 4, bW + 16, fmB.getHeight() + 18, 6, 6);
+            g2.setColor(new Color(255, 255, 255, 230));
+            g2.fillRoundRect((int) bx - 8, (int) by - fmB.getAscent() - 4, bW + 16, fmB.getHeight() + 20, 6, 6);
             g2.setColor(isMonochrome ? new Color(200, 200, 200) : new Color(226, 232, 240));
             g2.setStroke(new BasicStroke(1.0f));
-            g2.drawRoundRect((int) bx - 8, (int) by - fmB.getAscent() - 4, bW + 16, fmB.getHeight() + 18, 6, 6);
+            g2.drawRoundRect((int) bx - 8, (int) by - fmB.getAscent() - 4, bW + 16, fmB.getHeight() + 20, 6, 6);
 
             g2.setColor(isMonochrome ? Color.BLACK : new Color(2, 132, 199));
             g2.drawString(brandTitle, bx, by);
 
-            g2.setFont(new Font("Consolas", Font.PLAIN, Math.max(8, (int) (Math.min(targetW, targetH) * 0.011))));
+            g2.setFont(new Font("Consolas", Font.PLAIN, Math.max(8, (int) (baseDim * 0.0048))));
             g2.setColor(isMonochrome ? new Color(80, 80, 80) : new Color(100, 116, 139));
             g2.drawString(brandSub, bx, by + 13);
 
         } else {
-            // Contractor Title Block Stamp (Full Width Bottom Table)
+            // Sleek AutoCAD Title Block & Legal Information Bar (Small fonts, no overlapping)
             double tbX = padInner;
             double tbW = targetW - 2.0 * padInner;
             g2.setColor(Color.WHITE);
             g2.fill(new Rectangle2D.Double(tbX, titleBlockY, tbW, titleBlockHeight));
 
             g2.setColor(isMonochrome ? Color.BLACK : new Color(30, 41, 59));
-            g2.setStroke(new BasicStroke(2.0f));
+            g2.setStroke(new BasicStroke(1.5f));
             g2.draw(new Rectangle2D.Double(tbX, titleBlockY, tbW, titleBlockHeight));
 
-            double col1W = tbW * 0.40;
-            double col2W = tbW * 0.35;
-            double col3W = tbW - col1W - col2W;
+            double midY = titleBlockY + titleBlockHeight * 0.50;
+            g2.setStroke(new BasicStroke(0.8f));
+            g2.draw(new Line2D.Double(tbX, midY, tbX + tbW, midY));
 
-            g2.draw(new Line2D.Double(tbX + col1W, titleBlockY, tbX + col1W, titleBlockY + titleBlockHeight));
-            g2.draw(new Line2D.Double(tbX + col1W + col2W, titleBlockY, tbX + col1W + col2W, titleBlockY + titleBlockHeight));
+            // Fonts: Small, elegant, perfectly proportional
+            int brandFontSize = Math.max(9, (int) (baseDim * 0.0068));
+            int infoFontSize  = Math.max(7, (int) (baseDim * 0.0046));
+            int discFontSize  = Math.max(6, (int) (baseDim * 0.0036));
 
-            // Column 1: Firm & Brand
-            g2.setFont(new Font("Segoe UI", Font.BOLD, Math.max(12, (int) (titleBlockHeight * 0.24))));
+            Font brandFont = new Font("Segoe UI", Font.BOLD, brandFontSize);
+            Font infoFont  = new Font("Segoe UI", Font.BOLD, infoFontSize);
+            Font discFont  = new Font("Segoe UI", Font.PLAIN, discFontSize);
+
+            // Row 1 (Top Section): Firm Brand (Left) + Plan Size, Area, Scale, Sheet (Right)
+            g2.setFont(brandFont);
+            FontMetrics fmBrand = g2.getFontMetrics();
+            float r1Baseline = (float) (titleBlockY + (titleBlockHeight * 0.50 + fmBrand.getAscent() - fmBrand.getDescent()) / 2.0);
+
             g2.setColor(isMonochrome ? Color.BLACK : new Color(2, 132, 199));
-            g2.drawString("HDE STUDIO", (float) (tbX + 16), (float) (titleBlockY + titleBlockHeight * 0.38));
+            g2.drawString("HDE STUDIO", (float) (tbX + 16), r1Baseline);
 
-            g2.setFont(new Font("Segoe UI", Font.BOLD, Math.max(9, (int) (titleBlockHeight * 0.16))));
-            g2.setColor(isMonochrome ? Color.BLACK : new Color(71, 85, 105));
-            g2.drawString("ARCHITECTURAL DESIGN & DRAFTING STUDIO", (float) (tbX + 16), (float) (titleBlockY + titleBlockHeight * 0.64));
-            g2.setFont(new Font("Consolas", Font.PLAIN, Math.max(8, (int) (titleBlockHeight * 0.13))));
-            g2.drawString("CAD WORKING DRAWING SYSTEM", (float) (tbX + 16), (float) (titleBlockY + titleBlockHeight * 0.85));
-
-            // Column 2: Drawing Title & Status
-            double c2X = tbX + col1W + 14;
-            g2.setFont(new Font("Segoe UI", Font.BOLD, Math.max(10, (int) (titleBlockHeight * 0.20))));
-            g2.setColor(isMonochrome ? Color.BLACK : new Color(15, 23, 42));
-            g2.drawString("WALL LAYOUT & WORKING DRAWING", (float) c2X, (float) (titleBlockY + titleBlockHeight * 0.36));
-
-            g2.setFont(new Font("Consolas", Font.PLAIN, Math.max(9, (int) (titleBlockHeight * 0.15))));
-            g2.setColor(isMonochrome ? Color.BLACK : new Color(71, 85, 105));
-            g2.drawString("STATUS: APPROVED FOR CONSTRUCTION", (float) c2X, (float) (titleBlockY + titleBlockHeight * 0.62));
-            g2.drawString("HATCH : " + ("DIAGONAL_45".equals(activeHatch) ? "ANSI31 45\u00b0 MASONRY" : activeHatch), (float) c2X, (float) (titleBlockY + titleBlockHeight * 0.84));
-
-            // Column 3: Sheet Specs & Date
-            double c3X = tbX + col1W + col2W + 14;
-            g2.setFont(new Font("Segoe UI", Font.BOLD, Math.max(9, (int) (titleBlockHeight * 0.18))));
-            g2.setColor(isMonochrome ? Color.BLACK : new Color(15, 23, 42));
+            // Row 1 Right: Plan Size | Total Area | Scale | Sheet
+            g2.setFont(infoFont);
+            FontMetrics fmInfo = g2.getFontMetrics();
             boolean isLandscape = targetW >= targetH;
             boolean isA3 = Math.max(targetW, targetH) >= 4000;
             String sheetTag = (isA3 ? "A3" : "A4") + " " + (isLandscape ? "LANDSCAPE" : "PORTRAIT");
-            g2.drawString("SHEET : " + sheetTag + " (WD-01)", (float) c3X, (float) (titleBlockY + titleBlockHeight * 0.34));
-            g2.setFont(new Font("Consolas", Font.PLAIN, Math.max(9, (int) (titleBlockHeight * 0.14))));
-            g2.setColor(isMonochrome ? Color.BLACK : new Color(71, 85, 105));
-            g2.drawString("SCALE : FIT TO PAPER", (float) c3X, (float) (titleBlockY + titleBlockHeight * 0.58));
-            String dateStr = new java.text.SimpleDateFormat("yyyy-MM-dd").format(new Date());
-            g2.drawString("DATE  : " + dateStr + " | 300 DPI", (float) c3X, (float) (titleBlockY + titleBlockHeight * 0.82));
+
+            String specStr = "PLAN SIZE: " + planSizeText + "   |   TOTAL AREA: " + totalAreaText +
+                             "   |   SCALE: FIT TO PAPER   |   SHEET: " + sheetTag;
+            float specW = fmInfo.stringWidth(specStr);
+            float specX = (float) (tbX + tbW - specW - 16);
+            float brandEnd = (float) (tbX + 16 + fmBrand.stringWidth("HDE STUDIO") + 24);
+
+            g2.setColor(isMonochrome ? Color.BLACK : new Color(51, 65, 85));
+            if (specX > brandEnd) {
+                g2.drawString(specStr, specX, r1Baseline);
+            } else {
+                // In narrow portrait, show compact specs to avoid any overlap
+                String compactSpec = "PLAN: " + planSizeText + " (" + totalAreaText + ")   |   " + sheetTag;
+                float cW = fmInfo.stringWidth(compactSpec);
+                float cX = (float) (tbX + tbW - cW - 16);
+                g2.drawString(compactSpec, Math.max(brandEnd, cX), r1Baseline);
+            }
+
+            // Row 2 (Bottom Section): Disclaimer Notice
+            g2.setFont(discFont);
+            FontMetrics fmDisc = g2.getFontMetrics();
+            float r2Baseline = (float) (midY + (titleBlockHeight * 0.50 + fmDisc.getAscent() - fmDisc.getDescent()) / 2.0);
+
+            String disclaimer = "DISCLAIMER: This plan is created in HDE Studio planner and this plan serves as concept design only, you may generate complete architectural floor plan, use only after Licensed architectural approval only.";
+
+            g2.setColor(isMonochrome ? new Color(70, 70, 70) : new Color(100, 116, 139));
+            float discW = fmDisc.stringWidth(disclaimer);
+            if (discW + 32 <= tbW) {
+                g2.drawString(disclaimer, (float) (tbX + 16), r2Baseline);
+            } else {
+                // If width is constrained (e.g. small preview), split cleanly into two sub-lines
+                String p1 = "DISCLAIMER: This plan is created in HDE Studio planner and this plan serves as concept design only,";
+                String p2 = "you may generate complete architectural floor plan, use only after Licensed architectural approval only.";
+                float halfH = (float) (titleBlockHeight * 0.25);
+                g2.drawString(p1, (float) (tbX + 16), (float) (midY + halfH * 0.8));
+                g2.drawString(p2, (float) (tbX + 16), (float) (midY + halfH * 1.8));
+            }
         }
 
         g2.dispose();
