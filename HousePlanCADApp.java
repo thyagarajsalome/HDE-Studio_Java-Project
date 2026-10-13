@@ -289,7 +289,8 @@ public class HousePlanCADApp extends JFrame {
     private ButtonGroup toolButtonGroup;
     private ModernButton undoBtn, redoBtn;
 
-    private JTextField propNameField, propWidthField, propHeightField;
+    private JTextArea propNameField;
+    private JTextField propWidthField, propHeightField;
     private JSlider propRotSlider;
     private JLabel propTypeBadge;
     private JPanel propContentPanel, propEmptyPanel, propMultiPanel;
@@ -305,7 +306,7 @@ public class HousePlanCADApp extends JFrame {
     private void initUI() {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(1480, 920);
-        setMinimumSize(new Dimension(1100, 700));
+        setMinimumSize(new Dimension(1024, 600));
         setLocationRelativeTo(null);
         getContentPane().setLayout(new BorderLayout());
 
@@ -437,52 +438,7 @@ public class HousePlanCADApp extends JFrame {
         toolsGroup.add(dimBtn);
         toolsGroup.add(autoJoinBtn);
         toolsGroup.add(panBtn);
-        toolbar.add(toolsGroup, BorderLayout.WEST);
-
-        // Precision Controls
-        JPanel snapGroup = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 4));
-        snapGroup.setOpaque(false);
-
-        gridBtn = new ModernToggle("Grid [F7]", true,
-                new Color(56, 189, 248), new Color(14, 116, 144), new Color(15, 23, 42));
-        gridBtn.setToolTipText("AutoCAD Grid Display (F7): Hide or show background drafting grid lines");
-        gridBtn.addActionListener(e -> { showGrid = gridBtn.isSelected(); viewportPanel.repaint(); });
-
-        orthoBtn = new ModernToggle("ORTHO [F8]", false,
-                new Color(251, 191, 36), new Color(245, 158, 11), new Color(69, 26, 3));
-        orthoBtn.addActionListener(e -> { orthoMode = orthoBtn.isSelected(); viewportPanel.repaint(); });
-
-        snapBtn = new ModernToggle("Snap [F3]", false,
-                new Color(52, 211, 153), new Color(16, 185, 129), new Color(6, 78, 59));
-        snapBtn.setToolTipText("Snap to 1' increments (Smooth by default)");
-        snapBtn.addActionListener(e -> {
-            snapToGrid = snapBtn.isSelected();
-            snapStepFeet = snapToGrid ? 1.0 : 0.0;
-            viewportPanel.repaint();
-        });
-
-        snapCursorBtn = new ModernToggle("Cursor [F9]", false,
-                new Color(251, 191, 36), new Color(234, 179, 8), new Color(69, 26, 3));
-        snapCursorBtn.addActionListener(e -> { showSnapCursor = snapCursorBtn.isSelected(); viewportPanel.repaint(); });
-
-        collisionBtn = new ModernToggle("Collision [F4]", true,
-                new Color(244, 63, 94), new Color(225, 29, 72), new Color(76, 5, 25));
-        collisionBtn.addActionListener(e -> {
-            collisionDetectionEnabled = collisionBtn.isSelected();
-            checkAllCollisions(); viewportPanel.repaint();
-        });
-
-        ModernButton zoomOutBtn = new ModernButton("−", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
-        ModernButton zoomInBtn = new ModernButton("+", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
-        ModernButton zoomResetBtn = new ModernButton("Fit", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
-        zoomOutBtn.addActionListener(e -> { zoom = Math.max(0.2, zoom / 1.2); viewportPanel.repaint(); });
-        zoomInBtn.addActionListener(e -> { zoom = Math.min(4.0, zoom * 1.2); viewportPanel.repaint(); });
-        zoomResetBtn.addActionListener(e -> { zoom = 1.0; panX = 140; panY = 120; viewportPanel.repaint(); });
-
-        snapGroup.add(gridBtn); snapGroup.add(orthoBtn); snapGroup.add(snapBtn); snapGroup.add(snapCursorBtn);
-        snapGroup.add(collisionBtn);
-        snapGroup.add(zoomOutBtn); snapGroup.add(zoomInBtn); snapGroup.add(zoomResetBtn);
-        toolbar.add(snapGroup, BorderLayout.EAST);
+        toolbar.add(toolsGroup, BorderLayout.CENTER);
         return toolbar;
     }
 
@@ -900,7 +856,16 @@ public class HousePlanCADApp extends JFrame {
         propContentPanel.setOpaque(false);
         propContentPanel.setBorder(new EmptyBorder(10, 14, 14, 14));
 
-        propNameField = createStyledTextField();
+        propNameField = new JTextArea(3, 18);
+        propNameField.setFont(new Font("Consolas", Font.PLAIN, 12));
+        propNameField.setBackground(new Color(24, 33, 53));
+        propNameField.setForeground(Color.WHITE);
+        propNameField.setCaretColor(new Color(56, 189, 248));
+        propNameField.setLineWrap(true);
+        propNameField.setWrapStyleWord(true);
+        propNameField.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true),
+                BorderFactory.createEmptyBorder(4, 8, 4, 8)));
         propWidthField = createStyledTextField();
         propHeightField = createStyledTextField();
         propRotSlider = new JSlider(0, 360, 0);
@@ -1103,7 +1068,11 @@ public class HousePlanCADApp extends JFrame {
         JPanel status = new JPanel(new BorderLayout());
         status.setBackground(new Color(15, 23, 42));
         status.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(30, 41, 59)));
-        status.setPreferredSize(new Dimension(1000, 26));
+        status.setPreferredSize(new Dimension(1000, 32));
+
+        // Left Status: Cursor coords, Selection count, Collision status
+        JPanel leftStatus = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 3));
+        leftStatus.setOpaque(false);
 
         statusCursorLabel = new JLabel(" CURSOR: 0'-0\", 0'-0\" ");
         statusCursorLabel.setFont(new Font("Consolas", Font.PLAIN, 11));
@@ -1117,14 +1086,146 @@ public class HousePlanCADApp extends JFrame {
         statusCollisionLabel.setFont(new Font("Consolas", Font.BOLD, 11));
         statusCollisionLabel.setForeground(new Color(52, 211, 153));
 
-        JPanel rightStatus = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 2));
-        rightStatus.setOpaque(false);
-        rightStatus.add(statusSelectionLabel);
-        rightStatus.add(statusCollisionLabel);
+        leftStatus.add(statusCursorLabel);
+        leftStatus.add(new JSeparator(JSeparator.VERTICAL));
+        leftStatus.add(statusSelectionLabel);
+        leftStatus.add(statusCollisionLabel);
+        status.add(leftStatus, BorderLayout.WEST);
 
-        status.add(statusCursorLabel, BorderLayout.WEST);
-        status.add(rightStatus, BorderLayout.EAST);
+        // Right Status (AutoCAD Standard Drafting Status Tray)
+        JPanel trayGroup = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 3));
+        trayGroup.setOpaque(false);
+
+        gridBtn = new ModernToggle("Grid [F7]", true,
+                new Color(56, 189, 248), new Color(14, 116, 144), new Color(15, 23, 42));
+        gridBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        gridBtn.setToolTipText("AutoCAD Grid Display (F7): Hide or show background drafting grid lines");
+        gridBtn.addActionListener(e -> { showGrid = gridBtn.isSelected(); viewportPanel.repaint(); });
+
+        orthoBtn = new ModernToggle("ORTHO [F8]", false,
+                new Color(251, 191, 36), new Color(245, 158, 11), new Color(69, 26, 3));
+        orthoBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        orthoBtn.addActionListener(e -> { orthoMode = orthoBtn.isSelected(); viewportPanel.repaint(); });
+
+        snapBtn = new ModernToggle("Snap [F3]", false,
+                new Color(52, 211, 153), new Color(16, 185, 129), new Color(6, 78, 59));
+        snapBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        snapBtn.setToolTipText("Snap to 1' increments (Smooth by default)");
+        snapBtn.addActionListener(e -> {
+            snapToGrid = snapBtn.isSelected();
+            snapStepFeet = snapToGrid ? 1.0 : 0.0;
+            viewportPanel.repaint();
+        });
+
+        snapCursorBtn = new ModernToggle("Cursor [F9]", false,
+                new Color(251, 191, 36), new Color(234, 179, 8), new Color(69, 26, 3));
+        snapCursorBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        snapCursorBtn.addActionListener(e -> { showSnapCursor = snapCursorBtn.isSelected(); viewportPanel.repaint(); });
+
+        collisionBtn = new ModernToggle("Collision [F4]", true,
+                new Color(244, 63, 94), new Color(225, 29, 72), new Color(76, 5, 25));
+        collisionBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        collisionBtn.addActionListener(e -> {
+            collisionDetectionEnabled = collisionBtn.isSelected();
+            checkAllCollisions(); viewportPanel.repaint();
+        });
+
+        ModernButton zoomOutBtn = new ModernButton("−", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
+        zoomOutBtn.setPreferredSize(new Dimension(26, 22));
+        ModernButton zoomInBtn = new ModernButton("+", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
+        zoomInBtn.setPreferredSize(new Dimension(26, 22));
+        ModernButton zoomResetBtn = new ModernButton("Fit", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
+        zoomResetBtn.setPreferredSize(new Dimension(36, 22));
+
+        zoomOutBtn.addActionListener(e -> { zoom = Math.max(0.2, zoom / 1.2); viewportPanel.repaint(); });
+        zoomInBtn.addActionListener(e -> { zoom = Math.min(4.0, zoom * 1.2); viewportPanel.repaint(); });
+        zoomResetBtn.addActionListener(e -> { zoom = 1.0; panX = 140; panY = 120; viewportPanel.repaint(); });
+
+        trayGroup.add(gridBtn);
+        trayGroup.add(orthoBtn);
+        trayGroup.add(snapBtn);
+        trayGroup.add(snapCursorBtn);
+        trayGroup.add(collisionBtn);
+        trayGroup.add(new JSeparator(JSeparator.VERTICAL));
+        trayGroup.add(zoomOutBtn);
+        trayGroup.add(zoomInBtn);
+        trayGroup.add(zoomResetBtn);
+
+        status.add(trayGroup, BorderLayout.EAST);
         return status;
+    }
+
+    public static double parseDimensionFeet(String text) {
+        if (text == null) return 0.0;
+        text = text.trim();
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                "(\\d+(?:\\.\\d+)?)\\s*(?:'|ft|feet)?(?:\\s*-?\\s*(\\d+(?:\\.\\d+)?)\\s*(?:\"|in)?)?",
+                java.util.regex.Pattern.CASE_INSENSITIVE).matcher(text);
+        if (m.find()) {
+            double ft = Double.parseDouble(m.group(1));
+            if (m.group(2) != null && !m.group(2).isEmpty()) {
+                ft += Double.parseDouble(m.group(2)) / 12.0;
+            }
+            return ft;
+        }
+        return 0.0;
+    }
+
+    public static double parseRoomAreaFromText(String text) {
+        if (text == null) return 0.0;
+        String[] lines = text.split("\n");
+        for (String line : lines) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                    "([0-9]+(?:\\.[0-9]+)?(?:'|ft)?(?:\\s*-?\\s*[0-9]+(?:\\.[0-9]+)?\"?)?)\\s*[×xX*]\\s*([0-9]+(?:\\.[0-9]+)?(?:'|ft)?(?:\\s*-?\\s*[0-9]+(?:\\.[0-9]+)?\"?)?)",
+                    java.util.regex.Pattern.CASE_INSENSITIVE).matcher(line);
+            if (m.find()) {
+                double w = parseDimensionFeet(m.group(1));
+                double h = parseDimensionFeet(m.group(2));
+                if (w > 0 && h > 0) {
+                    return w * h;
+                }
+            }
+        }
+        return 0.0;
+    }
+
+    public double computeRoomAreaFromWalls(double cx, double cy) {
+        if (walls.isEmpty()) return 0.0;
+        double minLeft = -Double.MAX_VALUE;
+        double minRight = Double.MAX_VALUE;
+        double minTop = -Double.MAX_VALUE;
+        double minBottom = Double.MAX_VALUE;
+
+        for (Wall w : walls) {
+            if (Math.abs(w.x1 - w.x2) < 5.0) {
+                double wallX = (w.x1 + w.x2) / 2.0;
+                double minY = Math.min(w.y1, w.y2) - 10;
+                double maxY = Math.max(w.y1, w.y2) + 10;
+                if (cy >= minY && cy <= maxY) {
+                    if (wallX <= cx && wallX > minLeft) minLeft = wallX;
+                    if (wallX >= cx && wallX < minRight) minRight = wallX;
+                }
+            }
+            if (Math.abs(w.y1 - w.y2) < 5.0) {
+                double wallY = (w.y1 + w.y2) / 2.0;
+                double minX = Math.min(w.x1, w.x2) - 10;
+                double maxX = Math.max(w.x1, w.x2) + 10;
+                if (cx >= minX && cx <= maxX) {
+                    if (wallY <= cy && wallY > minTop) minTop = wallY;
+                    if (wallY >= cy && wallY < minBottom) minBottom = wallY;
+                }
+            }
+        }
+
+        if (minLeft > -Double.MAX_VALUE / 2 && minRight < Double.MAX_VALUE / 2
+                && minTop > -Double.MAX_VALUE / 2 && minBottom < Double.MAX_VALUE / 2) {
+            double wFt = (minRight - minLeft) / FT_PX;
+            double hFt = (minBottom - minTop) / FT_PX;
+            if (wFt >= 2.0 && hFt >= 2.0 && wFt <= 100.0 && hFt <= 100.0) {
+                return wFt * hFt;
+            }
+        }
+        return 0.0;
     }
 
     // --- Keyboard Shortcuts ---
@@ -1132,7 +1233,7 @@ public class HousePlanCADApp extends JFrame {
     private void setupKeyboardShortcuts() {
         KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(e -> {
             if (e.getID() != KeyEvent.KEY_PRESSED) return false;
-            boolean isTyping = (KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() instanceof JTextField);
+            boolean isTyping = (KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() instanceof javax.swing.text.JTextComponent);
 
             if (e.getKeyCode() == KeyEvent.VK_F7) {
                 showGrid = !showGrid; if (gridBtn != null) gridBtn.setSelected(showGrid); viewportPanel.repaint(); return true;
@@ -3794,22 +3895,34 @@ public class HousePlanCADApp extends JFrame {
                 g2.setStroke(new BasicStroke(1.2f));
                 g2.drawOval(cx - r + 4, cy - r + 4, (r - 4) * 2, (r - 4) * 2);
 
-                // Compass needle
-                Polygon needleL = new Polygon(new int[]{cx, cx, cx - r + 8}, new int[]{cy - r + 2, cy, cy}, 3);
-                Polygon needleR = new Polygon(new int[]{cx, cx, cx + r - 8}, new int[]{cy - r + 2, cy, cy}, 3);
-                g2.setColor(Color.WHITE);
+                int topY = cy - r + 6;
+                int botY = cy + (int)(r * 0.25);
+                int wingY = cy + (int)(r * 0.55);
+                int wingW = (int)(r * 0.35);
+
+                Polygon needleL = new Polygon(
+                        new int[]{cx, cx - wingW, cx},
+                        new int[]{topY, wingY, botY}, 3);
+                Polygon needleR = new Polygon(
+                        new int[]{cx, cx + wingW, cx},
+                        new int[]{topY, wingY, botY}, 3);
+
+                g2.setColor(new Color(56, 189, 248)); // Cyan accent on left
                 g2.fillPolygon(needleL);
-                g2.setColor(new Color(15, 23, 42));
+                g2.setColor(Color.WHITE); // White on right
                 g2.fillPolygon(needleR);
+
                 g2.setColor(new Color(203, 213, 225));
+                g2.setStroke(new BasicStroke(1.0f));
                 g2.drawPolygon(needleL);
                 g2.drawPolygon(needleR);
+                g2.drawLine(cx, topY, cx, botY);
 
                 // "N" label
                 g2.setColor(new Color(56, 189, 248));
                 g2.setFont(new Font("Segoe UI", Font.BOLD, Math.max(11, (int)(14 * zoom))));
                 FontMetrics fm = g2.getFontMetrics();
-                g2.drawString("N", cx - fm.stringWidth("N") / 2, cy - r - 2);
+                g2.drawString("N", cx - fm.stringWidth("N") / 2, topY - 2);
 
             // ─── STAIRCASE ──────────────────────────────────────────────
             } else if (type.startsWith("stair")) {
@@ -3840,20 +3953,82 @@ public class HousePlanCADApp extends JFrame {
 
             // ─── ROOM AREA TAG ──────────────────────────────────────────
             } else if (type.equals("tag")) {
-                g2.setColor(new Color(15, 23, 42, 180));
-                g2.fillRoundRect(0, 0, sw, sh, 8, 8);
-                g2.setColor(new Color(56, 189, 248, 100));
+                String[] rawLines = el.name.split("\n");
+                List<String> displayLines = new ArrayList<>();
+                boolean hasAreaLine = false;
+                for (String l : rawLines) {
+                    String trimmed = l.trim();
+                    if (!trimmed.isEmpty()) {
+                        displayLines.add(trimmed);
+                        String up = trimmed.toUpperCase();
+                        if (up.contains("SQFT") || up.contains("SQ.FT") || up.contains("SQ FT") || up.contains("SQ. FT")) {
+                            hasAreaLine = true;
+                        }
+                    }
+                }
+                if (!hasAreaLine) {
+                    double roomSqFt = parseRoomAreaFromText(el.name);
+                    if (roomSqFt <= 0) {
+                        roomSqFt = computeRoomAreaFromWalls(el.x + el.w / 2.0, el.y + el.h / 2.0);
+                    }
+                    if (roomSqFt > 0) {
+                        displayLines.add(String.format("%.0f SQ.FT.", roomSqFt));
+                    }
+                }
+                if (displayLines.isEmpty()) {
+                    displayLines.add("ROOM");
+                }
+
+                float titleSize = (float) Math.max(11, 12 * zoom);
+                float subSize   = (float) Math.max(9.5, 10.5 * zoom);
+                Font titleFont = new Font("Segoe UI", Font.BOLD, (int) titleSize);
+                Font subFont   = new Font("Consolas", Font.PLAIN, (int) subSize);
+                Font areaFont  = new Font("Consolas", Font.BOLD, (int) subSize);
+
+                int maxTextW = 0;
+                int lineH = (int) (titleSize * 1.35);
+                int totalTextH = displayLines.size() * lineH;
+
+                for (int i = 0; i < displayLines.size(); i++) {
+                    g2.setFont(i == 0 ? titleFont : subFont);
+                    FontMetrics fm = g2.getFontMetrics();
+                    maxTextW = Math.max(maxTextW, fm.stringWidth(displayLines.get(i)));
+                }
+
+                int padX = 8, padY = 5;
+                int maskW = maxTextW + padX * 2;
+                int maskH = totalTextH + padY * 2;
+                int maskX = (sw - maskW) / 2;
+                int maskY = (sh - maskH) / 2;
+
+                // AutoCAD-style subtle background mask so lines underneath don't clash (minimal padding)
+                g2.setColor(new Color(15, 23, 42, 215));
+                g2.fillRoundRect(maskX, maskY, maskW, maskH, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
                 g2.setStroke(new BasicStroke(0.8f));
-                g2.drawRoundRect(0, 0, sw, sh, 8, 8);
+                g2.drawRoundRect(maskX, maskY, maskW, maskH, 6, 6);
 
-                g2.setColor(Color.WHITE);
-                g2.setFont(new Font("Segoe UI", Font.BOLD, (int) Math.max(11, 12 * zoom)));
-                g2.drawString(el.name, 8, sh / 2 - 4);
+                // Draw each text line centered
+                int curY = maskY + padY + (int)(titleSize * 0.95);
+                for (int i = 0; i < displayLines.size(); i++) {
+                    String line = displayLines.get(i);
+                    boolean isTitle = (i == 0);
+                    boolean isArea = (!hasAreaLine && i == displayLines.size() - 1);
 
-                g2.setColor(new Color(56, 189, 248));
-                g2.setFont(new Font("Consolas", Font.PLAIN, (int) Math.max(9, 10 * zoom)));
-                double areaFt = (el.w / FT_PX) * (el.h / FT_PX);
-                g2.drawString(formatImperial(el.w) + " \u00d7 " + formatImperial(el.h) + " = " + String.format("%.0f", areaFt) + " sq.ft", 8, sh / 2 + 12);
+                    g2.setFont(isTitle ? titleFont : (isArea ? areaFont : subFont));
+                    FontMetrics fm = g2.getFontMetrics();
+                    int lx = (sw - fm.stringWidth(line)) / 2;
+
+                    if (isTitle) {
+                        g2.setColor(Color.WHITE);
+                    } else if (isArea) {
+                        g2.setColor(new Color(56, 189, 248)); // Cyan area highlight
+                    } else {
+                        g2.setColor(new Color(203, 213, 225)); // Light slate dimensions
+                    }
+                    g2.drawString(line, lx, curY);
+                    curY += lineH;
+                }
 
             // ─── CEILING FAN ────────────────────────────────────────────
             } else if (type.equals("ceiling-fan")) {
@@ -6471,7 +6646,7 @@ public class HousePlanCADApp extends JFrame {
             // Standard AutoCAD border & slim, perfectly proportional title block strip
             padOuter = baseDim * 0.018;
             padInner = baseDim * 0.026;
-            titleBlockHeight = Math.max(48.0, baseDim * 0.046);
+            titleBlockHeight = Math.max(64.0, baseDim * 0.062);
             titleBlockY = targetH - padInner - titleBlockHeight;
 
             g2.setColor(isMonochrome ? Color.BLACK : new Color(30, 41, 59));
@@ -6856,25 +7031,61 @@ public class HousePlanCADApp extends JFrame {
         // --- Layer 4: Room Tags & North Arrow (Standard AutoCAD Architectural Style) ---
         for (CADElement el : elements) {
             if ("tag".equals(el.type)) {
-                String[] lines = el.name.split("\n");
-                float tagFontSize = (float) Math.max(9.5, 11.0 / scale);
-                g2.setFont(new Font("Consolas", Font.BOLD, (int) tagFontSize));
-                FontMetrics fm = g2.getFontMetrics();
+                String[] rawLines = el.name.split("\n");
+                List<String> displayLines = new ArrayList<>();
+                boolean hasAreaLine = false;
+                for (String l : rawLines) {
+                    String trimmed = l.trim();
+                    if (!trimmed.isEmpty()) {
+                        displayLines.add(trimmed);
+                        String up = trimmed.toUpperCase();
+                        if (up.contains("SQFT") || up.contains("SQ.FT") || up.contains("SQ FT") || up.contains("SQ. FT")) {
+                            hasAreaLine = true;
+                        }
+                    }
+                }
+                if (!hasAreaLine) {
+                    double roomSqFt = parseRoomAreaFromText(el.name);
+                    if (roomSqFt <= 0) {
+                        roomSqFt = computeRoomAreaFromWalls(el.x + el.w / 2.0, el.y + el.h / 2.0);
+                    }
+                    if (roomSqFt > 0) {
+                        displayLines.add(String.format("%.0f SQ.FT.", roomSqFt));
+                    }
+                }
+                if (displayLines.isEmpty()) {
+                    displayLines.add("ROOM");
+                }
 
-                double lineH = fm.getHeight() * 1.05;
-                double totalH = lines.length * lineH;
+                float tagFontSize = (float) Math.max(9.5, 11.0 / scale);
+                Font titleFont = new Font("Consolas", Font.BOLD, (int) tagFontSize);
+                Font dimFont   = new Font("Consolas", Font.PLAIN, (int) (tagFontSize * 0.92));
+                Font areaFont  = new Font("Consolas", Font.BOLD, (int) (tagFontSize * 0.95));
+
+                g2.setFont(titleFont);
+                FontMetrics fm = g2.getFontMetrics();
+                double lineH = fm.getHeight() * 1.12;
+                double totalH = displayLines.size() * lineH;
                 double startY = el.y + (el.h - totalH) / 2.0 + fm.getAscent();
 
-                for (int i = 0; i < lines.length; i++) {
-                    String line = lines[i];
-                    int lw = fm.stringWidth(line);
+                for (int i = 0; i < displayLines.size(); i++) {
+                    String line = displayLines.get(i);
+                    boolean isTitle = (i == 0);
+                    boolean isArea = (!hasAreaLine && i == displayLines.size() - 1);
+                    g2.setFont(isTitle ? titleFont : (isArea ? areaFont : dimFont));
+                    FontMetrics fmL = g2.getFontMetrics();
+                    int lw = fmL.stringWidth(line);
                     double lx = el.x + (el.w - lw) / 2.0;
 
                     // Clean AutoCAD text background mask (tight hairline box)
                     g2.setColor(Color.WHITE);
-                    g2.fillRect((int) lx - 2, (int) (startY + i * lineH - fm.getAscent()), lw + 4, fm.getHeight());
+                    g2.fillRect((int) lx - 3, (int) (startY + i * lineH - fmL.getAscent()), lw + 6, fmL.getHeight());
 
-                    g2.setColor(isMonochrome ? Color.BLACK : (i == 0 ? new Color(15, 23, 42) : new Color(51, 65, 85)));
+                    if (isMonochrome) {
+                        g2.setColor(Color.BLACK);
+                    } else {
+                        g2.setColor(isTitle ? new Color(15, 23, 42) : (isArea ? new Color(2, 132, 199) : new Color(51, 65, 85)));
+                    }
                     g2.drawString(line, (float) lx, (float) (startY + i * lineH));
                 }
             } else if ("north-arrow".equals(el.type)) {
@@ -6882,14 +7093,34 @@ public class HousePlanCADApp extends JFrame {
                 g2.setColor(isMonochrome ? Color.BLACK : new Color(15, 23, 42));
                 g2.setStroke(new BasicStroke((float) (1.2 / scale)));
                 g2.draw(new Ellipse2D.Double(cx - r, cy - r, r * 2, r * 2));
-                Path2D.Double arrow = new Path2D.Double();
-                arrow.moveTo(cx, cy - r * 0.9);
-                arrow.lineTo(cx - r * 0.35, cy + r * 0.6);
-                arrow.lineTo(cx, cy + r * 0.2);
-                arrow.closePath();
-                g2.fill(arrow);
+
+                // Left wing (solid filled dark)
+                Path2D.Double arrowL = new Path2D.Double();
+                arrowL.moveTo(cx, cy - r * 0.88);
+                arrowL.lineTo(cx - r * 0.35, cy + r * 0.55);
+                arrowL.lineTo(cx, cy + r * 0.20);
+                arrowL.closePath();
+                g2.setColor(isMonochrome ? Color.BLACK : new Color(15, 23, 42));
+                g2.fill(arrowL);
+
+                // Right wing (white fill + outlined)
+                Path2D.Double arrowR = new Path2D.Double();
+                arrowR.moveTo(cx, cy - r * 0.88);
+                arrowR.lineTo(cx + r * 0.35, cy + r * 0.55);
+                arrowR.lineTo(cx, cy + r * 0.20);
+                arrowR.closePath();
+                g2.setColor(Color.WHITE);
+                g2.fill(arrowR);
+                g2.setColor(isMonochrome ? Color.BLACK : new Color(15, 23, 42));
+                g2.draw(arrowR);
+
+                // Center dividing meridian line
+                g2.draw(new Line2D.Double(cx, cy - r * 0.88, cx, cy + r * 0.20));
+
+                // Compass Cardinal "N"
                 g2.setFont(new Font("Consolas", Font.BOLD, (int) (r * 0.65)));
-                g2.drawString("N", (float) (cx - r * 0.18), (float) (cy - r * 1.05));
+                FontMetrics fmN = g2.getFontMetrics();
+                g2.drawString("N", (float) (cx - fmN.stringWidth("N") / 2.0), (float) (cy - r * 1.05));
             }
         }
 
@@ -6900,28 +7131,32 @@ public class HousePlanCADApp extends JFrame {
             // Sleek architectural brand watermark in bottom-right corner (leaves maximum space for plan)
             String brandTitle = "HDE STUDIO";
             String brandSub = "PLAN: " + planSizeText + "  |  " + totalAreaText;
-            int brandFontSize = Math.max(10, (int) (baseDim * 0.007));
+            int brandFontSize = Math.max(14, (int) (baseDim * 0.013));
+            int subFontSize   = Math.max(10, (int) (baseDim * 0.0085));
             g2.setFont(new Font("Segoe UI", Font.BOLD, brandFontSize));
             FontMetrics fmB = g2.getFontMetrics();
-            int bW = Math.max(fmB.stringWidth(brandTitle), fmB.stringWidth(brandSub));
-            float bx = (float) (targetW - padInner - bW - 16);
-            float by = (float) (targetH - padInner - 24);
+            g2.setFont(new Font("Consolas", Font.PLAIN, subFontSize));
+            FontMetrics fmS = g2.getFontMetrics();
+            int bW = Math.max(fmB.stringWidth(brandTitle), fmS.stringWidth(brandSub));
+            float bx = (float) (targetW - padInner - bW - 20);
+            float by = (float) (targetH - padInner - 28);
 
-            g2.setColor(new Color(255, 255, 255, 230));
-            g2.fillRoundRect((int) bx - 8, (int) by - fmB.getAscent() - 4, bW + 16, fmB.getHeight() + 20, 6, 6);
-            g2.setColor(isMonochrome ? new Color(200, 200, 200) : new Color(226, 232, 240));
-            g2.setStroke(new BasicStroke(1.0f));
-            g2.drawRoundRect((int) bx - 8, (int) by - fmB.getAscent() - 4, bW + 16, fmB.getHeight() + 20, 6, 6);
+            g2.setColor(new Color(255, 255, 255, 235));
+            g2.fillRoundRect((int) bx - 10, (int) by - fmB.getAscent() - 6, bW + 20, fmB.getHeight() + fmS.getHeight() + 10, 8, 8);
+            g2.setColor(isMonochrome ? new Color(180, 180, 180) : new Color(203, 213, 225));
+            g2.setStroke(new BasicStroke(1.2f));
+            g2.drawRoundRect((int) bx - 10, (int) by - fmB.getAscent() - 6, bW + 20, fmB.getHeight() + fmS.getHeight() + 10, 8, 8);
 
+            g2.setFont(new Font("Segoe UI", Font.BOLD, brandFontSize));
             g2.setColor(isMonochrome ? Color.BLACK : new Color(2, 132, 199));
             g2.drawString(brandTitle, bx, by);
 
-            g2.setFont(new Font("Consolas", Font.PLAIN, Math.max(8, (int) (baseDim * 0.0048))));
-            g2.setColor(isMonochrome ? new Color(80, 80, 80) : new Color(100, 116, 139));
-            g2.drawString(brandSub, bx, by + 13);
+            g2.setFont(new Font("Consolas", Font.PLAIN, subFontSize));
+            g2.setColor(isMonochrome ? new Color(70, 70, 70) : new Color(71, 85, 105));
+            g2.drawString(brandSub, bx, by + fmB.getHeight() + 2);
 
         } else {
-            // Sleek AutoCAD Title Block & Legal Information Bar (Small fonts, no overlapping)
+            // Sleek AutoCAD Title Block & Legal Information Bar (Clearly legible, proportional fonts)
             double tbX = padInner;
             double tbW = targetW - 2.0 * padInner;
             g2.setColor(Color.WHITE);
@@ -6935,10 +7170,10 @@ public class HousePlanCADApp extends JFrame {
             g2.setStroke(new BasicStroke(0.8f));
             g2.draw(new Line2D.Double(tbX, midY, tbX + tbW, midY));
 
-            // Fonts: Small, elegant, perfectly proportional
-            int brandFontSize = Math.max(9, (int) (baseDim * 0.0068));
-            int infoFontSize  = Math.max(7, (int) (baseDim * 0.0046));
-            int discFontSize  = Math.max(6, (int) (baseDim * 0.0036));
+            // Fonts: Clearly legible across both previews and high-res A4/A3 prints
+            int brandFontSize = Math.max(13, (int) (baseDim * 0.013));
+            int infoFontSize  = Math.max(10, (int) (baseDim * 0.0085));
+            int discFontSize  = Math.max(8, (int) (baseDim * 0.0062));
 
             Font brandFont = new Font("Segoe UI", Font.BOLD, brandFontSize);
             Font infoFont  = new Font("Segoe UI", Font.BOLD, infoFontSize);
@@ -6977,7 +7212,6 @@ public class HousePlanCADApp extends JFrame {
             if (specX > brandEnd) {
                 g2.drawString(specStr, specX, r1Baseline);
             } else {
-                // In narrow portrait, show compact specs to avoid any overlap
                 String compactSpec = "PLAN: " + planSizeText + " (" + totalAreaText + ")   |   " + sheetTag;
                 float cW = fmInfo.stringWidth(compactSpec);
                 float cX = (float) (tbX + tbW - cW - 16);
@@ -6996,12 +7230,13 @@ public class HousePlanCADApp extends JFrame {
             if (discW + 32 <= tbW) {
                 g2.drawString(disclaimer, (float) (tbX + 16), r2Baseline);
             } else {
-                // If width is constrained (e.g. small preview), split cleanly into two sub-lines
                 String p1 = "DISCLAIMER: This plan is created in HDE Studio planner and this plan serves as concept design only,";
                 String p2 = "you may generate complete architectural floor plan, use only after Licensed architectural approval only.";
-                float halfH = (float) (titleBlockHeight * 0.25);
-                g2.drawString(p1, (float) (tbX + 16), (float) (midY + halfH * 0.8));
-                g2.drawString(p2, (float) (tbX + 16), (float) (midY + halfH * 1.8));
+                float row2H = (float) (titleBlockHeight * 0.50);
+                float line1Y = (float) (midY + row2H * 0.38 + fmDisc.getAscent() / 2.0);
+                float line2Y = (float) (midY + row2H * 0.82 + fmDisc.getAscent() / 2.0);
+                g2.drawString(p1, (float) (tbX + 16), line1Y);
+                g2.drawString(p2, (float) (tbX + 16), line2Y);
             }
         }
 
