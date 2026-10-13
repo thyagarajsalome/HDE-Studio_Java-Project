@@ -289,8 +289,7 @@ public class HousePlanCADApp extends JFrame {
     private ButtonGroup toolButtonGroup;
     private ModernButton undoBtn, redoBtn;
 
-    private JTextArea propNameField;
-    private JTextField propWidthField, propHeightField;
+    private JTextField propNameField, propWidthField, propHeightField;
     private JSlider propRotSlider;
     private JLabel propTypeBadge;
     private JPanel propContentPanel, propEmptyPanel, propMultiPanel;
@@ -367,10 +366,6 @@ public class HousePlanCADApp extends JFrame {
             else if (idx == 3) loadPreset20x30();
         });
 
-        ModernButton snipBtn = new ModernButton("\u2702 Snip Tool...", new Color(13, 148, 136), Color.WHITE, new Color(45, 212, 191));
-        snipBtn.setToolTipText("Snip and save plan in 9:16 or 16:9 format (PNG/JPG)");
-        snipBtn.addActionListener(e -> showSnippingDialog());
-
         ModernButton exportBtn = new ModernButton("Export PDF...", new Color(2, 132, 199), Color.WHITE, new Color(56, 189, 248));
         exportBtn.setToolTipText("Export architectural drawing as A4 or A3 PDF");
         exportBtn.addActionListener(e -> showExportDialog());
@@ -380,7 +375,6 @@ public class HousePlanCADApp extends JFrame {
         actionPanel.add(undoBtn); actionPanel.add(redoBtn);
         actionPanel.add(new JSeparator(JSeparator.VERTICAL));
         actionPanel.add(presetsCombo);
-        actionPanel.add(snipBtn);
         actionPanel.add(exportBtn);
         actionPanel.add(clearBtn);
         header.add(actionPanel, BorderLayout.EAST);
@@ -856,16 +850,7 @@ public class HousePlanCADApp extends JFrame {
         propContentPanel.setOpaque(false);
         propContentPanel.setBorder(new EmptyBorder(10, 14, 14, 14));
 
-        propNameField = new JTextArea(3, 18);
-        propNameField.setFont(new Font("Consolas", Font.PLAIN, 12));
-        propNameField.setBackground(new Color(24, 33, 53));
-        propNameField.setForeground(Color.WHITE);
-        propNameField.setCaretColor(new Color(56, 189, 248));
-        propNameField.setLineWrap(true);
-        propNameField.setWrapStyleWord(true);
-        propNameField.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true),
-                BorderFactory.createEmptyBorder(4, 8, 4, 8)));
+        propNameField = createStyledTextField();
         propWidthField = createStyledTextField();
         propHeightField = createStyledTextField();
         propRotSlider = new JSlider(0, 360, 0);
@@ -1173,7 +1158,7 @@ public class HousePlanCADApp extends JFrame {
 
     public static double parseRoomAreaFromText(String text) {
         if (text == null) return 0.0;
-        String[] lines = text.split("\n");
+        String[] lines = text.contains("\n") ? text.split("\n") : (text.contains(" / ") ? text.split("\\s*/\\s*") : new String[]{text});
         for (String line : lines) {
             java.util.regex.Matcher m = java.util.regex.Pattern.compile(
                     "([0-9]+(?:\\.[0-9]+)?(?:'|ft)?(?:\\s*-?\\s*[0-9]+(?:\\.[0-9]+)?\"?)?)\\s*[×xX*]\\s*([0-9]+(?:\\.[0-9]+)?(?:'|ft)?(?:\\s*-?\\s*[0-9]+(?:\\.[0-9]+)?\"?)?)",
@@ -3953,7 +3938,7 @@ public class HousePlanCADApp extends JFrame {
 
             // ─── ROOM AREA TAG ──────────────────────────────────────────
             } else if (type.equals("tag")) {
-                String[] rawLines = el.name.split("\n");
+                String[] rawLines = el.name.contains("\n") ? el.name.split("\n") : (el.name.contains(" / ") ? el.name.split("\\s*/\\s*") : new String[]{el.name});
                 List<String> displayLines = new ArrayList<>();
                 boolean hasAreaLine = false;
                 for (String l : rawLines) {
@@ -6646,7 +6631,7 @@ public class HousePlanCADApp extends JFrame {
             // Standard AutoCAD border & slim, perfectly proportional title block strip
             padOuter = baseDim * 0.018;
             padInner = baseDim * 0.026;
-            titleBlockHeight = Math.max(64.0, baseDim * 0.062);
+            titleBlockHeight = Math.max(82.0, baseDim * 0.080);
             titleBlockY = targetH - padInner - titleBlockHeight;
 
             g2.setColor(isMonochrome ? Color.BLACK : new Color(30, 41, 59));
@@ -7031,7 +7016,7 @@ public class HousePlanCADApp extends JFrame {
         // --- Layer 4: Room Tags & North Arrow (Standard AutoCAD Architectural Style) ---
         for (CADElement el : elements) {
             if ("tag".equals(el.type)) {
-                String[] rawLines = el.name.split("\n");
+                String[] rawLines = el.name.contains("\n") ? el.name.split("\n") : (el.name.contains(" / ") ? el.name.split("\\s*/\\s*") : new String[]{el.name});
                 List<String> displayLines = new ArrayList<>();
                 boolean hasAreaLine = false;
                 for (String l : rawLines) {
@@ -7171,13 +7156,13 @@ public class HousePlanCADApp extends JFrame {
             g2.draw(new Line2D.Double(tbX, midY, tbX + tbW, midY));
 
             // Fonts: Clearly legible across both previews and high-res A4/A3 prints
-            int brandFontSize = Math.max(13, (int) (baseDim * 0.013));
-            int infoFontSize  = Math.max(10, (int) (baseDim * 0.0085));
-            int discFontSize  = Math.max(8, (int) (baseDim * 0.0062));
+            int brandFontSize = Math.max(16, (int) (baseDim * 0.018));
+            int infoFontSize  = Math.max(13, (int) (baseDim * 0.013));
+            int discFontSize  = Math.max(12, (int) (baseDim * 0.011));
 
             Font brandFont = new Font("Segoe UI", Font.BOLD, brandFontSize);
             Font infoFont  = new Font("Segoe UI", Font.BOLD, infoFontSize);
-            Font discFont  = new Font("Segoe UI", Font.PLAIN, discFontSize);
+            Font discFont  = new Font("Segoe UI", Font.BOLD, discFontSize);
 
             // Row 1 (Top Section): Firm Brand (Left) + Plan Size, Area, Scale, Sheet (Right)
             g2.setFont(brandFont);
@@ -7225,7 +7210,7 @@ public class HousePlanCADApp extends JFrame {
 
             String disclaimer = "DISCLAIMER: This plan is created in HDE Studio planner and this plan serves as concept design only, you may generate complete architectural floor plan, use only after Licensed architectural approval only.";
 
-            g2.setColor(isMonochrome ? new Color(70, 70, 70) : new Color(100, 116, 139));
+            g2.setColor(isMonochrome ? Color.BLACK : new Color(30, 41, 59));
             float discW = fmDisc.stringWidth(disclaimer);
             if (discW + 32 <= tbW) {
                 g2.drawString(disclaimer, (float) (tbX + 16), r2Baseline);
@@ -7233,8 +7218,8 @@ public class HousePlanCADApp extends JFrame {
                 String p1 = "DISCLAIMER: This plan is created in HDE Studio planner and this plan serves as concept design only,";
                 String p2 = "you may generate complete architectural floor plan, use only after Licensed architectural approval only.";
                 float row2H = (float) (titleBlockHeight * 0.50);
-                float line1Y = (float) (midY + row2H * 0.38 + fmDisc.getAscent() / 2.0);
-                float line2Y = (float) (midY + row2H * 0.82 + fmDisc.getAscent() / 2.0);
+                float line1Y = (float) (midY + row2H * 0.35 + fmDisc.getAscent() / 2.0);
+                float line2Y = (float) (midY + row2H * 0.78 + fmDisc.getAscent() / 2.0);
                 g2.drawString(p1, (float) (tbX + 16), line1Y);
                 g2.drawString(p2, (float) (tbX + 16), line2Y);
             }
