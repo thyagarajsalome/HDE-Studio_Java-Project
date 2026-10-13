@@ -7,6 +7,7 @@ import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.*;
+import java.awt.datatransfer.*;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.util.*;
@@ -76,6 +77,10 @@ public class HousePlanCADApp extends JFrame {
         private Color inactiveBg = new Color(24, 33, 53);
         private Color inactiveBorder = new Color(51, 65, 85);
         private Color inactiveFg = new Color(148, 163, 184);
+
+        public ModernToggle(String text, boolean selected) {
+            this(text, selected, Color.WHITE, new Color(56, 189, 248), new Color(13, 148, 136));
+        }
 
         public ModernToggle(String text, boolean selected, Color activeFg, Color activeBorder, Color activeBg) {
             super(text, selected);
@@ -361,6 +366,10 @@ public class HousePlanCADApp extends JFrame {
             else if (idx == 3) loadPreset20x30();
         });
 
+        ModernButton snipBtn = new ModernButton("\u2702 Snip Tool...", new Color(13, 148, 136), Color.WHITE, new Color(45, 212, 191));
+        snipBtn.setToolTipText("Snip and save plan in 9:16 or 16:9 format (PNG/JPG)");
+        snipBtn.addActionListener(e -> showSnippingDialog());
+
         ModernButton exportBtn = new ModernButton("Export PDF...", new Color(2, 132, 199), Color.WHITE, new Color(56, 189, 248));
         exportBtn.setToolTipText("Export architectural drawing as A4 or A3 PDF");
         exportBtn.addActionListener(e -> showExportDialog());
@@ -369,7 +378,10 @@ public class HousePlanCADApp extends JFrame {
 
         actionPanel.add(undoBtn); actionPanel.add(redoBtn);
         actionPanel.add(new JSeparator(JSeparator.VERTICAL));
-        actionPanel.add(presetsCombo); actionPanel.add(exportBtn); actionPanel.add(clearBtn);
+        actionPanel.add(presetsCombo);
+        actionPanel.add(snipBtn);
+        actionPanel.add(exportBtn);
+        actionPanel.add(clearBtn);
         header.add(actionPanel, BorderLayout.EAST);
         return header;
     }
@@ -1148,6 +1160,10 @@ public class HousePlanCADApp extends JFrame {
                 if (e.getKeyCode() == KeyEvent.VK_F) { flipSelectedH(); return true; }
                 if (e.getKeyCode() == KeyEvent.VK_V) { flipSelectedV(); return true; }
                 if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
+                    if (viewportPanel.isSnipMode) {
+                        viewportPanel.cancelSnipMode();
+                        return true;
+                    }
                     if (currentTool == ToolMode.HATCH_POLYGON) {
                         viewportPanel.clearHatchPoly();
                         currentTool = ToolMode.SELECT;
@@ -1718,6 +1734,53 @@ public class HousePlanCADApp extends JFrame {
             }
         }
 
+        // Snipping Tool Canvas Mode
+        public boolean isSnipMode = false;
+        private boolean isSnipDragging = false;
+        private double snipAspect = 16.0 / 9.0;
+        private Point snipStartScreen = null;
+        private Point snipCurrentScreen = null;
+        private java.util.function.Consumer<Rectangle2D.Double> snipCallback = null;
+
+        public void startSnipMode(double aspect, java.util.function.Consumer<Rectangle2D.Double> callback) {
+            this.isSnipMode = true;
+            this.isSnipDragging = false;
+            this.snipAspect = aspect;
+            this.snipStartScreen = null;
+            this.snipCurrentScreen = null;
+            this.snipCallback = callback;
+            setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+            statusCursorLabel.setText(" \u2702 SNIP MODE: Drag a box on canvas (locked to " + (aspect > 1.0 ? "16:9" : "9:16") + ") \u00b7 ESC to cancel ");
+            repaint();
+        }
+
+        public void cancelSnipMode() {
+            this.isSnipMode = false;
+            this.isSnipDragging = false;
+            this.snipStartScreen = null;
+            this.snipCurrentScreen = null;
+            if (this.snipCallback != null) {
+                java.util.function.Consumer<Rectangle2D.Double> cb = this.snipCallback;
+                this.snipCallback = null;
+                cb.accept(null);
+            }
+            setCursor(Cursor.getDefaultCursor());
+            updateStatusText();
+            repaint();
+        }
+
+        private Rectangle getConstrainedSnipScreenRect() {
+            if (snipStartScreen == null || snipCurrentScreen == null) return null;
+            int sx = snipStartScreen.x, sy = snipStartScreen.y;
+            int cx = snipCurrentScreen.x, cy = snipCurrentScreen.y;
+            int rawW = Math.abs(cx - sx);
+            if (rawW < 4) return null;
+            int constrainedH = (int) Math.round(rawW / snipAspect);
+            int rx = (cx >= sx) ? sx : (sx - rawW);
+            int ry = (cy >= sy) ? sy : (sy - constrainedH);
+            return new Rectangle(rx, ry, rawW, constrainedH);
+        }
+
         private final double ROT_STALK_LEN = 30.0;
         private final double ROT_HANDLE_RADIUS = 9.0;
         private final List<HUDButton> hudButtons = new ArrayList<>();
@@ -1736,6 +1799,19 @@ public class HousePlanCADApp extends JFrame {
                     requestFocusInWindow();
                     mouseScreen = e.getPoint();
                     mouseWorld = screenToWorld(mouseScreen.x, mouseScreen.y);
+
+                    // Snip tool canvas mode
+                    if (isSnipMode) {
+                        if (SwingUtilities.isLeftMouseButton(e)) {
+                            snipStartScreen = e.getPoint();
+                            snipCurrentScreen = e.getPoint();
+                            isSnipDragging = true;
+                            repaint();
+                        } else if (SwingUtilities.isRightMouseButton(e)) {
+                            cancelSnipMode();
+                        }
+                        return;
+                    }
 
                     // HUD buttons first
                     for (HUDButton btn : hudButtons) {
@@ -1836,6 +1912,13 @@ public class HousePlanCADApp extends JFrame {
                 @Override
                 public void mouseDragged(MouseEvent e) {
                     mouseScreen = e.getPoint();
+                    if (isSnipMode) {
+                        if (isSnipDragging) {
+                            snipCurrentScreen = e.getPoint();
+                            repaint();
+                        }
+                        return;
+                    }
                     if (isPanning) {
                         panX += (mouseScreen.x - panStartScreen.x);
                         panY += (mouseScreen.y - panStartScreen.y);
@@ -1954,6 +2037,11 @@ public class HousePlanCADApp extends JFrame {
                 @Override
                 public void mouseMoved(MouseEvent e) {
                     mouseScreen = e.getPoint();
+                    if (isSnipMode) {
+                        setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+                        repaint();
+                        return;
+                    }
                     mouseWorld = screenToWorld(mouseScreen.x, mouseScreen.y);
                     updateStatusText();
 
@@ -1969,6 +2057,31 @@ public class HousePlanCADApp extends JFrame {
 
                 @Override
                 public void mouseReleased(MouseEvent e) {
+                    if (isSnipMode) {
+                        if (isSnipDragging) {
+                            isSnipDragging = false;
+                            isSnipMode = false;
+                            setCursor(Cursor.getDefaultCursor());
+                            Rectangle r = getConstrainedSnipScreenRect();
+                            if (r != null && r.width >= 20 && r.height >= 20) {
+                                Point2D.Double w1 = screenToWorld(r.x, r.y);
+                                Point2D.Double w2 = screenToWorld(r.x + r.width, r.y + r.height);
+                                double minWX = Math.min(w1.x, w2.x), maxWX = Math.max(w1.x, w2.x);
+                                double minWY = Math.min(w1.y, w2.y), maxWY = Math.max(w1.y, w2.y);
+                                Rectangle2D.Double cropWorld = new Rectangle2D.Double(minWX, minWY, maxWX - minWX, maxWY - minWY);
+                                if (snipCallback != null) {
+                                    java.util.function.Consumer<Rectangle2D.Double> cb = snipCallback;
+                                    snipCallback = null;
+                                    cb.accept(cropWorld);
+                                }
+                            } else {
+                                cancelSnipMode();
+                            }
+                        }
+                        repaint();
+                        return;
+                    }
+
                     // Finalize drawing
                     if (isDrawing) {
                         isDrawing = false;
@@ -2173,6 +2286,63 @@ public class HousePlanCADApp extends JFrame {
             drawDynamicDimensions(g2);
             drawSelectionRectangle(g2);
             drawActiveTools(g2);
+            if (isSnipMode) {
+                drawSnipOverlay(g2);
+            }
+        }
+
+        private void drawSnipOverlay(Graphics2D g2) {
+            int w = getWidth(), h = getHeight();
+            Rectangle r = getConstrainedSnipScreenRect();
+            if (r != null && isSnipDragging) {
+                Area outer = new Area(new Rectangle(0, 0, w, h));
+                outer.subtract(new Area(r));
+                g2.setColor(new Color(0, 0, 0, 160));
+                g2.fill(outer);
+
+                // Cyan snip frame
+                g2.setColor(new Color(56, 189, 248));
+                g2.setStroke(new BasicStroke(2.0f));
+                g2.draw(r);
+
+                // Rule-of-thirds composition guides
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.setStroke(new BasicStroke(1.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, new float[]{4, 4}, 0));
+                g2.drawLine(r.x + r.width / 3, r.y, r.x + r.width / 3, r.y + r.height);
+                g2.drawLine(r.x + 2 * r.width / 3, r.y, r.x + 2 * r.width / 3, r.y + r.height);
+                g2.drawLine(r.x, r.y + r.height / 3, r.x + r.width, r.y + r.height / 3);
+                g2.drawLine(r.x, r.y + 2 * r.height / 3, r.x + r.width, r.y + 2 * r.height / 3);
+
+                // Dimension & Aspect badge
+                String badge = (snipAspect > 1.0 ? "16:9 Widescreen" : "9:16 Vertical") + "  \u00b7  " + r.width + " \u00d7 " + r.height + " px";
+                g2.setFont(new Font("Segoe UI", Font.BOLD, 12));
+                FontMetrics fmb = g2.getFontMetrics();
+                int bw = fmb.stringWidth(badge) + 16;
+                int bh = fmb.getHeight() + 8;
+                int bx = Math.max(8, r.x);
+                int by = (r.y - bh - 6 >= 6) ? (r.y - 6) : (r.y + bh + 14);
+                g2.setColor(new Color(15, 23, 42, 230));
+                g2.fillRoundRect(bx, by - bh, bw, bh, 6, 6);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawRoundRect(bx, by - bh, bw, bh, 6, 6);
+                g2.drawString(badge, bx + 8, by - 6);
+            } else {
+                // Dim screen slightly with guide banner at top
+                g2.setColor(new Color(0, 0, 0, 70));
+                g2.fillRect(0, 0, w, h);
+
+                String msg = "\u2702 SNIP MODE: Drag a box on the plan (Locked to " + (snipAspect > 1.0 ? "16:9" : "9:16") + ")  \u00b7  Right-click or ESC to cancel";
+                g2.setFont(new Font("Segoe UI", Font.BOLD, 13));
+                FontMetrics fm = g2.getFontMetrics();
+                int mw = fm.stringWidth(msg) + 24;
+                int mh = fm.getHeight() + 10;
+                int mx = (w - mw) / 2;
+                g2.setColor(new Color(15, 23, 42, 230));
+                g2.fillRoundRect(mx, 16, mw, mh, 8, 8);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawRoundRect(mx, 16, mw, mh, 8, 8);
+                g2.drawString(msg, mx + 12, 16 + fm.getAscent() + 4);
+            }
         }
 
         private void drawGrid(Graphics2D g2) {
@@ -5837,6 +6007,426 @@ public class HousePlanCADApp extends JFrame {
         dlg.setVisible(true);
     }
 
+    // =====================================================================
+    // =============  ARCHITECTURAL SNIPPING TOOL (9:16 & 16:9)  ============
+    // =====================================================================
+
+    /**
+     * Architectural Snipping Tool for exporting floor plans in social media & video formats:
+     * - 16:9 Landscape (YouTube, LinkedIn, Presentations, Desktop)
+     * - 9:16 Vertical (Instagram Reels, YouTube Shorts, TikTok, Mobile Stories)
+     * Supports Full Floor Plan framing or interactive Canvas Drag-Snip, with PNG and JPG export and Clipboard Copy.
+     */
+    public void showSnippingDialog() {
+        JDialog dlg = new JDialog(this, "\u2702 Snipping Tool \u2014 9:16 & 16:9 Format", true);
+        dlg.setLayout(new BorderLayout());
+        dlg.getContentPane().setBackground(new Color(15, 23, 42));
+
+        final boolean[] isLandscape16x9 = new boolean[]{ true };
+        final Rectangle2D.Double[] activeCropWorld = new Rectangle2D.Double[]{ null };
+        final BufferedImage[] cachedThumb = new BufferedImage[1];
+
+        JPanel mainContainer = new JPanel(new BorderLayout(18, 0));
+        mainContainer.setOpaque(false);
+        mainContainer.setBorder(new EmptyBorder(16, 20, 16, 20));
+
+        JPanel form = new JPanel(new GridBagLayout());
+        form.setOpaque(false);
+        form.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(30, 41, 59)),
+                new EmptyBorder(14, 16, 14, 16)));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(6, 6, 6, 6);
+
+        // Header Title
+        JLabel titleLbl = new JLabel("\u2702 ARCHITECTURAL SNIPPING TOOL");
+        titleLbl.setFont(new Font("Segoe UI", Font.BOLD, 15));
+        titleLbl.setForeground(Color.WHITE);
+        gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
+        form.add(titleLbl, gbc);
+
+        JLabel subtitleLbl = new JLabel("Export 16:9 (YouTube/Posts) or 9:16 (Reels/Shorts/Stories) in PNG/JPG");
+        subtitleLbl.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        subtitleLbl.setForeground(new Color(148, 163, 184));
+        gbc.gridy = 1;
+        form.add(subtitleLbl, gbc);
+        gbc.gridwidth = 1;
+
+        // 1. Aspect Ratio
+        gbc.gridx = 0; gbc.gridy = 2;
+        JLabel ratioLbl = new JLabel("Aspect Ratio:");
+        ratioLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        ratioLbl.setForeground(new Color(203, 213, 225));
+        form.add(ratioLbl, gbc);
+
+        JPanel ratioPanel = new JPanel(new GridLayout(1, 2, 8, 0));
+        ratioPanel.setOpaque(false);
+        ModernToggle btn16x9 = new ModernToggle("\u25a0 16:9 Landscape (YouTube)", true);
+        ModernToggle btn9x16 = new ModernToggle("\u25af 9:16 Vertical (Reels/Shorts)", false);
+        ButtonGroup ratioGroup = new ButtonGroup();
+        ratioGroup.add(btn16x9); ratioGroup.add(btn9x16);
+        ratioPanel.add(btn16x9); ratioPanel.add(btn9x16);
+        gbc.gridx = 1;
+        form.add(ratioPanel, gbc);
+
+        // 2. Framing Area
+        gbc.gridx = 0; gbc.gridy = 3;
+        JLabel framingLbl = new JLabel("Snip Area:");
+        framingLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        framingLbl.setForeground(new Color(203, 213, 225));
+        form.add(framingLbl, gbc);
+
+        JPanel frameActionPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        frameActionPanel.setOpaque(false);
+        JLabel cropStatusLbl = new JLabel("Full Floor Plan (Auto)");
+        cropStatusLbl.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        cropStatusLbl.setForeground(new Color(56, 189, 248));
+
+        ModernButton dragSnipBtn = new ModernButton("\u2702 Select on Canvas", new Color(13, 148, 136), Color.WHITE, new Color(45, 212, 191));
+        dragSnipBtn.setPreferredSize(new Dimension(140, 26));
+
+        ModernButton resetCropBtn = new ModernButton("Reset Full", new Color(30, 41, 59), new Color(203, 213, 225), new Color(71, 85, 105));
+        resetCropBtn.setPreferredSize(new Dimension(90, 26));
+        resetCropBtn.setVisible(false);
+
+        frameActionPanel.add(cropStatusLbl);
+        frameActionPanel.add(dragSnipBtn);
+        frameActionPanel.add(resetCropBtn);
+        gbc.gridx = 1;
+        form.add(frameActionPanel, gbc);
+
+        // 3. Resolution
+        gbc.gridx = 0; gbc.gridy = 4;
+        JLabel resLbl = new JLabel("Resolution:");
+        resLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        resLbl.setForeground(new Color(203, 213, 225));
+        form.add(resLbl, gbc);
+
+        JComboBox<String> resCombo = new JComboBox<>(new String[]{
+                "1080p Full HD (1920 \u00d7 1080 / 1080 \u00d7 1920)",
+                "4K Ultra HD (3840 \u00d7 2160 / 2160 \u00d7 3840)",
+                "720p Standard HD (1280 \u00d7 720 / 720 \u00d7 1280)"
+        });
+        styleComboBox(resCombo);
+        gbc.gridx = 1;
+        form.add(resCombo, gbc);
+
+        // 4. File Format
+        gbc.gridx = 0; gbc.gridy = 5;
+        JLabel formatLbl = new JLabel("Image Format:");
+        formatLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        formatLbl.setForeground(new Color(203, 213, 225));
+        form.add(formatLbl, gbc);
+
+        JComboBox<String> formatCombo = new JComboBox<>(new String[]{
+                "PNG (.png) \u2014 Lossless Sharp Lines",
+                "JPEG (.jpg) \u2014 Web Ready (95% Quality)"
+        });
+        styleComboBox(formatCombo);
+        gbc.gridx = 1;
+        form.add(formatCombo, gbc);
+
+        // 5. Drawing Style
+        gbc.gridx = 0; gbc.gridy = 6;
+        JLabel styleLbl = new JLabel("Drawing Style:");
+        styleLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        styleLbl.setForeground(new Color(203, 213, 225));
+        form.add(styleLbl, gbc);
+
+        JComboBox<String> styleCombo = new JComboBox<>(new String[]{
+                "Monochrome (Black Lines on White)",
+                "Color (Architectural Presentation)"
+        });
+        styleComboBox(styleCombo);
+        gbc.gridx = 1;
+        form.add(styleCombo, gbc);
+
+        // 6. Wall Hatch
+        gbc.gridx = 0; gbc.gridy = 7;
+        JLabel hatchLbl = new JLabel("Wall Hatch:");
+        hatchLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        hatchLbl.setForeground(new Color(203, 213, 225));
+        form.add(hatchLbl, gbc);
+
+        JComboBox<String> hatchCombo = new JComboBox<>(new String[]{
+                "45\u00b0 Diagonal (ANSI31 Masonry)",
+                "Solid Black Poch\u00e9",
+                "Hollow"
+        });
+        styleComboBox(hatchCombo);
+        gbc.gridx = 1;
+        form.add(hatchCombo, gbc);
+
+        // 7. Title Bar / Disclaimer Checkbox
+        gbc.gridx = 0; gbc.gridy = 8; gbc.gridwidth = 2;
+        JCheckBox bannerCheck = new JCheckBox("Include HDE Studio Title Bar (Plan Size, Area & Disclaimer)", true);
+        bannerCheck.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        bannerCheck.setForeground(new Color(203, 213, 225));
+        bannerCheck.setOpaque(false);
+        form.add(bannerCheck, gbc);
+        gbc.gridwidth = 1;
+
+        // ─── RIGHT: LIVE ASPECT RATIO VIEWPORT PREVIEW ───
+        JPanel previewContainer = new JPanel(new BorderLayout(0, 8));
+        previewContainer.setOpaque(false);
+        previewContainer.setPreferredSize(new Dimension(420, 460));
+        previewContainer.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(30, 41, 59)),
+                new EmptyBorder(12, 14, 12, 14)));
+
+        JLabel prevHeader = new JLabel("\u25c8 LIVE ASPECT RATIO PREVIEW");
+        prevHeader.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        prevHeader.setForeground(new Color(56, 189, 248));
+        previewContainer.add(prevHeader, BorderLayout.NORTH);
+
+        JPanel previewCanvas = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g;
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                int pw = getWidth(), ph = getHeight();
+                g2.setColor(new Color(11, 17, 32));
+                g2.fillRect(0, 0, pw, ph);
+                if (cachedThumb[0] != null) {
+                    BufferedImage thumb = cachedThumb[0];
+                    double sc = Math.min((double)(pw - 20) / thumb.getWidth(), (double)(ph - 20) / thumb.getHeight());
+                    int dw = (int)(thumb.getWidth() * sc), dh = (int)(thumb.getHeight() * sc);
+                    int dx = (pw - dw) / 2, dy = (ph - dh) / 2;
+                    g2.setColor(new Color(0, 0, 0, 100));
+                    g2.fillRoundRect(dx + 4, dy + 4, dw, dh, 4, 4);
+                    g2.drawImage(thumb, dx, dy, dw, dh, null);
+                    g2.setColor(new Color(71, 85, 105));
+                    g2.setStroke(new BasicStroke(1.2f));
+                    g2.drawRect(dx, dy, dw, dh);
+                }
+            }
+        };
+        previewCanvas.setBackground(new Color(11, 17, 32));
+        previewCanvas.setBorder(BorderFactory.createLineBorder(new Color(30, 41, 59)));
+        previewContainer.add(previewCanvas, BorderLayout.CENTER);
+
+        JLabel previewFooter = new JLabel("", JLabel.CENTER);
+        previewFooter.setFont(new Font("Consolas", Font.PLAIN, 11));
+        previewFooter.setForeground(new Color(148, 163, 184));
+        previewContainer.add(previewFooter, BorderLayout.SOUTH);
+
+        Runnable updatePreview = () -> {
+            boolean is16x9 = isLandscape16x9[0];
+            int resIdx = resCombo.getSelectedIndex();
+            int baseW, baseH;
+            if (resIdx == 1) {
+                baseW = is16x9 ? 3840 : 2160;
+                baseH = is16x9 ? 2160 : 3840;
+            } else if (resIdx == 2) {
+                baseW = is16x9 ? 1280 : 720;
+                baseH = is16x9 ? 720 : 1280;
+            } else {
+                baseW = is16x9 ? 1920 : 1080;
+                baseH = is16x9 ? 1080 : 1920;
+            }
+
+            boolean isMono = (styleCombo.getSelectedIndex() == 0);
+            boolean showBanner = bannerCheck.isSelected();
+            String hStyle = hatchCombo.getSelectedIndex() == 0 ? "DIAGONAL_45" :
+                           (hatchCombo.getSelectedIndex() == 1 ? "SOLID" : "HOLLOW");
+
+            double aspect = (double) baseW / baseH;
+            int prevW, prevH;
+            if (aspect >= 1.0) { prevW = 540; prevH = (int)(540 / aspect); }
+            else               { prevH = 540; prevW = (int)(540 * aspect); }
+
+            cachedThumb[0] = renderArchitecturalDrawing(prevW, prevH, isMono, !showBanner, hStyle, activeCropWorld[0]);
+            String ratioTag = is16x9 ? "16:9 Landscape" : "9:16 Vertical";
+            String cropTag = (activeCropWorld[0] != null) ? "Custom Region" : "Full Plan";
+            previewFooter.setText(ratioTag + "  |  " + baseW + " \u00d7 " + baseH + " px  |  " + cropTag);
+            previewCanvas.repaint();
+        };
+
+        btn16x9.addActionListener(e -> {
+            isLandscape16x9[0] = true;
+            btn16x9.setSelected(true);
+            btn9x16.setSelected(false);
+            if (activeCropWorld[0] != null) {
+                activeCropWorld[0] = null;
+                cropStatusLbl.setText("Full Floor Plan (Auto)");
+                resetCropBtn.setVisible(false);
+            }
+            updatePreview.run();
+        });
+
+        btn9x16.addActionListener(e -> {
+            isLandscape16x9[0] = false;
+            btn9x16.setSelected(true);
+            btn16x9.setSelected(false);
+            if (activeCropWorld[0] != null) {
+                activeCropWorld[0] = null;
+                cropStatusLbl.setText("Full Floor Plan (Auto)");
+                resetCropBtn.setVisible(false);
+            }
+            updatePreview.run();
+        });
+
+        dragSnipBtn.addActionListener(e -> {
+            double aspectVal = isLandscape16x9[0] ? (16.0 / 9.0) : (9.0 / 16.0);
+            dlg.setVisible(false);
+            viewportPanel.startSnipMode(aspectVal, cropWorld -> {
+                if (cropWorld != null) {
+                    activeCropWorld[0] = cropWorld;
+                    cropStatusLbl.setText("Custom: " + Math.round(cropWorld.width / FT_PX) + "' \u00d7 " + Math.round(cropWorld.height / FT_PX) + "'");
+                    resetCropBtn.setVisible(true);
+                }
+                dlg.setVisible(true);
+                updatePreview.run();
+            });
+        });
+
+        resetCropBtn.addActionListener(e -> {
+            activeCropWorld[0] = null;
+            cropStatusLbl.setText("Full Floor Plan (Auto)");
+            resetCropBtn.setVisible(false);
+            updatePreview.run();
+        });
+
+        resCombo.addActionListener(e -> updatePreview.run());
+        formatCombo.addActionListener(e -> updatePreview.run());
+        styleCombo.addActionListener(e -> updatePreview.run());
+        hatchCombo.addActionListener(e -> updatePreview.run());
+        bannerCheck.addActionListener(e -> updatePreview.run());
+
+        updatePreview.run();
+
+        mainContainer.add(form, BorderLayout.CENTER);
+        mainContainer.add(previewContainer, BorderLayout.EAST);
+        dlg.add(mainContainer, BorderLayout.CENTER);
+
+        // ─── BUTTONS ───
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 14));
+        btnPanel.setOpaque(false);
+        btnPanel.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(30, 41, 59)));
+
+        ModernButton cancelBtn = new ModernButton("Cancel", new Color(30, 41, 59), new Color(203, 213, 225), new Color(71, 85, 105));
+        cancelBtn.addActionListener(e -> dlg.dispose());
+
+        ModernButton copyBtn = new ModernButton("\uD83D\uDCCB Copy to Clipboard", new Color(30, 41, 59), new Color(203, 213, 225), new Color(71, 85, 105));
+        copyBtn.setPreferredSize(new Dimension(150, 32));
+        copyBtn.addActionListener(e -> {
+            boolean is16x9 = isLandscape16x9[0];
+            int resIdx = resCombo.getSelectedIndex();
+            int baseW = (resIdx == 1) ? (is16x9 ? 3840 : 2160) : (resIdx == 2 ? (is16x9 ? 1280 : 720) : (is16x9 ? 1920 : 1080));
+            int baseH = (resIdx == 1) ? (is16x9 ? 2160 : 3840) : (resIdx == 2 ? (is16x9 ? 720 : 1280) : (is16x9 ? 1080 : 1920));
+            boolean isMono = (styleCombo.getSelectedIndex() == 0);
+            boolean showBanner = bannerCheck.isSelected();
+            String hStyle = hatchCombo.getSelectedIndex() == 0 ? "DIAGONAL_45" : (hatchCombo.getSelectedIndex() == 1 ? "SOLID" : "HOLLOW");
+
+            BufferedImage fullImg = renderArchitecturalDrawing(baseW, baseH, isMono, !showBanner, hStyle, activeCropWorld[0]);
+            copyImageToClipboard(fullImg);
+            JOptionPane.showMessageDialog(dlg,
+                    "Image copied to clipboard!\n\n" +
+                    "Ratio: " + (is16x9 ? "16:9 Landscape" : "9:16 Vertical") + "\n" +
+                    "Dimensions: " + baseW + " \u00d7 " + baseH + " px\n\n" +
+                    "You can now paste it directly into social media, chat, or presentations (Ctrl+V).",
+                    "Copied to Clipboard", JOptionPane.INFORMATION_MESSAGE);
+        });
+
+        ModernButton saveBtn = new ModernButton("\uD83D\uDCBE Save Image...", new Color(13, 148, 136), Color.WHITE, new Color(45, 212, 191));
+        saveBtn.setPreferredSize(new Dimension(140, 32));
+        saveBtn.addActionListener(e -> {
+            boolean is16x9 = isLandscape16x9[0];
+            int resIdx = resCombo.getSelectedIndex();
+            int baseW = (resIdx == 1) ? (is16x9 ? 3840 : 2160) : (resIdx == 2 ? (is16x9 ? 1280 : 720) : (is16x9 ? 1920 : 1080));
+            int baseH = (resIdx == 1) ? (is16x9 ? 2160 : 3840) : (resIdx == 2 ? (is16x9 ? 720 : 1280) : (is16x9 ? 1080 : 1920));
+            boolean isMono = (styleCombo.getSelectedIndex() == 0);
+            boolean showBanner = bannerCheck.isSelected();
+            String hStyle = hatchCombo.getSelectedIndex() == 0 ? "DIAGONAL_45" : (hatchCombo.getSelectedIndex() == 1 ? "SOLID" : "HOLLOW");
+            boolean isPng = (formatCombo.getSelectedIndex() == 0);
+            String ext = isPng ? "png" : "jpg";
+
+            String ratioTag = is16x9 ? "16x9" : "9x16";
+            String styleTag = isMono ? "Mono" : "Color";
+            String defName = "HDE_Snip_" + ratioTag + "_" + baseW + "x" + baseH + "_" + styleTag + "." + ext;
+
+            JFileChooser fc = new JFileChooser();
+            fc.setSelectedFile(new File(defName));
+            if (fc.showSaveDialog(dlg) == JFileChooser.APPROVE_OPTION) {
+                File dest = fc.getSelectedFile();
+                if (!dest.getName().toLowerCase().endsWith("." + ext)) {
+                    dest = new File(dest.getParentFile(), dest.getName() + "." + ext);
+                }
+                try {
+                    BufferedImage fullImg = renderArchitecturalDrawing(baseW, baseH, isMono, !showBanner, hStyle, activeCropWorld[0]);
+                    saveImageToFile(fullImg, dest, ext);
+                    JOptionPane.showMessageDialog(dlg,
+                            "Image saved successfully:\n" + dest.getAbsolutePath() +
+                            "\n\nRatio: " + (is16x9 ? "16:9 Landscape" : "9:16 Vertical") +
+                            "\nResolution: " + baseW + " \u00d7 " + baseH + " px (" + ext.toUpperCase() + ")",
+                            "Snip Saved", JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(dlg,
+                            "Failed to save image: " + ex.getMessage(),
+                            "Save Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+
+        btnPanel.add(cancelBtn);
+        btnPanel.add(copyBtn);
+        btnPanel.add(saveBtn);
+        dlg.add(btnPanel, BorderLayout.SOUTH);
+
+        dlg.pack();
+        dlg.setLocationRelativeTo(this);
+        dlg.setVisible(true);
+    }
+
+    private void saveImageToFile(BufferedImage img, File file, String format) throws IOException {
+        if ("jpg".equalsIgnoreCase(format) || "jpeg".equalsIgnoreCase(format)) {
+            BufferedImage rgbImg = new BufferedImage(img.getWidth(), img.getHeight(), BufferedImage.TYPE_INT_RGB);
+            Graphics2D g = rgbImg.createGraphics();
+            g.setColor(Color.WHITE);
+            g.fillRect(0, 0, img.getWidth(), img.getHeight());
+            g.drawImage(img, 0, 0, null);
+            g.dispose();
+
+            Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("jpeg");
+            if (writers.hasNext()) {
+                ImageWriter writer = writers.next();
+                ImageWriteParam param = writer.getDefaultWriteParam();
+                param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+                param.setCompressionQuality(0.95f);
+                try (ImageOutputStream ios = ImageIO.createImageOutputStream(file)) {
+                    writer.setOutput(ios);
+                    writer.write(null, new IIOImage(rgbImg, null, null), param);
+                }
+                writer.dispose();
+            } else {
+                ImageIO.write(rgbImg, "jpeg", file);
+            }
+        } else {
+            ImageIO.write(img, "png", file);
+        }
+    }
+
+    public void copyImageToClipboard(BufferedImage img) {
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new Transferable() {
+            @Override
+            public DataFlavor[] getTransferDataFlavors() {
+                return new DataFlavor[]{ DataFlavor.imageFlavor };
+            }
+            @Override
+            public boolean isDataFlavorSupported(DataFlavor flavor) {
+                return DataFlavor.imageFlavor.equals(flavor);
+            }
+            @Override
+            public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException {
+                if (DataFlavor.imageFlavor.equals(flavor)) return img;
+                throw new UnsupportedFlavorException(flavor);
+            }
+        }, null);
+    }
+
 
     /**
      * Professional Architectural Drawing Renderer.
@@ -5848,6 +6438,10 @@ public class HousePlanCADApp extends JFrame {
      * 4) Floor / Tile Patterns: Real architectural flooring hatches rendered below wall cut lines.
      */
     public BufferedImage renderArchitecturalDrawing(int targetW, int targetH, boolean isMonochrome, boolean isSocialClean, String hatchStyle) {
+        return renderArchitecturalDrawing(targetW, targetH, isMonochrome, isSocialClean, hatchStyle, null);
+    }
+
+    public BufferedImage renderArchitecturalDrawing(int targetW, int targetH, boolean isMonochrome, boolean isSocialClean, String hatchStyle, Rectangle2D.Double customCrop) {
         BufferedImage img = new BufferedImage(targetW, targetH, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2 = img.createGraphics();
 
@@ -5891,30 +6485,39 @@ public class HousePlanCADApp extends JFrame {
         double rawMinX = Double.MAX_VALUE, rawMaxX = -Double.MAX_VALUE;
         double rawMinY = Double.MAX_VALUE, rawMaxY = -Double.MAX_VALUE;
 
-        for (Wall w : walls) {
-            rawMinX = Math.min(rawMinX, Math.min(w.x1, w.x2)); rawMaxX = Math.max(rawMaxX, Math.max(w.x1, w.x2));
-            rawMinY = Math.min(rawMinY, Math.min(w.y1, w.y2)); rawMaxY = Math.max(rawMaxY, Math.max(w.y1, w.y2));
-        }
-        for (CADElement el : elements) {
-            if (el.type.startsWith("floor-") || el.type.equals("room") || el.type.equals("wall")) {
-                rawMinX = Math.min(rawMinX, el.x); rawMaxX = Math.max(rawMaxX, el.x + el.w);
-                rawMinY = Math.min(rawMinY, el.y); rawMaxY = Math.max(rawMinY, el.y + el.h);
+        if (customCrop != null) {
+            rawMinX = customCrop.x;
+            rawMaxX = customCrop.x + customCrop.width;
+            rawMinY = customCrop.y;
+            rawMaxY = customCrop.y + customCrop.height;
+        } else {
+            for (Wall w : walls) {
+                rawMinX = Math.min(rawMinX, Math.min(w.x1, w.x2)); rawMaxX = Math.max(rawMaxX, Math.max(w.x1, w.x2));
+                rawMinY = Math.min(rawMinY, Math.min(w.y1, w.y2)); rawMaxY = Math.max(rawMaxY, Math.max(w.y1, w.y2));
+            }
+            for (CADElement el : elements) {
+                if (el.type.startsWith("floor-") || el.type.equals("room") || el.type.equals("wall")) {
+                    rawMinX = Math.min(rawMinX, el.x); rawMaxX = Math.max(rawMaxX, el.x + el.w);
+                    rawMinY = Math.min(rawMinY, el.y); rawMaxY = Math.max(rawMinY, el.y + el.h);
+                }
             }
         }
 
         double minX = rawMinX, maxX = rawMaxX;
         double minY = rawMinY, maxY = rawMaxY;
 
-        for (CADElement el : elements) {
-            minX = Math.min(minX, el.x); maxX = Math.max(maxX, el.x + el.w);
-            minY = Math.min(minY, el.y); maxY = Math.max(maxY, el.y + el.h);
-        }
-        for (CADDimension d : dimensions) {
-            minX = Math.min(minX, Math.min(d.x1, d.x2)); maxX = Math.max(maxX, Math.max(d.x1, d.x2));
-            minY = Math.min(minY, Math.min(d.y1, d.y2)); maxY = Math.max(maxY, Math.max(d.y1, d.y2));
+        if (customCrop == null) {
+            for (CADElement el : elements) {
+                minX = Math.min(minX, el.x); maxX = Math.max(maxX, el.x + el.w);
+                minY = Math.min(minY, el.y); maxY = Math.max(maxY, el.y + el.h);
+            }
+            for (CADDimension d : dimensions) {
+                minX = Math.min(minX, Math.min(d.x1, d.x2)); maxX = Math.max(maxX, Math.max(d.x1, d.x2));
+                minY = Math.min(minY, Math.min(d.y1, d.y2)); maxY = Math.max(maxY, Math.max(d.y1, d.y2));
+            }
         }
 
-        if (walls.isEmpty() && elements.isEmpty()) {
+        if (walls.isEmpty() && elements.isEmpty() && customCrop == null) {
             minX = 0; maxX = 800; minY = 0; maxY = 600;
             rawMinX = 0; rawMaxX = 800; rawMinY = 0; rawMaxY = 600;
         }
@@ -5929,7 +6532,7 @@ public class HousePlanCADApp extends JFrame {
         String planSizeText = planWidthFt + "' \u00d7 " + planDepthFt + "' FT";
         String totalAreaText = String.format("%,d SQ.FT.", totalAreaSqFt);
 
-        double modelMargin = isSocialClean ? (1.5 * FT_PX) : (2.5 * FT_PX);
+        double modelMargin = (customCrop != null) ? (0.5 * FT_PX) : (isSocialClean ? (1.5 * FT_PX) : (2.5 * FT_PX));
         minX -= modelMargin; maxX += modelMargin;
         minY -= modelMargin; maxY += modelMargin;
 
@@ -6352,9 +6955,17 @@ public class HousePlanCADApp extends JFrame {
             // Row 1 Right: Plan Size | Total Area | Scale | Sheet
             g2.setFont(infoFont);
             FontMetrics fmInfo = g2.getFontMetrics();
-            boolean isLandscape = targetW >= targetH;
-            boolean isA3 = Math.max(targetW, targetH) >= 4000;
-            String sheetTag = (isA3 ? "A3" : "A4") + " " + (isLandscape ? "LANDSCAPE" : "PORTRAIT");
+            double ratio = (double) targetW / targetH;
+            String sheetTag;
+            if (Math.abs(ratio - (16.0 / 9.0)) < 0.05) {
+                sheetTag = "16:9 (" + targetW + "\u00d7" + targetH + ")";
+            } else if (Math.abs(ratio - (9.0 / 16.0)) < 0.05) {
+                sheetTag = "9:16 (" + targetW + "\u00d7" + targetH + ")";
+            } else {
+                boolean isLandscape = targetW >= targetH;
+                boolean isA3 = Math.max(targetW, targetH) >= 4000;
+                sheetTag = (isA3 ? "A3" : "A4") + " " + (isLandscape ? "LANDSCAPE" : "PORTRAIT");
+            }
 
             String specStr = "PLAN SIZE: " + planSizeText + "   |   TOTAL AREA: " + totalAreaText +
                              "   |   SCALE: FIT TO PAPER   |   SHEET: " + sheetTag;
