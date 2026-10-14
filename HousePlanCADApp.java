@@ -393,10 +393,25 @@ public class HousePlanCADApp extends JFrame {
     private ModernButton propUnfreezeBtn;
     private boolean isUpdatingInspector = false;
 
+    // --- Local Project Database & Auto-Save State ---
+    private String activeProjectId = UUID.randomUUID().toString();
+    private String activeProjectName = "Standard 30' × 40' Villa";
+    private String activeProjectClient = "Client / Owner";
+    private String activeProjectFacing = "North Facing";
+    private double activePlotWidthFt = 30.0;
+    private double activePlotDepthFt = 40.0;
+    private boolean isProjectDirty = false;
+    private File activeProjectFile = null;
+    private javax.swing.Timer autoSaveTimer = null;
+    private JLabel headerProjectTitleLbl = null;
+    private JLabel headerDirtyIndicator = null;
+
     public HousePlanCADApp() {
         super("HDE Studio — Architectural 2D CAD");
         initUI();
+        initAutoSaveEngine();
         loadPreset30x40();
+        checkAutoSaveRecoveryOnStartup();
     }
 
     private void initUI() {
@@ -429,7 +444,7 @@ public class HousePlanCADApp extends JFrame {
         header.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(30, 41, 59)));
         header.setPreferredSize(new Dimension(1000, 44));
 
-        JPanel brandPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 14, 8));
+        JPanel brandPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 7));
         brandPanel.setOpaque(false);
         JLabel titleLbl = new JLabel("HDE Studio");
         titleLbl.setFont(new Font("Segoe UI", Font.BOLD, 15));
@@ -441,10 +456,38 @@ public class HousePlanCADApp extends JFrame {
                 BorderFactory.createLineBorder(new Color(56, 189, 248, 140), 1, true),
                 BorderFactory.createEmptyBorder(2, 6, 2, 6)));
         brandPanel.add(titleLbl); brandPanel.add(tagLbl);
+
+        // Active Project Info & Dirty Indicator in Header
+        headerProjectTitleLbl = new JLabel(activeProjectName);
+        headerProjectTitleLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        headerProjectTitleLbl.setForeground(new Color(226, 232, 240));
+        headerProjectTitleLbl.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true),
+                BorderFactory.createEmptyBorder(2, 8, 2, 8)));
+        headerDirtyIndicator = new JLabel("●");
+        headerDirtyIndicator.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        headerDirtyIndicator.setForeground(new Color(100, 116, 139));
+        headerDirtyIndicator.setToolTipText("Project Saved");
+        brandPanel.add(Box.createHorizontalStrut(6));
+        brandPanel.add(headerProjectTitleLbl);
+        brandPanel.add(headerDirtyIndicator);
         header.add(brandPanel, BorderLayout.WEST);
 
-        JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 7));
+        JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 7));
         actionPanel.setOpaque(false);
+
+        // Project Database & File Buttons
+        ModernButton newProjBtn = new ModernButton("+ New", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
+        newProjBtn.setToolTipText("New Project Wizard (Ctrl+N)");
+        newProjBtn.addActionListener(e -> showNewProjectDialog());
+
+        ModernButton projectsHubBtn = new ModernButton("📁 Projects", new Color(30, 41, 59), new Color(56, 189, 248), new Color(56, 189, 248, 160));
+        projectsHubBtn.setToolTipText("Project Manager & Revision Hub (Ctrl+O)");
+        projectsHubBtn.addActionListener(e -> showProjectManagerDialog());
+
+        ModernButton saveBtn = new ModernButton("💾 Save", new Color(14, 116, 144), Color.WHITE, new Color(56, 189, 248));
+        saveBtn.setToolTipText("Quick Save (Ctrl+S) / Save As (Ctrl+Shift+S)");
+        saveBtn.addActionListener(e -> saveCurrentProject(false));
 
         // Undo/Redo buttons
         undoBtn = new ModernButton("↶ Undo", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
@@ -471,6 +514,10 @@ public class HousePlanCADApp extends JFrame {
         ModernButton clearBtn = new ModernButton("Clear All", new Color(127, 29, 29), new Color(254, 205, 211), new Color(244, 63, 94));
         clearBtn.addActionListener(e -> clearCanvas());
 
+        actionPanel.add(newProjBtn);
+        actionPanel.add(projectsHubBtn);
+        actionPanel.add(saveBtn);
+        actionPanel.add(new JSeparator(JSeparator.VERTICAL));
         actionPanel.add(undoBtn); actionPanel.add(redoBtn);
         actionPanel.add(new JSeparator(JSeparator.VERTICAL));
         actionPanel.add(presetsCombo);
@@ -1818,6 +1865,12 @@ public class HousePlanCADApp extends JFrame {
             }
 
             if (!isTyping) {
+                // Project and File Shortcuts
+                if (e.isControlDown() && e.isShiftDown() && e.getKeyCode() == KeyEvent.VK_S) { saveCurrentProject(true); return true; }
+                if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_S) { saveCurrentProject(false); return true; }
+                if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_O) { showProjectManagerDialog(); return true; }
+                if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_N) { showNewProjectDialog(); return true; }
+
                 if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_Z) { undo(); return true; }
                 if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_Y) { redo(); return true; }
                 if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_A) { selectAll(); return true; }
@@ -2009,6 +2062,7 @@ public class HousePlanCADApp extends JFrame {
         redoStack.clear();
         while (undoStack.size() > MAX_UNDO) ((ArrayDeque<AppState>) undoStack).removeLast();
         updateUndoButtons();
+        markProjectDirty(true);
     }
 
     private void undo() {
@@ -7670,8 +7724,1012 @@ public class HousePlanCADApp extends JFrame {
     }
 
     // =====================================================================
-    // ==============  ARCHITECTURAL EXPORT ENGINE (PNG & PDF)  ============
+    // =============  LOCAL PROJECT DATABASE & AUTO-SAVE ENGINE  ===========
     // =====================================================================
+
+    /**
+     * Pure Java Lightweight JSON Parser and Serializer (0 External Dependencies).
+     */
+    public static class SimpleJson {
+        public static class JsonParser {
+            private final String src;
+            private int pos = 0;
+
+            public JsonParser(String s) { this.src = (s != null) ? s.trim() : ""; }
+
+            public Object parseValue() {
+                skipWhitespace();
+                if (pos >= src.length()) return null;
+                char c = src.charAt(pos);
+                if (c == '{') return parseObject();
+                if (c == '[') return parseArray();
+                if (c == '"') return parseString();
+                if (c == 't' || c == 'f') return parseBoolean();
+                if (c == 'n') { pos += 4; return null; }
+                return parseNumber();
+            }
+
+            private void skipWhitespace() {
+                while (pos < src.length() && Character.isWhitespace(src.charAt(pos))) pos++;
+            }
+
+            private Map<String, Object> parseObject() {
+                Map<String, Object> map = new LinkedHashMap<>();
+                pos++; // skip '{'
+                skipWhitespace();
+                if (pos < src.length() && src.charAt(pos) == '}') { pos++; return map; }
+                while (pos < src.length()) {
+                    skipWhitespace();
+                    String key = parseString();
+                    skipWhitespace();
+                    if (pos < src.length() && src.charAt(pos) == ':') pos++;
+                    skipWhitespace();
+                    Object val = parseValue();
+                    map.put(key, val);
+                    skipWhitespace();
+                    if (pos < src.length() && src.charAt(pos) == ',') {
+                        pos++;
+                    } else if (pos < src.length() && src.charAt(pos) == '}') {
+                        pos++; break;
+                    } else {
+                        pos++;
+                    }
+                }
+                return map;
+            }
+
+            private List<Object> parseArray() {
+                List<Object> list = new ArrayList<>();
+                pos++; // skip '['
+                skipWhitespace();
+                if (pos < src.length() && src.charAt(pos) == ']') { pos++; return list; }
+                while (pos < src.length()) {
+                    skipWhitespace();
+                    Object val = parseValue();
+                    list.add(val);
+                    skipWhitespace();
+                    if (pos < src.length() && src.charAt(pos) == ',') {
+                        pos++;
+                    } else if (pos < src.length() && src.charAt(pos) == ']') {
+                        pos++; break;
+                    } else {
+                        pos++;
+                    }
+                }
+                return list;
+            }
+
+            private String parseString() {
+                if (pos >= src.length() || src.charAt(pos) != '"') return "";
+                pos++; // skip opening '"'
+                StringBuilder sb = new StringBuilder();
+                while (pos < src.length()) {
+                    char c = src.charAt(pos++);
+                    if (c == '"') break;
+                    if (c == '\\' && pos < src.length()) {
+                        char esc = src.charAt(pos++);
+                        if (esc == '"') sb.append('"');
+                        else if (esc == '\\') sb.append('\\');
+                        else if (esc == 'n') sb.append('\n');
+                        else if (esc == 'r') sb.append('\r');
+                        else if (esc == 't') sb.append('\t');
+                        else sb.append(esc);
+                    } else {
+                        sb.append(c);
+                    }
+                }
+                return sb.toString();
+            }
+
+            private Boolean parseBoolean() {
+                if (src.startsWith("true", pos)) { pos += 4; return Boolean.TRUE; }
+                if (src.startsWith("false", pos)) { pos += 5; return Boolean.FALSE; }
+                return Boolean.FALSE;
+            }
+
+            private Double parseNumber() {
+                int start = pos;
+                if (pos < src.length() && (src.charAt(pos) == '-' || src.charAt(pos) == '+')) pos++;
+                while (pos < src.length() && (Character.isDigit(src.charAt(pos)) || src.charAt(pos) == '.' || src.charAt(pos) == 'e' || src.charAt(pos) == 'E' || src.charAt(pos) == '-')) {
+                    pos++;
+                }
+                String numStr = src.substring(start, pos);
+                try {
+                    return Double.parseDouble(numStr);
+                } catch (Exception e) {
+                    return 0.0;
+                }
+            }
+        }
+
+        public static String escape(String s) {
+            if (s == null) return "";
+            return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
+        }
+
+        public static double getDouble(Map<?, ?> map, String key, double def) {
+            if (map == null || !map.containsKey(key)) return def;
+            Object val = map.get(key);
+            if (val instanceof Number) return ((Number) val).doubleValue();
+            if (val instanceof String) {
+                try { return Double.parseDouble((String) val); } catch (Exception ignored) {}
+            }
+            return def;
+        }
+
+        public static String getString(Map<?, ?> map, String key, String def) {
+            if (map == null || !map.containsKey(key)) return def;
+            Object val = map.get(key);
+            return (val != null) ? val.toString() : def;
+        }
+
+        public static boolean getBoolean(Map<?, ?> map, String key, boolean def) {
+            if (map == null || !map.containsKey(key)) return def;
+            Object val = map.get(key);
+            if (val instanceof Boolean) return (Boolean) val;
+            if (val instanceof String) return Boolean.parseBoolean((String) val);
+            return def;
+        }
+    }
+
+    public static class ProjectSummary {
+        public File file;
+        public String id;
+        public String name;
+        public String client;
+        public String facing;
+        public double plotW;
+        public double plotD;
+        public long lastModified;
+        public int wallCount;
+        public int elementCount;
+        public int dimCount;
+        public String thumbnailBase64;
+        public BufferedImage thumbnailImage;
+    }
+
+    public static File getProjectsDirectory() {
+        File dir = new File(System.getProperty("user.home"), "HDE_Studio_Projects");
+        if (!dir.exists()) dir.mkdirs();
+        return dir;
+    }
+
+    public static File getAutoSaveFile() {
+        return new File(getProjectsDirectory(), "_autosave_recovery.hde");
+    }
+
+    public void markProjectDirty(boolean dirty) {
+        this.isProjectDirty = dirty;
+        if (headerDirtyIndicator != null) {
+            headerDirtyIndicator.setText(dirty ? "● MODIFIED" : "● SAVED");
+            headerDirtyIndicator.setForeground(dirty ? new Color(251, 191, 36) : new Color(52, 211, 153));
+        }
+        if (headerProjectTitleLbl != null) {
+            headerProjectTitleLbl.setText(activeProjectName);
+        }
+        String fileName = (activeProjectFile != null) ? activeProjectFile.getName() : "Untitled";
+        setTitle("HDE Studio — Architectural 2D CAD — [" + activeProjectName + (dirty ? " *" : "") + "] (" + fileName + ")");
+    }
+
+    private void initAutoSaveEngine() {
+        // Runs every 45 seconds; auto-saves silently to _autosave_recovery.hde if project has changes
+        autoSaveTimer = new javax.swing.Timer(45000, e -> {
+            if (isProjectDirty && (!walls.isEmpty() || !elements.isEmpty())) {
+                performAutoSave();
+            }
+        });
+        autoSaveTimer.start();
+    }
+
+    private void checkAutoSaveRecoveryOnStartup() {
+        File recovery = getAutoSaveFile();
+        if (recovery.exists() && recovery.length() > 200) {
+            long ageSec = (System.currentTimeMillis() - recovery.lastModified()) / 1000;
+            if (ageSec < 86400 * 7) { // within last 7 days
+                SwingUtilities.invokeLater(() -> {
+                    int ans = JOptionPane.showConfirmDialog(this,
+                            "An unsaved project recovery file was found from your previous session.\n" +
+                            "Auto-saved: " + new Date(recovery.lastModified()) + "\n\n" +
+                            "Would you like to recover your unsaved drawing?",
+                            "HDE Studio — Crash Recovery Available",
+                            JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+                    if (ans == JOptionPane.YES_OPTION) {
+                        loadProjectFromFile(recovery);
+                        this.activeProjectFile = null; // Don't overwrite the recovery file on normal save
+                        markProjectDirty(true);
+                    }
+                });
+            }
+        }
+    }
+
+    public void performAutoSave() {
+        try {
+            File recovery = getAutoSaveFile();
+            saveProjectToSpecificFile(recovery, activeProjectName, activeProjectClient, activeProjectFacing,
+                    activePlotWidthFt, activePlotDepthFt, false);
+            if (headerDirtyIndicator != null) {
+                headerDirtyIndicator.setToolTipText("Auto-saved recovery snapshot at " + String.format("%tT", new Date()));
+            }
+        } catch (Exception ex) {
+            System.err.println("Auto-save notice: " + ex.getMessage());
+        }
+    }
+
+    public void saveCurrentProject(boolean forceSaveAs) {
+        if (activeProjectFile == null || forceSaveAs) {
+            // Prompt for Project Details & File Location
+            JPanel p = new JPanel(new GridLayout(4, 2, 8, 8));
+            p.setOpaque(false);
+            JTextField nameField = new JTextField(activeProjectName);
+            JTextField clientField = new JTextField(activeProjectClient);
+            JComboBox<String> facingCombo = new JComboBox<>(new String[]{"North Facing", "East Facing", "West Facing", "South Facing"});
+            facingCombo.setSelectedItem(activeProjectFacing);
+            styleComboBox(facingCombo);
+
+            JLabel l1 = new JLabel("Project Title:"); l1.setForeground(Color.WHITE);
+            JLabel l2 = new JLabel("Client / Owner:"); l2.setForeground(Color.WHITE);
+            JLabel l3 = new JLabel("Site Facing:"); l3.setForeground(Color.WHITE);
+
+            p.add(l1); p.add(nameField);
+            p.add(l2); p.add(clientField);
+            p.add(l3); p.add(facingCombo);
+
+            int opt = JOptionPane.showConfirmDialog(this, p, forceSaveAs ? "Save Project As" : "Save Project", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+            if (opt != JOptionPane.OK_OPTION) return;
+
+            String projName = nameField.getText().trim();
+            if (projName.isEmpty()) projName = "Untitled Project";
+            String client = clientField.getText().trim();
+            String facing = (String) facingCombo.getSelectedItem();
+
+            String safeName = projName.replaceAll("[^a-zA-Z0-9_\\-\\s]", "").trim().replace(' ', '_');
+            File dest = new File(getProjectsDirectory(), safeName + ".hde");
+
+            saveProjectToSpecificFile(dest, projName, client, facing, activePlotWidthFt, activePlotDepthFt, true);
+        } else {
+            saveProjectToSpecificFile(activeProjectFile, activeProjectName, activeProjectClient, activeProjectFacing,
+                    activePlotWidthFt, activePlotDepthFt, true);
+        }
+    }
+
+    public void saveProjectToSpecificFile(File file, String name, String client, String facing,
+                                          double plotW, double plotD, boolean updateActive) {
+        try {
+            StringBuilder sb = new StringBuilder();
+            sb.append("{\n");
+            sb.append("  \"version\": \"1.0\",\n");
+            sb.append("  \"app\": \"HDE Studio\",\n");
+            sb.append("  \"id\": \"").append(SimpleJson.escape(activeProjectId)).append("\",\n");
+            sb.append("  \"name\": \"").append(SimpleJson.escape(name)).append("\",\n");
+            sb.append("  \"client\": \"").append(SimpleJson.escape(client)).append("\",\n");
+            sb.append("  \"facing\": \"").append(SimpleJson.escape(facing)).append("\",\n");
+            sb.append("  \"plotWidthFt\": ").append(plotW).append(",\n");
+            sb.append("  \"plotDepthFt\": ").append(plotD).append(",\n");
+            sb.append("  \"wallHatchStyle\": \"").append(SimpleJson.escape(wallHatchStyle)).append("\",\n");
+            sb.append("  \"activeHatchPattern\": \"").append(SimpleJson.escape(activeHatchPattern)).append("\",\n");
+            sb.append("  \"savedAt\": ").append(System.currentTimeMillis()).append(",\n");
+
+            // Stage Locks
+            sb.append("  \"stageLocked\": {");
+            int sIdx = 0;
+            for (ProjectStage s : ProjectStage.values()) {
+                if (sIdx++ > 0) sb.append(", ");
+                sb.append("\"").append(s.name()).append("\": ").append(Boolean.TRUE.equals(stageLocked.get(s)));
+            }
+            sb.append("},\n");
+
+            // Walls
+            sb.append("  \"walls\": [\n");
+            for (int i = 0; i < walls.size(); i++) {
+                Wall w = walls.get(i);
+                sb.append("    {\"id\": \"").append(SimpleJson.escape(w.id))
+                  .append("\", \"x1\": ").append(w.x1)
+                  .append(", \"y1\": ").append(w.y1)
+                  .append(", \"x2\": ").append(w.x2)
+                  .append(", \"y2\": ").append(w.y2)
+                  .append(", \"thicknessInches\": ").append(w.thicknessInches).append("}");
+                if (i < walls.size() - 1) sb.append(",");
+                sb.append("\n");
+            }
+            sb.append("  ],\n");
+
+            // Elements
+            sb.append("  \"elements\": [\n");
+            for (int i = 0; i < elements.size(); i++) {
+                CADElement el = elements.get(i);
+                sb.append("    {\"id\": \"").append(SimpleJson.escape(el.id))
+                  .append("\", \"type\": \"").append(SimpleJson.escape(el.type))
+                  .append("\", \"name\": \"").append(SimpleJson.escape(el.name))
+                  .append("\", \"x\": ").append(el.x)
+                  .append(", \"y\": ").append(el.y)
+                  .append(", \"w\": ").append(el.w)
+                  .append(", \"h\": ").append(el.h)
+                  .append(", \"rotation\": ").append(el.rotation)
+                  .append(", \"flipH\": ").append(el.flipH)
+                  .append(", \"flipV\": ").append(el.flipV);
+                if (el.points != null && !el.points.isEmpty()) {
+                    sb.append(", \"points\": [");
+                    for (int p = 0; p < el.points.size(); p++) {
+                        Point2D.Double pt = el.points.get(p);
+                        sb.append("{\"x\": ").append(pt.x).append(", \"y\": ").append(pt.y).append("}");
+                        if (p < el.points.size() - 1) sb.append(", ");
+                    }
+                    sb.append("]");
+                }
+                sb.append("}");
+                if (i < elements.size() - 1) sb.append(",");
+                sb.append("\n");
+            }
+            sb.append("  ],\n");
+
+            // Dimensions
+            sb.append("  \"dimensions\": [\n");
+            for (int i = 0; i < dimensions.size(); i++) {
+                CADDimension d = dimensions.get(i);
+                sb.append("    {\"id\": \"").append(SimpleJson.escape(d.id))
+                  .append("\", \"x1\": ").append(d.x1)
+                  .append(", \"y1\": ").append(d.y1)
+                  .append(", \"x2\": ").append(d.x2)
+                  .append(", \"y2\": ").append(d.y2)
+                  .append(", \"offset\": ").append(d.offset).append("}");
+                if (i < dimensions.size() - 1) sb.append(",");
+                sb.append("\n");
+            }
+            sb.append("  ],\n");
+
+            // Visual Thumbnail (Base64 PNG)
+            String thumbBase64 = "";
+            try {
+                BufferedImage thumb = renderArchitecturalDrawing(280, 200, false, true, "DIAGONAL_45");
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                ImageIO.write(thumb, "PNG", baos);
+                thumbBase64 = Base64.getEncoder().encodeToString(baos.toByteArray());
+            } catch (Exception ignored) {}
+            sb.append("  \"thumbnail\": \"").append(thumbBase64).append("\"\n");
+            sb.append("}\n");
+
+            // Write atomic with temp file
+            File tmp = new File(file.getParentFile(), file.getName() + ".tmp");
+            try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(tmp), "UTF-8"))) {
+                writer.write(sb.toString());
+            }
+            if (file.exists()) file.delete();
+            tmp.renameTo(file);
+
+            if (updateActive) {
+                this.activeProjectFile = file;
+                this.activeProjectName = name;
+                this.activeProjectClient = client;
+                this.activeProjectFacing = facing;
+                this.activePlotWidthFt = plotW;
+                this.activePlotDepthFt = plotD;
+                markProjectDirty(false);
+            }
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Save Failed: " + ex.getMessage(), "Error Saving Project", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    public boolean loadProjectFromFile(File file) {
+        if (file == null || !file.exists()) return false;
+        try {
+            StringBuilder sb = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), "UTF-8"))) {
+                String line;
+                while ((line = reader.readLine()) != null) sb.append(line).append("\n");
+            }
+
+            SimpleJson.JsonParser parser = new SimpleJson.JsonParser(sb.toString());
+            Object rootObj = parser.parseValue();
+            if (!(rootObj instanceof Map)) return false;
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = (Map<String, Object>) rootObj;
+
+            // Clear canvas & undo
+            undoStack.clear(); redoStack.clear();
+            walls.clear(); elements.clear(); dimensions.clear();
+            clearSelection();
+
+            // Meta
+            this.activeProjectId = SimpleJson.getString(map, "id", UUID.randomUUID().toString());
+            this.activeProjectName = SimpleJson.getString(map, "name", file.getName().replace(".hde", ""));
+            this.activeProjectClient = SimpleJson.getString(map, "client", "Client / Owner");
+            this.activeProjectFacing = SimpleJson.getString(map, "facing", "North Facing");
+            this.activePlotWidthFt = SimpleJson.getDouble(map, "plotWidthFt", 30.0);
+            this.activePlotDepthFt = SimpleJson.getDouble(map, "plotDepthFt", 40.0);
+            this.wallHatchStyle = SimpleJson.getString(map, "wallHatchStyle", "DIAGONAL_45");
+            this.activeHatchPattern = SimpleJson.getString(map, "activeHatchPattern", "floor-tiles-2x2");
+
+            // Stage locks
+            if (map.get("stageLocked") instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> locks = (Map<String, Object>) map.get("stageLocked");
+                for (ProjectStage s : ProjectStage.values()) {
+                    if (locks.containsKey(s.name())) {
+                        stageLocked.put(s, SimpleJson.getBoolean(locks, s.name(), false));
+                    }
+                }
+            }
+
+            // Walls
+            if (map.get("walls") instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<Object> wList = (List<Object>) map.get("walls");
+                for (Object o : wList) {
+                    if (o instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> wm = (Map<String, Object>) o;
+                        double x1 = SimpleJson.getDouble(wm, "x1", 0);
+                        double y1 = SimpleJson.getDouble(wm, "y1", 0);
+                        double x2 = SimpleJson.getDouble(wm, "x2", 0);
+                        double y2 = SimpleJson.getDouble(wm, "y2", 0);
+                        double thick = SimpleJson.getDouble(wm, "thicknessInches", 9.0);
+                        Wall w = new Wall(x1, y1, x2, y2, thick);
+                        w.id = SimpleJson.getString(wm, "id", UUID.randomUUID().toString());
+                        walls.add(w);
+                    }
+                }
+            }
+
+            // Elements
+            if (map.get("elements") instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<Object> eList = (List<Object>) map.get("elements");
+                for (Object o : eList) {
+                    if (o instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> em = (Map<String, Object>) o;
+                        String type = SimpleJson.getString(em, "type", "tag");
+                        String name = SimpleJson.getString(em, "name", "Block");
+                        double x = SimpleJson.getDouble(em, "x", 0);
+                        double y = SimpleJson.getDouble(em, "y", 0);
+                        double w = SimpleJson.getDouble(em, "w", 24);
+                        double h = SimpleJson.getDouble(em, "h", 24);
+                        double rot = SimpleJson.getDouble(em, "rotation", 0);
+                        boolean fh = SimpleJson.getBoolean(em, "flipH", false);
+                        boolean fv = SimpleJson.getBoolean(em, "flipV", false);
+
+                        CADElement el;
+                        if (em.get("points") instanceof List) {
+                            @SuppressWarnings("unchecked")
+                            List<Object> ptList = (List<Object>) em.get("points");
+                            List<Point2D.Double> pts = new ArrayList<>();
+                            for (Object po : ptList) {
+                                if (po instanceof Map) {
+                                    @SuppressWarnings("unchecked")
+                                    Map<String, Object> ptm = (Map<String, Object>) po;
+                                    pts.add(new Point2D.Double(SimpleJson.getDouble(ptm, "x", 0), SimpleJson.getDouble(ptm, "y", 0)));
+                                }
+                            }
+                            el = new CADElement(type, name, pts);
+                        } else {
+                            el = new CADElement(type, name, x, y, w, h);
+                        }
+                        el.id = SimpleJson.getString(em, "id", UUID.randomUUID().toString());
+                        el.rotation = rot;
+                        el.flipH = fh;
+                        el.flipV = fv;
+                        elements.add(el);
+                    }
+                }
+            }
+
+            // Dimensions
+            if (map.get("dimensions") instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<Object> dList = (List<Object>) map.get("dimensions");
+                for (Object o : dList) {
+                    if (o instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> dm = (Map<String, Object>) o;
+                        double x1 = SimpleJson.getDouble(dm, "x1", 0);
+                        double y1 = SimpleJson.getDouble(dm, "y1", 0);
+                        double x2 = SimpleJson.getDouble(dm, "x2", 0);
+                        double y2 = SimpleJson.getDouble(dm, "y2", 0);
+                        double offset = SimpleJson.getDouble(dm, "offset", 24.0);
+                        CADDimension d = new CADDimension(x1, y1, x2, y2, offset);
+                        d.id = SimpleJson.getString(dm, "id", UUID.randomUUID().toString());
+                        dimensions.add(d);
+                    }
+                }
+            }
+
+            this.activeProjectFile = file;
+            markProjectDirty(false);
+            updateStageStepperUI();
+            updateUndoButtons();
+            checkAllCollisions();
+            updateProperties();
+            viewportPanel.repaint();
+            return true;
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Could not open project:\n" + ex.getMessage(), "File Load Error", JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+    }
+
+    public List<ProjectSummary> listAllLocalProjects() {
+        List<ProjectSummary> list = new ArrayList<>();
+        File dir = getProjectsDirectory();
+        File[] files = dir.listFiles((d, n) -> n.toLowerCase().endsWith(".hde") && !n.startsWith("_autosave"));
+        if (files == null || files.length == 0) {
+            // Seed initial sample projects if empty directory
+            createSampleProjectsIfEmpty();
+            files = dir.listFiles((d, n) -> n.toLowerCase().endsWith(".hde") && !n.startsWith("_autosave"));
+        }
+        if (files != null) {
+            for (File f : files) {
+                try {
+                    ProjectSummary sum = readProjectSummary(f);
+                    if (sum != null) list.add(sum);
+                } catch (Exception ignored) {}
+            }
+        }
+        list.sort((a, b) -> Long.compare(b.lastModified, a.lastModified));
+        return list;
+    }
+
+    private ProjectSummary readProjectSummary(File file) {
+        try {
+            StringBuilder sb = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), "UTF-8"))) {
+                String line;
+                while ((line = reader.readLine()) != null) sb.append(line).append("\n");
+            }
+            SimpleJson.JsonParser parser = new SimpleJson.JsonParser(sb.toString());
+            Object root = parser.parseValue();
+            if (!(root instanceof Map)) return null;
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = (Map<String, Object>) root;
+
+            ProjectSummary s = new ProjectSummary();
+            s.file = file;
+            s.id = SimpleJson.getString(map, "id", UUID.randomUUID().toString());
+            s.name = SimpleJson.getString(map, "name", file.getName().replace(".hde", ""));
+            s.client = SimpleJson.getString(map, "client", "Client / Owner");
+            s.facing = SimpleJson.getString(map, "facing", "North Facing");
+            s.plotW = SimpleJson.getDouble(map, "plotWidthFt", 30.0);
+            s.plotD = SimpleJson.getDouble(map, "plotDepthFt", 40.0);
+            s.lastModified = file.lastModified();
+
+            if (map.get("walls") instanceof List) s.wallCount = ((List<?>) map.get("walls")).size();
+            if (map.get("elements") instanceof List) s.elementCount = ((List<?>) map.get("elements")).size();
+            if (map.get("dimensions") instanceof List) s.dimCount = ((List<?>) map.get("dimensions")).size();
+
+            s.thumbnailBase64 = SimpleJson.getString(map, "thumbnail", null);
+            if (s.thumbnailBase64 != null && !s.thumbnailBase64.isEmpty()) {
+                try {
+                    byte[] bytes = Base64.getDecoder().decode(s.thumbnailBase64);
+                    s.thumbnailImage = ImageIO.read(new ByteArrayInputStream(bytes));
+                } catch (Exception ignored) {}
+            }
+            return s;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void createSampleProjectsIfEmpty() {
+        File dir = getProjectsDirectory();
+        File sample1 = new File(dir, "Modern_30x40_Villa_v1.hde");
+        if (!sample1.exists()) {
+            loadPreset30x40();
+            saveProjectToSpecificFile(sample1, "Modern 30' × 40' 2BHK Villa", "Sample Architecture Client", "North Facing", 30.0, 40.0, false);
+        }
+        File sample2 = new File(dir, "Compact_25x40_Duplex.hde");
+        if (!sample2.exists()) {
+            loadPreset25x40();
+            saveProjectToSpecificFile(sample2, "Compact 25' × 40' 2BHK Plan", "Urban Living Sample", "East Facing", 25.0, 40.0, false);
+        }
+    }
+
+    public void showNewProjectDialog() {
+        if (isProjectDirty) {
+            int ans = JOptionPane.showConfirmDialog(this,
+                    "Current project has unsaved changes.\nWould you like to save before creating a new project?",
+                    "Save Changes?", JOptionPane.YES_NO_CANCEL_OPTION);
+            if (ans == JOptionPane.CANCEL_OPTION) return;
+            if (ans == JOptionPane.YES_OPTION) saveCurrentProject(false);
+        }
+
+        JDialog dlg = new JDialog(this, "New Architectural Project Wizard", true);
+        dlg.setLayout(new BorderLayout());
+        dlg.getContentPane().setBackground(new Color(15, 23, 42));
+
+        JPanel content = new JPanel(new GridBagLayout());
+        content.setOpaque(false);
+        content.setBorder(new EmptyBorder(20, 24, 20, 24));
+        GridBagConstraints g = new GridBagConstraints();
+        g.fill = GridBagConstraints.HORIZONTAL;
+        g.insets = new Insets(6, 6, 6, 6);
+
+        JLabel hLbl = new JLabel("CREATE NEW ARCHITECTURAL PROJECT");
+        hLbl.setFont(new Font("Segoe UI", Font.BOLD, 15));
+        hLbl.setForeground(Color.WHITE);
+        g.gridx = 0; g.gridy = 0; g.gridwidth = 2;
+        content.add(hLbl, g);
+
+        g.gridwidth = 1;
+        g.gridy = 1; g.gridx = 0;
+        JLabel lName = new JLabel("Project Name:"); lName.setForeground(new Color(203, 213, 225));
+        content.add(lName, g);
+        g.gridx = 1;
+        JTextField nameFld = new JTextField("Residential Villa Project", 20);
+        content.add(nameFld, g);
+
+        g.gridy = 2; g.gridx = 0;
+        JLabel lClient = new JLabel("Client / Owner:"); lClient.setForeground(new Color(203, 213, 225));
+        content.add(lClient, g);
+        g.gridx = 1;
+        JTextField clientFld = new JTextField("Mr. & Mrs. Sharma", 20);
+        content.add(clientFld, g);
+
+        g.gridy = 3; g.gridx = 0;
+        JLabel lFacing = new JLabel("Plot Facing:"); lFacing.setForeground(new Color(203, 213, 225));
+        content.add(lFacing, g);
+        g.gridx = 1;
+        JComboBox<String> facingCmb = new JComboBox<>(new String[]{"North Facing", "East Facing", "West Facing", "South Facing"});
+        styleComboBox(facingCmb);
+        content.add(facingCmb, g);
+
+        g.gridy = 4; g.gridx = 0;
+        JLabel lSize = new JLabel("Plot Dimensions Preset:"); lSize.setForeground(new Color(203, 213, 225));
+        content.add(lSize, g);
+        g.gridx = 1;
+        JComboBox<String> sizeCmb = new JComboBox<>(new String[]{
+                "30' × 40' (Standard 1200 Sq Ft)",
+                "30' × 50' (Medium 1500 Sq Ft)",
+                "40' × 60' (Large 2400 Sq Ft)",
+                "20' × 30' (Compact 600 Sq Ft)",
+                "25' × 40' (Row House 1000 Sq Ft)",
+                "Blank Canvas (Custom Size)"
+        });
+        styleComboBox(sizeCmb);
+        content.add(sizeCmb, g);
+
+        g.gridy = 5; g.gridx = 0;
+        JLabel lBound = new JLabel("Auto Boundary Walls:"); lBound.setForeground(new Color(203, 213, 225));
+        content.add(lBound, g);
+        g.gridx = 1;
+        JCheckBox autoBoundBox = new JCheckBox("Generate 9\" Brickwork Perimeter Walls", true);
+        autoBoundBox.setOpaque(false);
+        autoBoundBox.setForeground(new Color(56, 189, 248));
+        content.add(autoBoundBox, g);
+
+        dlg.add(content, BorderLayout.CENTER);
+
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 14));
+        btnPanel.setOpaque(false);
+        btnPanel.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(30, 41, 59)));
+
+        ModernButton cancelBtn = new ModernButton("Cancel", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
+        cancelBtn.addActionListener(e -> dlg.dispose());
+
+        ModernButton createBtn = new ModernButton("✓ Create Project", new Color(2, 132, 199), Color.WHITE, new Color(56, 189, 248));
+        createBtn.addActionListener(e -> {
+            String pName = nameFld.getText().trim();
+            if (pName.isEmpty()) pName = "Untitled Project";
+            String cName = clientFld.getText().trim();
+            String fFacing = (String) facingCmb.getSelectedItem();
+
+            double pW = 30.0, pD = 40.0;
+            int selIdx = sizeCmb.getSelectedIndex();
+            if (selIdx == 0) { pW = 30.0; pD = 40.0; }
+            else if (selIdx == 1) { pW = 30.0; pD = 50.0; }
+            else if (selIdx == 2) { pW = 40.0; pD = 60.0; }
+            else if (selIdx == 3) { pW = 20.0; pD = 30.0; }
+            else if (selIdx == 4) { pW = 25.0; pD = 40.0; }
+            else { pW = 30.0; pD = 40.0; }
+
+            clearCanvas();
+            this.activeProjectId = UUID.randomUUID().toString();
+            this.activeProjectName = pName;
+            this.activeProjectClient = cName;
+            this.activeProjectFacing = fFacing;
+            this.activePlotWidthFt = pW;
+            this.activePlotDepthFt = pD;
+            this.activeProjectFile = null;
+
+            if (autoBoundBox.isSelected() && selIdx != 5) {
+                double ox = 120.0, oy = 120.0;
+                double pwPx = pW * FT_PX, pdPx = pD * FT_PX;
+                walls.add(new Wall(ox, oy, ox + pwPx, oy, 9.0));
+                walls.add(new Wall(ox + pwPx, oy, ox + pwPx, oy + pdPx, 9.0));
+                walls.add(new Wall(ox + pwPx, oy + pdPx, ox, oy + pdPx, 9.0));
+                walls.add(new Wall(ox, oy + pdPx, ox, oy, 9.0));
+                // Add North Arrow
+                elements.add(new CADElement("north-arrow", "North", ox + pwPx + 3.0 * FT_PX, oy + 2.0 * FT_PX, 3.0 * FT_PX, 3.0 * FT_PX));
+                // Add overall boundary dimensions
+                dimensions.add(new CADDimension(ox, oy, ox + pwPx, oy, -30.0));
+                dimensions.add(new CADDimension(ox + pwPx, oy, ox + pwPx, oy + pdPx, -30.0));
+                autoJoinAllWalls();
+            }
+
+            markProjectDirty(true);
+            setStage(ProjectStage.STAGE_1_WALLS);
+            viewportPanel.repaint();
+            dlg.dispose();
+        });
+
+        btnPanel.add(cancelBtn);
+        btnPanel.add(createBtn);
+        dlg.add(btnPanel, BorderLayout.SOUTH);
+
+        dlg.pack();
+        dlg.setLocationRelativeTo(this);
+        dlg.setVisible(true);
+    }
+
+    public void showProjectManagerDialog() {
+        JDialog dlg = new JDialog(this, "📁 Local Project Database & Revision Manager", true);
+        dlg.setLayout(new BorderLayout());
+        dlg.getContentPane().setBackground(new Color(15, 23, 42));
+        dlg.setSize(960, 640);
+        dlg.setLocationRelativeTo(this);
+
+        // Header bar: Search, Filter, Storage Path, and Import/Export buttons
+        JPanel topBar = new JPanel(new BorderLayout(12, 0));
+        topBar.setBackground(new Color(11, 17, 32));
+        topBar.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(30, 41, 59)),
+                new EmptyBorder(12, 16, 12, 16)));
+
+        JPanel leftHeader = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        leftHeader.setOpaque(false);
+        JLabel title = new JLabel("PROJECT DATABASE");
+        title.setFont(new Font("Segoe UI", Font.BOLD, 15));
+        title.setForeground(Color.WHITE);
+        leftHeader.add(title);
+
+        JTextField searchField = new JTextField(16);
+        searchField.setBackground(new Color(24, 33, 53));
+        searchField.setForeground(Color.WHITE);
+        searchField.setCaretColor(Color.WHITE);
+        searchField.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true),
+                new EmptyBorder(4, 8, 4, 8)));
+        leftHeader.add(new JLabel("  🔍"));
+        leftHeader.add(searchField);
+        topBar.add(leftHeader, BorderLayout.WEST);
+
+        JPanel rightHeader = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        rightHeader.setOpaque(false);
+
+        ModernButton newProjBtn = new ModernButton("+ New Project", new Color(2, 132, 199), Color.WHITE, new Color(56, 189, 248));
+        newProjBtn.addActionListener(e -> { dlg.dispose(); showNewProjectDialog(); });
+
+        ModernButton importBtn = new ModernButton("Import .hde", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
+        importBtn.setToolTipText("Import any external .hde CAD file into your project database");
+        importBtn.addActionListener(e -> {
+            JFileChooser fc = new JFileChooser();
+            fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("HDE CAD Project (*.hde)", "hde"));
+            if (fc.showOpenDialog(dlg) == JFileChooser.APPROVE_OPTION) {
+                File src = fc.getSelectedFile();
+                try {
+                    File dest = new File(getProjectsDirectory(), src.getName());
+                    if (dest.exists()) {
+                        dest = new File(getProjectsDirectory(), "Imported_" + System.currentTimeMillis() + "_" + src.getName());
+                    }
+                    // Copy file
+                    try (InputStream in = new FileInputStream(src); OutputStream out = new FileOutputStream(dest)) {
+                        byte[] buf = new byte[8192];
+                        int len;
+                        while ((len = in.read(buf)) > 0) out.write(buf, 0, len);
+                    }
+                    JOptionPane.showMessageDialog(dlg, "Project imported successfully!", "Import Complete", JOptionPane.INFORMATION_MESSAGE);
+                    dlg.dispose();
+                    showProjectManagerDialog();
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(dlg, "Import failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+
+        ModernButton openFolderBtn = new ModernButton("Open Folder", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
+        openFolderBtn.setToolTipText("Open the local projects directory in Windows Explorer");
+        openFolderBtn.addActionListener(e -> {
+            try { Desktop.getDesktop().open(getProjectsDirectory()); } catch (Exception ignored) {}
+        });
+
+        rightHeader.add(newProjBtn);
+        rightHeader.add(importBtn);
+        rightHeader.add(openFolderBtn);
+        topBar.add(rightHeader, BorderLayout.EAST);
+        dlg.add(topBar, BorderLayout.NORTH);
+
+        // Center: Grid of Project Cards with Thumbnails
+        JPanel gridContainer = new JPanel();
+        gridContainer.setLayout(new BoxLayout(gridContainer, BoxLayout.Y_AXIS));
+        gridContainer.setBackground(new Color(15, 23, 42));
+        gridContainer.setBorder(new EmptyBorder(16, 16, 16, 16));
+
+        JScrollPane scroll = new JScrollPane(gridContainer);
+        scroll.setBorder(null);
+        scroll.getVerticalScrollBar().setUnitIncrement(18);
+        scroll.getViewport().setBackground(new Color(15, 23, 42));
+        dlg.add(scroll, BorderLayout.CENTER);
+
+        // Populate cards
+        Runnable refreshCards = () -> {
+            gridContainer.removeAll();
+            List<ProjectSummary> projects = listAllLocalProjects();
+            String query = searchField.getText().trim().toLowerCase();
+
+            JPanel cardsPanel = new JPanel(new GridLayout(0, 3, 16, 16));
+            cardsPanel.setBackground(new Color(15, 23, 42));
+
+            int count = 0;
+            for (ProjectSummary p : projects) {
+                if (!query.isEmpty() && !p.name.toLowerCase().contains(query) && !p.client.toLowerCase().contains(query)) {
+                    continue;
+                }
+                count++;
+                JPanel card = createProjectCard(p, dlg);
+                cardsPanel.add(card);
+            }
+
+            if (count == 0) {
+                JPanel empty = new JPanel(new GridBagLayout());
+                empty.setOpaque(false);
+                JLabel noLbl = new JLabel("No projects found matching '" + query + "'");
+                noLbl.setFont(new Font("Segoe UI", Font.BOLD, 13));
+                noLbl.setForeground(new Color(100, 116, 139));
+                empty.add(noLbl);
+                gridContainer.add(empty);
+            } else {
+                gridContainer.add(cardsPanel);
+            }
+            gridContainer.revalidate();
+            gridContainer.repaint();
+        };
+
+        searchField.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) { refreshCards.run(); }
+            public void removeUpdate(DocumentEvent e) { refreshCards.run(); }
+            public void changedUpdate(DocumentEvent e) { refreshCards.run(); }
+        });
+
+        refreshCards.run();
+
+        // Footer status bar
+        JPanel footer = new JPanel(new BorderLayout());
+        footer.setBackground(new Color(11, 17, 32));
+        footer.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(30, 41, 59)),
+                new EmptyBorder(8, 16, 8, 16)));
+        JLabel locLbl = new JLabel("Local Storage: " + getProjectsDirectory().getAbsolutePath());
+        locLbl.setFont(new Font("Consolas", Font.PLAIN, 11));
+        locLbl.setForeground(new Color(100, 116, 139));
+        footer.add(locLbl, BorderLayout.WEST);
+
+        ModernButton closeBtn = new ModernButton("Close", new Color(24, 33, 53), new Color(203, 213, 225), new Color(51, 65, 85));
+        closeBtn.addActionListener(e -> dlg.dispose());
+        footer.add(closeBtn, BorderLayout.EAST);
+        dlg.add(footer, BorderLayout.SOUTH);
+
+        dlg.setVisible(true);
+    }
+
+    private JPanel createProjectCard(ProjectSummary p, JDialog parentDlg) {
+        JPanel card = new JPanel(new BorderLayout(0, 6));
+        card.setBackground(new Color(24, 33, 53));
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true),
+                new EmptyBorder(10, 10, 10, 10)));
+        card.setPreferredSize(new Dimension(280, 260));
+
+        // Top Thumbnail Panel
+        JPanel thumbPanel = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g;
+                if (p.thumbnailImage != null) {
+                    g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                    g2.drawImage(p.thumbnailImage, 0, 0, getWidth(), getHeight(), null);
+                } else {
+                    g2.setColor(new Color(15, 23, 42));
+                    g2.fillRect(0, 0, getWidth(), getHeight());
+                    g2.setColor(new Color(71, 85, 105));
+                    g2.setFont(new Font("Segoe UI", Font.BOLD, 12));
+                    g2.drawString("No Preview", getWidth() / 2 - 32, getHeight() / 2 + 4);
+                }
+                g2.setColor(new Color(51, 65, 85));
+                g2.drawRect(0, 0, getWidth() - 1, getHeight() - 1);
+            }
+        };
+        thumbPanel.setPreferredSize(new Dimension(260, 120));
+        thumbPanel.setBackground(new Color(15, 23, 42));
+        card.add(thumbPanel, BorderLayout.NORTH);
+
+        // Center: Title, Client, Specs, and Modified time
+        JPanel infoPanel = new JPanel(new GridLayout(3, 1, 2, 2));
+        infoPanel.setOpaque(false);
+
+        JLabel nameLbl = new JLabel(p.name);
+        nameLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        nameLbl.setForeground(Color.WHITE);
+
+        JLabel subLbl = new JLabel(p.client + " · " + (int) p.plotW + "' × " + (int) p.plotD + "' (" + (int)(p.plotW * p.plotD) + " sq ft)");
+        subLbl.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+        subLbl.setForeground(new Color(148, 163, 184));
+
+        String dateStr = String.format("%tB %<te, %<tY %<tR", new Date(p.lastModified));
+        JLabel metaLbl = new JLabel("Modified: " + dateStr + " · " + p.wallCount + " walls, " + p.elementCount + " blocks");
+        metaLbl.setFont(new Font("Consolas", Font.PLAIN, 9));
+        metaLbl.setForeground(new Color(100, 116, 139));
+
+        infoPanel.add(nameLbl);
+        infoPanel.add(subLbl);
+        infoPanel.add(metaLbl);
+        card.add(infoPanel, BorderLayout.CENTER);
+
+        // Bottom Actions: Open, Revise (Duplicate v2), Export, Delete
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+        actions.setOpaque(false);
+
+        ModernButton openBtn = new ModernButton("Open", new Color(2, 132, 199), Color.WHITE, new Color(56, 189, 248));
+        openBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        openBtn.addActionListener(e -> {
+            if (isProjectDirty) {
+                int ans = JOptionPane.showConfirmDialog(parentDlg,
+                        "Current project has unsaved changes.\nWould you like to save before opening this project?",
+                        "Save Changes?", JOptionPane.YES_NO_CANCEL_OPTION);
+                if (ans == JOptionPane.CANCEL_OPTION) return;
+                if (ans == JOptionPane.YES_OPTION) saveCurrentProject(false);
+            }
+            parentDlg.dispose();
+            loadProjectFromFile(p.file);
+        });
+
+        ModernButton reviseBtn = new ModernButton("Revise (v+)", new Color(24, 33, 53), new Color(52, 211, 153), new Color(16, 185, 129));
+        reviseBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        reviseBtn.setToolTipText("Branch/Duplicate this plan into a new Revision (e.g. v2, Rev B)");
+        reviseBtn.addActionListener(e -> {
+            String baseName = p.name;
+            String newName = baseName + " (Rev 2)";
+            if (baseName.matches(".*(v|Rev\\s*)[0-9]+.*")) {
+                newName = baseName.replaceAll("(v|Rev\\s*)([0-9]+)", "Rev " + (Integer.parseInt(baseName.replaceAll(".*(v|Rev\\s*)([0-9]+).*", "$2")) + 1));
+            }
+            String inputName = JOptionPane.showInputDialog(parentDlg, "Enter revision name:", newName);
+            if (inputName != null && !inputName.trim().isEmpty()) {
+                String safe = inputName.trim().replaceAll("[^a-zA-Z0-9_\\-\\s]", "").trim().replace(' ', '_');
+                File newFile = new File(getProjectsDirectory(), safe + ".hde");
+                try {
+                    // Copy original file to new revision file
+                    try (InputStream in = new FileInputStream(p.file); OutputStream out = new FileOutputStream(newFile)) {
+                        byte[] buf = new byte[8192];
+                        int len;
+                        while ((len = in.read(buf)) > 0) out.write(buf, 0, len);
+                    }
+                    parentDlg.dispose();
+                    showProjectManagerDialog();
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(parentDlg, "Revision failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+
+        ModernButton delBtn = new ModernButton("🗑", new Color(24, 33, 53), new Color(244, 63, 94), new Color(159, 18, 57));
+        delBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        delBtn.setToolTipText("Delete project file permanently");
+        delBtn.addActionListener(e -> {
+            int ans = JOptionPane.showConfirmDialog(parentDlg, "Are you sure you want to delete '" + p.name + "'?\nThis cannot be undone.", "Delete Project", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (ans == JOptionPane.YES_OPTION) {
+                p.file.delete();
+                parentDlg.dispose();
+                showProjectManagerDialog();
+            }
+        });
+
+        actions.add(reviseBtn);
+        actions.add(delBtn);
+        actions.add(openBtn);
+        card.add(actions, BorderLayout.SOUTH);
+
+        return card;
+    }
 
     /**
      * Dialog for professional architectural drawing export in multiple aspect ratios,
