@@ -391,7 +391,6 @@ public class HousePlanCADApp extends JFrame {
     private JPanel propLockBanner;
     private JLabel propLockLabel;
     private ModernButton propUnfreezeBtn;
-    private ModernButton sectionViewBtn;
     private boolean isUpdatingInspector = false;
 
     // --- Local Project Database & Auto-Save State ---
@@ -547,8 +546,6 @@ public class HousePlanCADApp extends JFrame {
         hatchBtn.setToolTipText("HDE Studio Hatches: Click perimeter corners around any room to fill with active hatch/tile pattern");
         ModernToggle dimBtn = createToolToggle("Dimension", ToolMode.MEASURE, toolButtonGroup, false);
         dimBtn.setToolTipText("Point-to-Point Linear Dimension: Click Point 1, Click Point 2, drag mouse for offset");
-        ModernToggle sectionBtn = createToolToggle("⌖ Section Tag", ToolMode.SECTION_LINE, toolButtonGroup, false);
-        sectionBtn.setToolTipText("Architectural Section Cut Line (Ctrl+Shift+S): Click 2 points to cut plan and view 2D vertical sectional elevation");
 
         ModernToggle panBtn = createToolToggle("Pan [H]", ToolMode.PAN, toolButtonGroup, false);
 
@@ -590,7 +587,6 @@ public class HousePlanCADApp extends JFrame {
         toolsGroup.add(floorBtn);
         toolsGroup.add(hatchBtn);
         toolsGroup.add(dimBtn);
-        toolsGroup.add(sectionBtn);
         toolsGroup.add(autoJoinBtn);
         toolsGroup.add(panBtn);
         toolbar.add(toolsGroup, BorderLayout.CENTER);
@@ -1062,7 +1058,6 @@ public class HousePlanCADApp extends JFrame {
 
         addCatalogItem(tagsDimsPanel, "Room Area Tag", "tag", 14.0, 10.0);
         addCatalogItem(tagsDimsPanel, "North Arrow", "north-arrow", 3.0, 3.0);
-        addCatalogItem(tagsDimsPanel, "Section Cut Line (A-A')", "section-tag", 20.0, 3.0);
         addCatalogItem(tagsDimsPanel, "Hall / Living Tag", "tag", 16.0, 12.0);
         addCatalogItem(tagsDimsPanel, "Master Bedroom Tag", "tag", 14.0, 12.0);
         addCatalogItem(tagsDimsPanel, "Kitchen Tag", "tag", 10.0, 8.0);
@@ -1420,19 +1415,6 @@ public class HousePlanCADApp extends JFrame {
         propContentPanel.add(orderRow);
         propContentPanel.add(Box.createVerticalStrut(8));
 
-        sectionViewBtn = new ModernButton("⚡ View Sectional Elevation", new Color(14, 116, 144), Color.WHITE, new Color(56, 189, 248));
-        sectionViewBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
-        sectionViewBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
-        sectionViewBtn.setToolTipText("Generate 2D vertical sectional elevation cut through bathroom, kitchen & walls");
-        sectionViewBtn.setVisible(false);
-        sectionViewBtn.addActionListener(e -> {
-            if (primarySelected instanceof CADElement && "section-tag".equals(((CADElement) primarySelected).type)) {
-                showSectionalElevationDialog((CADElement) primarySelected);
-            }
-        });
-        propContentPanel.add(sectionViewBtn);
-        propContentPanel.add(Box.createVerticalStrut(5));
-
         ModernButton dupBtn = new ModernButton("Duplicate (Ctrl+D)", new Color(24, 33, 53), new Color(56, 189, 248), new Color(14, 116, 144));
         dupBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
         dupBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
@@ -1659,7 +1641,6 @@ public class HousePlanCADApp extends JFrame {
             }
 
             if (primarySelected instanceof Wall) {
-                if (sectionViewBtn != null) sectionViewBtn.setVisible(false);
                 Wall w = (Wall) primarySelected;
                 propTypeBadge.setText(isLocked ? "🔒 " + (int)w.thicknessInches + "\" WALL (FROZEN)" : w.thicknessInches + "\" WALL");
                 propTypeBadge.setForeground(isLocked ? new Color(251, 191, 36) : new Color(56, 189, 248));
@@ -1671,7 +1652,6 @@ public class HousePlanCADApp extends JFrame {
                 propHeightField.setEditable(!isLocked);
                 propRotSlider.setEnabled(false);
             } else if (primarySelected instanceof CADDimension) {
-                if (sectionViewBtn != null) sectionViewBtn.setVisible(false);
                 CADDimension d = (CADDimension) primarySelected;
                 propTypeBadge.setText(isLocked ? "🔒 DIMENSION (FROZEN)" : "DIMENSION");
                 propTypeBadge.setForeground(isLocked ? new Color(251, 191, 36) : new Color(56, 189, 248));
@@ -1685,9 +1665,6 @@ public class HousePlanCADApp extends JFrame {
                 propRotSlider.setEnabled(false);
             } else if (primarySelected instanceof CADElement) {
                 CADElement elem = (CADElement) primarySelected;
-                boolean isSecTag = "section-tag".equals(elem.type);
-                if (sectionViewBtn != null) sectionViewBtn.setVisible(isSecTag);
-
                 String typeStr = elem.type.toUpperCase();
                 if (elem.type.startsWith("opening")) {
                     typeStr = "WALL OPENING";
@@ -1697,17 +1674,15 @@ public class HousePlanCADApp extends JFrame {
                     typeStr = "FLOOR FINISH";
                 } else if (elem.type.startsWith("set-")) {
                     typeStr = "ROOM SET (CUSTOM)";
-                } else if (isSecTag) {
-                    typeStr = "SECTION CUT LINE";
                 }
                 propTypeBadge.setText(isLocked ? "🔒 " + typeStr + " (FROZEN)" : typeStr);
-                propTypeBadge.setForeground(isLocked ? new Color(251, 191, 36) : (isSecTag ? new Color(245, 158, 11) : new Color(56, 189, 248)));
+                propTypeBadge.setForeground(isLocked ? new Color(251, 191, 36) : new Color(56, 189, 248));
                 propNameField.setText(elem.name);
                 propWidthField.setText(String.format("%.2f", elem.w / FT_PX));
                 propHeightField.setText(String.format("%.2f", elem.h / FT_PX));
                 propNameField.setEditable(!isLocked);
-                propWidthField.setEditable(!isLocked && !isSecTag);
-                propHeightField.setEditable(!isLocked && !isSecTag);
+                propWidthField.setEditable(!isLocked);
+                propHeightField.setEditable(!isLocked);
                 propRotSlider.setEnabled(!isLocked);
                 propRotSlider.setValue((int) Math.round(elem.rotation));
             }
@@ -1902,12 +1877,7 @@ public class HousePlanCADApp extends JFrame {
 
             if (!isTyping) {
                 // Project and File Shortcuts
-                if (e.isControlDown() && e.isShiftDown() && e.getKeyCode() == KeyEvent.VK_S) {
-                    currentTool = ToolMode.SECTION_LINE;
-                    selectToolButton(ToolMode.SECTION_LINE);
-                    viewportPanel.initSectionLine();
-                    return true;
-                }
+                if (e.isControlDown() && e.isShiftDown() && e.getKeyCode() == KeyEvent.VK_S) { saveCurrentProject(true); return true; }
                 if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_S) { saveCurrentProject(false); return true; }
                 if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_O) { showProjectManagerDialog(); return true; }
                 if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_N) { showNewProjectDialog(); return true; }
@@ -1959,9 +1929,6 @@ public class HousePlanCADApp extends JFrame {
                 }
                 if (e.getKeyCode() == KeyEvent.VK_S && !e.isControlDown()) {
                     currentTool = ToolMode.SELECT; selectToolButton(ToolMode.SELECT); return true;
-                }
-                if (e.getKeyCode() == KeyEvent.VK_X && !e.isControlDown()) {
-                    currentTool = ToolMode.SECTION_LINE; selectToolButton(ToolMode.SECTION_LINE); viewportPanel.initSectionLine(); return true;
                 }
                 if (e.getKeyCode() == KeyEvent.VK_W && !e.isControlDown()) {
                     currentTool = ToolMode.DRAW_WALL; selectToolButton(ToolMode.DRAW_WALL); return true;
