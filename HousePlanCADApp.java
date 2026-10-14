@@ -8975,15 +8975,15 @@ public class HousePlanCADApp extends JFrame {
             FontMetrics fmDisc = g2.getFontMetrics();
             float r2Baseline = (float) (midY + (titleBlockHeight * 0.50 + fmDisc.getAscent() - fmDisc.getDescent()) / 2.0);
 
-            String disclaimer = "DISCLAIMER: This plan is created in HDE Studio planner and this plan serves as concept design only, you may generate complete architectural floor plan, use only after Licensed architectural approval only.";
+            String disclaimer = "DISCLAIMER: This plan is for conceptual design purposes only and is not intended for direct construction. Obtain professional architectural and structural review and all necessary approvals before use.";
 
             g2.setColor(isMonochrome ? Color.BLACK : new Color(30, 41, 59));
             float discW = fmDisc.stringWidth(disclaimer);
             if (discW + 32 <= tbW) {
                 g2.drawString(disclaimer, (float) (tbX + 16), r2Baseline);
             } else {
-                String p1 = "DISCLAIMER: This plan is created in HDE Studio planner and this plan serves as concept design only,";
-                String p2 = "you may generate complete architectural floor plan, use only after Licensed architectural approval only.";
+                String p1 = "DISCLAIMER: This plan is for conceptual design purposes only and is not intended for direct construction.";
+                String p2 = "Obtain professional architectural and structural review and all necessary approvals before use.";
                 float row2H = (float) (titleBlockHeight * 0.50);
                 float line1Y = (float) (midY + row2H * 0.35 + fmDisc.getAscent() / 2.0);
                 float line2Y = (float) (midY + row2H * 0.78 + fmDisc.getAscent() / 2.0);
