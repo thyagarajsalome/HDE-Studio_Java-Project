@@ -11222,7 +11222,7 @@ public class HousePlanCADApp extends JFrame {
         JDialog dlg = new JDialog(this, "📖 Learn HDE Studio — Interactive Tutorials & Architectural Guide", true);
         dlg.setLayout(new BorderLayout());
         dlg.getContentPane().setBackground(new Color(15, 23, 42));
-        dlg.setSize(980, 680);
+        dlg.setSize(1080, 750);
         dlg.setLocationRelativeTo(this);
 
         // Header Banner
@@ -11257,21 +11257,21 @@ public class HousePlanCADApp extends JFrame {
 
         dlg.add(headerPanel, BorderLayout.NORTH);
 
-        // Main Split: Left Category List + Right HTML Content Pane
+        // Main Split: Left Category List + Right Image & Tutorial Container
         JPanel bodyPanel = new JPanel(new BorderLayout(14, 0));
         bodyPanel.setOpaque(false);
         bodyPanel.setBorder(new EmptyBorder(0, 20, 12, 20));
 
-        // Category List Model & JList
+        // Category List Model & JList (Clean text with zero broken emoji characters)
         String[] moduleNames = {
-            "1. 🚀 Quick Start & Workspace Tour",
-            "2. 🧱 Precision Wall Drafting & Columns",
-            "3. 🚪 Doors, Windows & Openings",
-            "4. 🛋️ CAD Block Library & 8 Room Sets",
-            "5. 🎨 Floor Finishes & Tile Hatching",
-            "6. 📏 Dimensions & Room Area Tags",
-            "7. 🗂️ Layers, Properties & Revisions",
-            "8. 🖨️ PDF & Blueprint Vector Export"
+            "1. Quick Start & Workspace Tour",
+            "2. Precision Wall Drafting & Columns",
+            "3. Doors, Windows & Openings",
+            "4. CAD Block Library & 8 Room Sets",
+            "5. Floor Finishes & Tile Hatching",
+            "6. Dimensions & Room Area Tags",
+            "7. Layers, Properties & Revisions",
+            "8. PDF & Blueprint Vector Export"
         };
 
         DefaultListModel<String> listModel = new DefaultListModel<>();
@@ -11289,27 +11289,84 @@ public class HousePlanCADApp extends JFrame {
                 new EmptyBorder(4, 4, 4, 4)));
 
         JScrollPane leftScroll = new JScrollPane(categoryList);
-        leftScroll.setPreferredSize(new Dimension(290, 500));
+        leftScroll.setPreferredSize(new Dimension(290, 520));
         leftScroll.setBorder(BorderFactory.createLineBorder(new Color(30, 41, 59)));
         leftScroll.getViewport().setBackground(new Color(24, 33, 53));
 
-        // Right HTML Content Pane
+        // Right Tutorial Container: Image on Top + Explanation Below
+        JPanel rightCard = new JPanel();
+        rightCard.setLayout(new BoxLayout(rightCard, BoxLayout.Y_AXIS));
+        rightCard.setOpaque(false);
+        rightCard.setBorder(new EmptyBorder(6, 12, 16, 12));
+
+        JLabel imageLabel = new JLabel();
+        imageLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        imageLabel.setOpaque(true);
+        imageLabel.setBackground(new Color(17, 24, 39));
+        imageLabel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true),
+                new EmptyBorder(6, 6, 6, 6)));
+
+        JLabel imageCaption = new JLabel();
+        imageCaption.setAlignmentX(Component.LEFT_ALIGNMENT);
+        imageCaption.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        imageCaption.setForeground(new Color(56, 189, 248));
+        imageCaption.setBorder(new EmptyBorder(6, 4, 12, 4));
+
         JEditorPane contentPane = new JEditorPane();
         contentPane.setContentType("text/html");
         contentPane.setEditable(false);
         contentPane.setBackground(new Color(15, 23, 42));
+        contentPane.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JScrollPane rightScroll = new JScrollPane(contentPane);
+        rightCard.add(imageLabel);
+        rightCard.add(imageCaption);
+        rightCard.add(contentPane);
+
+        JScrollPane rightScroll = new JScrollPane(rightCard);
         rightScroll.setBorder(BorderFactory.createLineBorder(new Color(30, 41, 59)));
         rightScroll.getViewport().setBackground(new Color(15, 23, 42));
+        rightScroll.getVerticalScrollBar().setUnitIncrement(16);
 
-        // Listener to switch tutorial content
+        String[] imageNames = {
+            "workspace",
+            "wall drafting",
+            "Doors and windows",
+            "cad blocks",
+            "flooring",
+            "Dimension",
+            "Layers",
+            "pdf"
+        };
+        String[] imageCaptions = {
+            "📷 Workspace & Drafting Toolbar Overview (workspace.webp)",
+            "📷 Precision Wall Drafting & Real-Time Dimensions HUD (wall drafting.webp)",
+            "📷 Architectural Doors & Windows with Smart Wall-Cuts (Doors and windows.webp)",
+            "📷 CAD Block Library & 8 Specialized Room Sets (cad blocks.webp)",
+            "📷 Floor Finishes, Vitrified Tiling & Hatching Patterns (flooring.webp)",
+            "📷 Point-to-Point Dimensions & Auto-Calculated Room Tags (Dimension.webp)",
+            "📷 CAD Layers Management & Properties Ribbon (Layers.webp)",
+            "📷 Architectural Vector PDF & Blueprint Export (pdf.webp)"
+        };
+
+        // Listener to switch image and tutorial content
         categoryList.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
                 int idx = categoryList.getSelectedIndex();
-                if (idx >= 0) {
+                if (idx >= 0 && idx < imageNames.length) {
+                    ImageIcon ic = loadTutorialImage(imageNames[idx], 650);
+                    if (ic != null) {
+                        imageLabel.setIcon(ic);
+                        imageLabel.setText(null);
+                        imageLabel.setVisible(true);
+                    } else {
+                        imageLabel.setIcon(null);
+                        imageLabel.setText(" [Image: " + imageNames[idx] + ".webp] ");
+                        imageLabel.setForeground(new Color(148, 163, 184));
+                    }
+                    imageCaption.setText(imageCaptions[idx]);
                     contentPane.setText(getTutorialHtml(idx));
-                    contentPane.setCaretPosition(0);
+                    SwingUtilities.invokeLater(() -> rightScroll.getVerticalScrollBar().setValue(0));
                 }
             }
         });
@@ -11350,6 +11407,32 @@ public class HousePlanCADApp extends JFrame {
         dlg.add(footer, BorderLayout.SOUTH);
 
         dlg.setVisible(true);
+    }
+
+    private ImageIcon loadTutorialImage(String baseName, int targetWidth) {
+        try {
+            File[] candidates = {
+                new File("D:\\java-project\\tutorial_assets\\" + baseName + ".png"),
+                new File("C:\\Users\\Thyagaraja\\.gemini\\antigravity-cli\\brain\\d20cecaf-5b7d-49e8-a232-a509005d8c03\\" + baseName + ".png"),
+                new File("C:\\Users\\Thyagaraja\\OneDrive\\Pictures\\converted_webp_8_images\\" + baseName + ".png")
+            };
+            File found = null;
+            for (File c : candidates) {
+                if (c.exists()) { found = c; break; }
+            }
+            if (found != null) {
+                BufferedImage bimg = ImageIO.read(found);
+                if (bimg != null) {
+                    int w = bimg.getWidth();
+                    int h = bimg.getHeight();
+                    int tw = Math.min(targetWidth, w);
+                    int th = (int) Math.round((double) h / w * tw);
+                    Image scaled = bimg.getScaledInstance(tw, th, Image.SCALE_SMOOTH);
+                    return new ImageIcon(scaled);
+                }
+            }
+        } catch (Exception ignored) {}
+        return null;
     }
 
     private String getTutorialHtml(int idx) {
