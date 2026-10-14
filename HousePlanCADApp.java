@@ -569,11 +569,21 @@ public class HousePlanCADApp extends JFrame {
         autoJoinBtn.setToolTipText("Automatically weld all wall corners and T-junctions");
         autoJoinBtn.addActionListener(e -> { saveUndoState(); autoJoinAllWalls(); });
 
+        ModernButton roomBuilderBtn = new ModernButton("⊞ Room Builder", new Color(30, 41, 59), new Color(52, 211, 153), new Color(16, 185, 129));
+        roomBuilderBtn.setToolTipText("Parametric Room Generator: Generate room walls, openings, tags, and dimensions (Ctrl+Shift+R)");
+        roomBuilderBtn.addActionListener(e -> showParametricRoomDialog());
+
+        ModernButton columnGridBtn = new ModernButton("▦ Column Grid", new Color(30, 41, 59), new Color(251, 191, 36), new Color(245, 158, 11));
+        columnGridBtn.setToolTipText("Structural Column Grid Generator: Auto-place RCC columns at wall corners and spans (Ctrl+Shift+G)");
+        columnGridBtn.addActionListener(e -> showStructuralGridDialog());
+
         toolsGroup.add(selectBtn);
         toolsGroup.add(wallBtn);
         toolsGroup.add(wallThickCombo);
         toolsGroup.add(wallHatchCombo);
         toolsGroup.add(roomBtn);
+        toolsGroup.add(roomBuilderBtn);
+        toolsGroup.add(columnGridBtn);
         toolsGroup.add(floorBtn);
         toolsGroup.add(hatchBtn);
         toolsGroup.add(dimBtn);
@@ -1870,6 +1880,8 @@ public class HousePlanCADApp extends JFrame {
                 if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_S) { saveCurrentProject(false); return true; }
                 if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_O) { showProjectManagerDialog(); return true; }
                 if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_N) { showNewProjectDialog(); return true; }
+                if (e.isControlDown() && e.isShiftDown() && e.getKeyCode() == KeyEvent.VK_R) { showParametricRoomDialog(); return true; }
+                if (e.isControlDown() && e.isShiftDown() && e.getKeyCode() == KeyEvent.VK_G) { showStructuralGridDialog(); return true; }
 
                 if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_Z) { undo(); return true; }
                 if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_Y) { redo(); return true; }
@@ -8729,6 +8741,491 @@ public class HousePlanCADApp extends JFrame {
         card.add(actions, BorderLayout.SOUTH);
 
         return card;
+    }
+
+    // =====================================================================
+    // =======  OPTION B: PARAMETRIC ROOM & STRUCTURAL GRID GENERATOR  =====
+    // =====================================================================
+
+    /**
+     * Parametric Room Generator Dialog:
+     * Fast 1-Click Room Creation with customizable dimensions, wall thickness,
+     * auto door opening, auto window, room tag, and exterior dimensions.
+     */
+    public void showParametricRoomDialog() {
+        JDialog dlg = new JDialog(this, "⊞ Parametric Room Builder — Fast Drafting", true);
+        dlg.setLayout(new BorderLayout());
+        dlg.getContentPane().setBackground(new Color(15, 23, 42));
+
+        JPanel form = new JPanel(new GridBagLayout());
+        form.setOpaque(false);
+        form.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(30, 41, 59)),
+                new EmptyBorder(16, 20, 16, 20)));
+        GridBagConstraints g = new GridBagConstraints();
+        g.fill = GridBagConstraints.HORIZONTAL;
+        g.insets = new Insets(6, 6, 6, 6);
+
+        // Header Title
+        JLabel titleLbl = new JLabel("⊞ PARAMETRIC ROOM BUILDER");
+        titleLbl.setFont(new Font("Segoe UI", Font.BOLD, 15));
+        titleLbl.setForeground(Color.WHITE);
+        g.gridx = 0; g.gridy = 0; g.gridwidth = 2;
+        form.add(titleLbl, g);
+
+        JLabel subLbl = new JLabel("Generate enclosed room walls, doors, windows, tags & dimensions");
+        subLbl.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        subLbl.setForeground(new Color(148, 163, 184));
+        g.gridy = 1;
+        form.add(subLbl, g);
+        g.gridwidth = 1;
+
+        // 1. Room Type Preset
+        g.gridy = 2; g.gridx = 0;
+        JLabel lPreset = new JLabel("Room Preset:"); lPreset.setForeground(new Color(203, 213, 225));
+        form.add(lPreset, g);
+        g.gridx = 1;
+        String[] roomPresets = {
+                "Master Bedroom (14' × 16')",
+                "Standard Bedroom (12' × 14')",
+                "Living / Dining Hall (16' × 22')",
+                "Kitchen (10' × 12')",
+                "Attached Toilet / Bath (8' × 5')",
+                "Common Powder Room (5' × 5')",
+                "Pooja Room (6' × 6')",
+                "Custom Room..."
+        };
+        JComboBox<String> presetCombo = new JComboBox<>(roomPresets);
+        styleComboBox(presetCombo);
+        form.add(presetCombo, g);
+
+        // 2. Room Name Tag
+        g.gridy = 3; g.gridx = 0;
+        JLabel lName = new JLabel("Room Label:"); lName.setForeground(new Color(203, 213, 225));
+        form.add(lName, g);
+        g.gridx = 1;
+        JTextField nameFld = new JTextField("MASTER BEDROOM", 18);
+        form.add(nameFld, g);
+
+        // 3. Width (Feet)
+        g.gridy = 4; g.gridx = 0;
+        JLabel lWidth = new JLabel("Room Width (ft):"); lWidth.setForeground(new Color(203, 213, 225));
+        form.add(lWidth, g);
+        g.gridx = 1;
+        JTextField widthFld = new JTextField("14.0", 8);
+        form.add(widthFld, g);
+
+        // 4. Depth / Height (Feet)
+        g.gridy = 5; g.gridx = 0;
+        JLabel lHeight = new JLabel("Room Depth (ft):"); lHeight.setForeground(new Color(203, 213, 225));
+        form.add(lHeight, g);
+        g.gridx = 1;
+        JTextField heightFld = new JTextField("16.0", 8);
+        form.add(heightFld, g);
+
+        // 5. Wall Thickness
+        g.gridy = 6; g.gridx = 0;
+        JLabel lThick = new JLabel("Wall Thickness:"); lThick.setForeground(new Color(203, 213, 225));
+        form.add(lThick, g);
+        g.gridx = 1;
+        JComboBox<String> thickCombo = new JComboBox<>(new String[]{"9\" Brickwork (Exterior)", "6\" Masonry (Partition)", "4.5\" Half-Brick (Internal)"});
+        styleComboBox(thickCombo);
+        form.add(thickCombo, g);
+
+        // Preset Listener
+        presetCombo.addActionListener(e -> {
+            int idx = presetCombo.getSelectedIndex();
+            if (idx == 0) { nameFld.setText("MASTER BEDROOM"); widthFld.setText("14.0"); heightFld.setText("16.0"); thickCombo.setSelectedIndex(0); }
+            else if (idx == 1) { nameFld.setText("BEDROOM"); widthFld.setText("12.0"); heightFld.setText("14.0"); thickCombo.setSelectedIndex(1); }
+            else if (idx == 2) { nameFld.setText("LIVING / DINING"); widthFld.setText("16.0"); heightFld.setText("22.0"); thickCombo.setSelectedIndex(0); }
+            else if (idx == 3) { nameFld.setText("KITCHEN"); widthFld.setText("10.0"); heightFld.setText("12.0"); thickCombo.setSelectedIndex(1); }
+            else if (idx == 4) { nameFld.setText("BATHROOM"); widthFld.setText("8.0"); heightFld.setText("5.0"); thickCombo.setSelectedIndex(2); }
+            else if (idx == 5) { nameFld.setText("POWDER ROOM"); widthFld.setText("5.0"); heightFld.setText("5.0"); thickCombo.setSelectedIndex(2); }
+            else if (idx == 6) { nameFld.setText("POOJA ROOM"); widthFld.setText("6.0"); heightFld.setText("6.0"); thickCombo.setSelectedIndex(2); }
+        });
+
+        // 6. Options: Door & Window Placement
+        g.gridy = 7; g.gridx = 0;
+        JLabel lDoor = new JLabel("Door Placement:"); lDoor.setForeground(new Color(203, 213, 225));
+        form.add(lDoor, g);
+        g.gridx = 1;
+        JComboBox<String> doorCombo = new JComboBox<>(new String[]{
+                "South Wall (Bottom Entry)", "North Wall (Top Entry)", "East Wall (Right Entry)", "West Wall (Left Entry)", "No Door"
+        });
+        styleComboBox(doorCombo);
+        form.add(doorCombo, g);
+
+        g.gridy = 8; g.gridx = 0;
+        JLabel lWin = new JLabel("Window Placement:"); lWin.setForeground(new Color(203, 213, 225));
+        form.add(lWin, g);
+        g.gridx = 1;
+        JComboBox<String> winCombo = new JComboBox<>(new String[]{
+                "North Wall (Top)", "East Wall (Right)", "West Wall (Left)", "South Wall (Bottom)", "No Window"
+        });
+        styleComboBox(winCombo);
+        form.add(winCombo, g);
+
+        // 7. Checkboxes: Room Area Tag & Auto-Dimensions
+        g.gridy = 9; g.gridx = 0; g.gridwidth = 2;
+        JPanel optCheckPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        optCheckPanel.setOpaque(false);
+        JCheckBox tagBox = new JCheckBox("Add Room Area Tag", true);
+        tagBox.setOpaque(false); tagBox.setForeground(new Color(56, 189, 248));
+        JCheckBox dimBox = new JCheckBox("Add Exterior Dimensions", true);
+        dimBox.setOpaque(false); dimBox.setForeground(new Color(56, 189, 248));
+        optCheckPanel.add(tagBox);
+        optCheckPanel.add(dimBox);
+        form.add(optCheckPanel, g);
+        g.gridwidth = 1;
+
+        dlg.add(form, BorderLayout.CENTER);
+
+        // Footer buttons
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 12));
+        btnPanel.setOpaque(false);
+        btnPanel.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(30, 41, 59)));
+
+        ModernButton cancelBtn = new ModernButton("Cancel", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
+        cancelBtn.addActionListener(e -> dlg.dispose());
+
+        ModernButton insertBtn = new ModernButton("✓ Build Room on Plan", new Color(13, 148, 136), Color.WHITE, new Color(45, 212, 191));
+        insertBtn.setPreferredSize(new Dimension(170, 32));
+        insertBtn.addActionListener(e -> {
+            try {
+                double wFt = Double.parseDouble(widthFld.getText().trim());
+                double hFt = Double.parseDouble(heightFld.getText().trim());
+                if (wFt <= 2.0 || hFt <= 2.0) {
+                    JOptionPane.showMessageDialog(dlg, "Room dimensions must be at least 2 ft.", "Invalid Size", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                double thick = (thickCombo.getSelectedIndex() == 0) ? 9.0 : (thickCombo.getSelectedIndex() == 1 ? 6.0 : 4.5);
+                String roomName = nameFld.getText().trim();
+                if (roomName.isEmpty()) roomName = "ROOM";
+
+                int doorPos = doorCombo.getSelectedIndex(); // 0: South, 1: North, 2: East, 3: West, 4: None
+                int winPos = winCombo.getSelectedIndex();   // 0: North, 1: East, 2: West, 3: South, 4: None
+                boolean addTag = tagBox.isSelected();
+                boolean addDims = dimBox.isSelected();
+
+                generateParametricRoom(roomName, wFt, hFt, thick, doorPos, winPos, addTag, addDims);
+                dlg.dispose();
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(dlg, "Please enter valid numeric dimensions for width and depth.", "Input Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        btnPanel.add(cancelBtn);
+        btnPanel.add(insertBtn);
+        dlg.add(btnPanel, BorderLayout.SOUTH);
+
+        dlg.pack();
+        dlg.setLocationRelativeTo(this);
+        dlg.setVisible(true);
+    }
+
+    /**
+     * Core Parametric Room Placement Logic:
+     * Calculates clean insertion offset next to existing layout or at center,
+     * creates 4 perimeter walls, auto-joins corners, and inserts door, window, tag, and dimensions.
+     */
+    public void generateParametricRoom(String name, double wFt, double hFt, double thick,
+                                       int doorPos, int winPos, boolean addTag, boolean addDims) {
+        saveUndoState();
+
+        // Calculate placement origin: if empty, place at 120, 120. Else place to right or below existing bounding box
+        double ox = 120.0, oy = 120.0;
+        if (!walls.isEmpty()) {
+            double maxX = -Double.MAX_VALUE;
+            double minY = Double.MAX_VALUE;
+            for (Wall w : walls) {
+                maxX = Math.max(maxX, Math.max(w.x1, w.x2));
+                minY = Math.min(minY, Math.min(w.y1, w.y2));
+            }
+            ox = maxX + 4.0 * FT_PX; // 4 ft spacing from last wall
+            oy = minY;
+        }
+
+        double pw = wFt * FT_PX;
+        double ph = hFt * FT_PX;
+
+        // 1. Create 4 Perimeter Walls
+        Wall topW = new Wall(ox, oy, ox + pw, oy, thick);
+        Wall rightW = new Wall(ox + pw, oy, ox + pw, oy + ph, thick);
+        Wall bottomW = new Wall(ox + pw, oy + ph, ox, oy + ph, thick);
+        Wall leftW = new Wall(ox, oy + ph, ox, oy, thick);
+
+        walls.add(topW);
+        walls.add(rightW);
+        walls.add(bottomW);
+        walls.add(leftW);
+
+        // 2. Door Placement (3'-0" standard door, 2'-6" for bath/powder)
+        boolean isBath = name.toLowerCase().contains("bath") || name.toLowerCase().contains("powder") || name.toLowerCase().contains("toilet");
+        double doorW = isBath ? 2.5 * FT_PX : 3.0 * FT_PX;
+        double doorH = (thick / 12.0) * FT_PX;
+        String doorName = name + " Door " + (isBath ? "2'-6\"" : "3'-0\"");
+
+        if (doorPos == 0) { // South Wall (Bottom)
+            elements.add(new CADElement("door", doorName, ox + pw * 0.2, oy + ph - doorH / 2.0, doorW, doorH));
+        } else if (doorPos == 1) { // North Wall (Top)
+            elements.add(new CADElement("door", doorName, ox + pw * 0.2, oy - doorH / 2.0, doorW, doorH));
+        } else if (doorPos == 2) { // East Wall (Right)
+            CADElement d = new CADElement("door", doorName, ox + pw - doorH / 2.0, oy + ph * 0.2, doorH, doorW);
+            d.rotation = 90;
+            elements.add(d);
+        } else if (doorPos == 3) { // West Wall (Left)
+            CADElement d = new CADElement("door", doorName, ox - doorH / 2.0, oy + ph * 0.2, doorH, doorW);
+            d.rotation = 90;
+            elements.add(d);
+        }
+
+        // 3. Window Placement (4'-0" standard window, 2'-0" vent for bath)
+        double winW = isBath ? 2.0 * FT_PX : 4.0 * FT_PX;
+        double winH = (thick / 12.0) * FT_PX;
+        String winType = isBath ? "window-vent" : "window";
+        String winName = name + " Window " + (isBath ? "2'-0\" Vent" : "4'-0\"");
+
+        if (winPos == 0) { // North Wall (Top)
+            elements.add(new CADElement(winType, winName, ox + (pw - winW) / 2.0, oy - winH / 2.0, winW, winH));
+        } else if (winPos == 1) { // East Wall (Right)
+            CADElement w = new CADElement(winType, winName, ox + pw - winH / 2.0, oy + (ph - winW) / 2.0, winH, winW);
+            w.rotation = 90;
+            elements.add(w);
+        } else if (winPos == 2) { // West Wall (Left)
+            CADElement w = new CADElement(winType, winName, ox - winH / 2.0, oy + (ph - winW) / 2.0, winH, winW);
+            w.rotation = 90;
+            elements.add(w);
+        } else if (winPos == 3) { // South Wall (Bottom)
+            elements.add(new CADElement(winType, winName, ox + (pw - winW) / 2.0, oy + ph - winH / 2.0, winW, winH));
+        }
+
+        // 4. Room Area Tag
+        if (addTag) {
+            String tagText = name + "\n" + (int) wFt + "'-0\" × " + (int) hFt + "'-0\"";
+            double tagW = Math.min(pw * 0.8, 12.0 * FT_PX);
+            double tagH = 3.5 * FT_PX;
+            elements.add(new CADElement("tag", tagText, ox + (pw - tagW) / 2.0, oy + (ph - tagH) / 2.0, tagW, tagH));
+        }
+
+        // 5. Exterior Linear Dimensions
+        if (addDims) {
+            dimensions.add(new CADDimension(ox, oy, ox + pw, oy, -28.0)); // Top dimension
+            dimensions.add(new CADDimension(ox + pw, oy, ox + pw, oy + ph, -28.0)); // Right dimension
+        }
+
+        autoJoinAllWalls();
+        checkAllCollisions();
+        markProjectDirty(true);
+        viewportPanel.repaint();
+    }
+
+    /**
+     * Structural Column Grid Generator Dialog:
+     * Calculates column locations at wall intersections, corners, and long spans
+     * (e.g. 10' to 15' structural bay spans) according to standard RCC construction practice.
+     */
+    public void showStructuralGridDialog() {
+        JDialog dlg = new JDialog(this, "▦ Structural Column Grid Generator", true);
+        dlg.setLayout(new BorderLayout());
+        dlg.getContentPane().setBackground(new Color(15, 23, 42));
+
+        JPanel form = new JPanel(new GridBagLayout());
+        form.setOpaque(false);
+        form.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(30, 41, 59)),
+                new EmptyBorder(16, 20, 16, 20)));
+        GridBagConstraints g = new GridBagConstraints();
+        g.fill = GridBagConstraints.HORIZONTAL;
+        g.insets = new Insets(6, 6, 6, 6);
+
+        // Header
+        JLabel titleLbl = new JLabel("▦ STRUCTURAL COLUMN GRID GENERATOR");
+        titleLbl.setFont(new Font("Segoe UI", Font.BOLD, 15));
+        titleLbl.setForeground(Color.WHITE);
+        g.gridx = 0; g.gridy = 0; g.gridwidth = 2;
+        form.add(titleLbl, g);
+
+        JLabel subLbl = new JLabel("Auto-detect wall corners, T-junctions, and span intervals to place RCC columns");
+        subLbl.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        subLbl.setForeground(new Color(148, 163, 184));
+        g.gridy = 1;
+        form.add(subLbl, g);
+        g.gridwidth = 1;
+
+        // 1. Column Size Preset
+        g.gridy = 2; g.gridx = 0;
+        JLabel lColSize = new JLabel("Column Size:"); lColSize.setForeground(new Color(203, 213, 225));
+        form.add(lColSize, g);
+        g.gridx = 1;
+        JComboBox<String> colSizeCombo = new JComboBox<>(new String[]{
+                "9\" × 12\" (Standard Residential G+1)",
+                "9\" × 15\" (Heavy Beam Span / G+2)",
+                "9\" × 9\" (Square Internal Post)",
+                "12\" × 18\" (Commercial / Multi-Story)"
+        });
+        styleComboBox(colSizeCombo);
+        form.add(colSizeCombo, g);
+
+        // 2. Maximum Unbraced Span Interval
+        g.gridy = 3; g.gridx = 0;
+        JLabel lMaxSpan = new JLabel("Max Span Distance (ft):"); lMaxSpan.setForeground(new Color(203, 213, 225));
+        form.add(lMaxSpan, g);
+        g.gridx = 1;
+        JTextField maxSpanFld = new JTextField("14.0", 8);
+        form.add(maxSpanFld, g);
+
+        // 3. Placement Mode Options
+        g.gridy = 4; g.gridx = 0;
+        JLabel lMode = new JLabel("Placement Rule:"); lMode.setForeground(new Color(203, 213, 225));
+        form.add(lMode, g);
+        g.gridx = 1;
+        JComboBox<String> ruleCombo = new JComboBox<>(new String[]{
+                "All Wall Corners + Midpoints on Spans > Max",
+                "Exterior Perimeter Corners Only",
+                "Full Rectangular Structural Grid Matrix"
+        });
+        styleComboBox(ruleCombo);
+        form.add(ruleCombo, g);
+
+        // 4. Clear existing columns checkbox
+        g.gridy = 5; g.gridx = 0; g.gridwidth = 2;
+        JCheckBox clearOldBox = new JCheckBox("Replace existing columns (Clean layout)", true);
+        clearOldBox.setOpaque(false);
+        clearOldBox.setForeground(new Color(56, 189, 248));
+        form.add(clearOldBox, g);
+        g.gridwidth = 1;
+
+        dlg.add(form, BorderLayout.CENTER);
+
+        // Buttons
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 12));
+        btnPanel.setOpaque(false);
+        btnPanel.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(30, 41, 59)));
+
+        ModernButton cancelBtn = new ModernButton("Cancel", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
+        cancelBtn.addActionListener(e -> dlg.dispose());
+
+        ModernButton runBtn = new ModernButton("⚡ Auto-Place Columns", new Color(2, 132, 199), Color.WHITE, new Color(56, 189, 248));
+        runBtn.setPreferredSize(new Dimension(170, 32));
+        runBtn.addActionListener(e -> {
+            try {
+                double maxSpan = Double.parseDouble(maxSpanFld.getText().trim());
+                if (maxSpan < 6.0) maxSpan = 6.0;
+
+                double colW = 0.75 * FT_PX, colH = 1.0 * FT_PX; // 9"x12" default
+                int cIdx = colSizeCombo.getSelectedIndex();
+                if (cIdx == 0) { colW = 0.75 * FT_PX; colH = 1.0 * FT_PX; }
+                else if (cIdx == 1) { colW = 0.75 * FT_PX; colH = 1.25 * FT_PX; }
+                else if (cIdx == 2) { colW = 0.75 * FT_PX; colH = 0.75 * FT_PX; }
+                else if (cIdx == 3) { colW = 1.0 * FT_PX; colH = 1.5 * FT_PX; }
+
+                int rule = ruleCombo.getSelectedIndex();
+                boolean clearOld = clearOldBox.isSelected();
+
+                int placed = generateStructuralColumnGrid(colW, colH, maxSpan, rule, clearOld);
+                dlg.dispose();
+                JOptionPane.showMessageDialog(this,
+                        "Successfully placed " + placed + " RCC Structural Columns on your floor plan.",
+                        "Column Grid Complete", JOptionPane.INFORMATION_MESSAGE);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dlg, "Error generating column grid: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        btnPanel.add(cancelBtn);
+        btnPanel.add(runBtn);
+        dlg.add(btnPanel, BorderLayout.SOUTH);
+
+        dlg.pack();
+        dlg.setLocationRelativeTo(this);
+        dlg.setVisible(true);
+    }
+
+    /**
+     * Algorithmic RCC Column Placement Engine:
+     * Discovers wall corner vertices, T-junctions, and span subdivisions.
+     * Prevents overlapping duplicate columns within a 2 ft threshold.
+     */
+    public int generateStructuralColumnGrid(double colW, double colH, double maxSpanFt, int rule, boolean clearOld) {
+        if (walls.isEmpty()) return 0;
+        saveUndoState();
+
+        if (clearOld) {
+            elements.removeIf(el -> el.type.startsWith("column"));
+        }
+
+        List<Point2D.Double> targetPoints = new ArrayList<>();
+        double tol = 1.5 * FT_PX; // 1.5 ft cluster tolerance
+
+        // 1. Collect all wall endpoints (Corners & T-junctions)
+        for (Wall w : walls) {
+            addUniquePoint(targetPoints, w.x1, w.y1, tol);
+            addUniquePoint(targetPoints, w.x2, w.y2, tol);
+        }
+
+        // 2. Subdivide long unbraced wall spans exceeding maxSpanFt
+        if (rule != 1) { // Not corners only
+            double maxSpanPx = maxSpanFt * FT_PX;
+            for (Wall w : walls) {
+                double len = w.getLength();
+                if (len > maxSpanPx) {
+                    int divisions = (int) Math.ceil(len / maxSpanPx);
+                    double dx = (w.x2 - w.x1) / divisions;
+                    double dy = (w.y2 - w.y1) / divisions;
+                    for (int i = 1; i < divisions; i++) {
+                        addUniquePoint(targetPoints, w.x1 + dx * i, w.y1 + dy * i, tol);
+                    }
+                }
+            }
+        }
+
+        // 3. Filter for Exterior Corners Only if rule == 1
+        if (rule == 1) {
+            double minX = Double.MAX_VALUE, maxX = -Double.MAX_VALUE;
+            double minY = Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
+            for (Wall w : walls) {
+                minX = Math.min(minX, Math.min(w.x1, w.x2)); maxX = Math.max(maxX, Math.max(w.x1, w.x2));
+                minY = Math.min(minY, Math.min(w.y1, w.y2)); maxY = Math.max(maxY, Math.max(w.y1, w.y2));
+            }
+            List<Point2D.Double> extOnly = new ArrayList<>();
+            for (Point2D.Double pt : targetPoints) {
+                if (Math.abs(pt.x - minX) < tol || Math.abs(pt.x - maxX) < tol ||
+                    Math.abs(pt.y - minY) < tol || Math.abs(pt.y - maxY) < tol) {
+                    extOnly.add(pt);
+                }
+            }
+            targetPoints = extOnly;
+        }
+
+        // 4. Place CADElement columns centered on candidate coordinates
+        int count = 0;
+        for (Point2D.Double pt : targetPoints) {
+            // Check if column already exists at this spot
+            boolean exists = false;
+            for (CADElement el : elements) {
+                if (el.type.startsWith("column")) {
+                    if (Point2D.distance(pt.x, pt.y, el.x + el.w / 2.0, el.y + el.h / 2.0) < tol) {
+                        exists = true; break;
+                    }
+                }
+            }
+            if (!exists) {
+                CADElement col = new CADElement("column", "RCC Column", pt.x - colW / 2.0, pt.y - colH / 2.0, colW, colH);
+                elements.add(col);
+                count++;
+            }
+        }
+
+        markProjectDirty(true);
+        viewportPanel.repaint();
+        return count;
+    }
+
+    private void addUniquePoint(List<Point2D.Double> list, double x, double y, double tol) {
+        for (Point2D.Double p : list) {
+            if (Point2D.distance(p.x, p.y, x, y) < tol) return;
+        }
+        list.add(new Point2D.Double(x, y));
     }
 
     /**
