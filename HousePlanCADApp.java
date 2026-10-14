@@ -180,6 +180,8 @@ public class HousePlanCADApp extends JFrame {
         }
 
         public boolean isOpening() { return type.startsWith("door") || type.startsWith("window"); }
+        public boolean isDoor() { return type.startsWith("door"); }
+        public boolean isWindow() { return type.startsWith("window"); }
 
         public Path2D.Double getPolygonPath() {
             if (points == null || points.size() < 3) return null;
@@ -252,6 +254,74 @@ public class HousePlanCADApp extends JFrame {
     // --- Application State ---
     public enum ToolMode { SELECT, DRAW_WALL, ROOM_BOX, FLOOR_ZONE, HATCH_POLYGON, MEASURE, PAN }
 
+    // --- 8-Stage Architectural Workflow ---
+    public enum ProjectStage {
+        STAGE_1_WALLS("1. Walls & Structure", "Ext/Int Walls, Columns, Openings", "STRUCT"),
+        STAGE_2_FURNITURE("2. Furniture", "Beds, Sofas, Dining, Living", "LIVING"),
+        STAGE_3_ELECTRICAL("3. Electrical / Lighting", "Fans, Lights, Switches, AC", "ELEC"),
+        STAGE_4_PLUMBING("4. Plumbing / Bath", "WC, Basins, Showers, Kitchen", "BATH"),
+        STAGE_5_FLOORING("5. Flooring / Tiles", "Tile Patterns & Hatch Zones", "FLOORING"),
+        STAGE_6_EXTERIOR("6. Exterior & Landscape", "Roads, Trees, Vehicles, Garden", "SITE_EXT"),
+        STAGE_7_DIMENSIONS("7. Dimensions & Tags", "Dimensions, Room Tags, North", "STRUCT"),
+        STAGE_8_AGENT("8. Architect Agent", "Design Review & Flaw Checker", "LIVING");
+
+        public final String title;
+        public final String desc;
+        public final String defaultCatalogCard;
+
+        ProjectStage(String title, String desc, String defaultCatalogCard) {
+            this.title = title;
+            this.desc = desc;
+            this.defaultCatalogCard = defaultCatalogCard;
+        }
+    }
+
+    private ProjectStage currentStage = ProjectStage.STAGE_1_WALLS;
+    private final Map<ProjectStage, Boolean> stageLocked = new EnumMap<>(ProjectStage.class);
+    private final Map<ProjectStage, Boolean> stageVisible = new EnumMap<>(ProjectStage.class);
+
+    // Stage Stepper UI components
+    private final Map<ProjectStage, ModernButton> stageButtons = new EnumMap<>(ProjectStage.class);
+    private ModernButton stageFreezeBtn;
+    private JLabel stageInfoLabel;
+
+    // Architect Agent (Stage 8) Inspection Data & UI
+    public static class AuditIssue {
+        public enum Severity { ERROR, WARNING, INFO }
+        public Severity severity;
+        public String title;
+        public String message;
+        public String recommendation;
+        public Object targetObj;
+        public double markerX, markerY;
+        public Runnable autoFixAction;
+
+        public AuditIssue(Severity sev, String title, String msg, String rec, Object target, double mx, double my, Runnable autoFix) {
+            this.severity = sev;
+            this.title = title;
+            this.message = msg;
+            this.recommendation = rec;
+            this.targetObj = target;
+            this.markerX = mx;
+            this.markerY = my;
+            this.autoFixAction = autoFix;
+        }
+    }
+
+    public static class ArchitectAuditReport {
+        public int score = 100;
+        public String grade = "A+";
+        public List<AuditIssue> issues = new ArrayList<>();
+        public int errorCount = 0;
+        public int warningCount = 0;
+        public int infoCount = 0;
+    }
+
+    private ArchitectAuditReport currentAuditReport = null;
+    private JPanel agentInspectorPanel;
+    private JLabel agentScoreLabel, agentGradeLabel, agentSummaryLabel;
+    private JPanel agentIssuesListPanel;
+
     private final List<Wall> walls = new ArrayList<>();
     private final List<CADElement> elements = new ArrayList<>();
     private final List<CADDimension> dimensions = new ArrayList<>();
@@ -282,6 +352,11 @@ public class HousePlanCADApp extends JFrame {
     private double zoom = 1.0;
     private double panX = 140.0, panY = 120.0;
 
+    // Sidebar card switching references
+    private CardLayout catalogCardLayout;
+    private JPanel catalogContentCards;
+    private final Map<String, ModernToggle> catalogTabs = new HashMap<>();
+
     // UI Components
     private CADViewportPanel viewportPanel;
     private JLabel statusCursorLabel, statusCollisionLabel, statusSelectionLabel;
@@ -309,9 +384,11 @@ public class HousePlanCADApp extends JFrame {
         setLocationRelativeTo(null);
         getContentPane().setLayout(new BorderLayout());
 
-        JPanel topContainer = new JPanel(new GridLayout(2, 1));
+        JPanel topContainer = new JPanel();
+        topContainer.setLayout(new BoxLayout(topContainer, BoxLayout.Y_AXIS));
         topContainer.add(createPrimaryHeader());
         topContainer.add(createDraftingToolbar());
+        topContainer.add(createWorkflowStepperBar());
         getContentPane().add(topContainer, BorderLayout.NORTH);
 
         viewportPanel = new CADViewportPanel();
@@ -512,6 +589,197 @@ public class HousePlanCADApp extends JFrame {
         });
     }
 
+    // --- 8-Stage Step-by-Step Architectural Workflow Stepper Bar ---
+
+    private JPanel createWorkflowStepperBar() {
+        JPanel bar = new JPanel(new BorderLayout());
+        bar.setBackground(new Color(11, 17, 32));
+        bar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(30, 41, 59)));
+        bar.setPreferredSize(new Dimension(1000, 36));
+
+        // Left Label
+        JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+        leftPanel.setOpaque(false);
+        JLabel wfBadge = new JLabel("WORKFLOW STAGE:");
+        wfBadge.setFont(new Font("Consolas", Font.BOLD, 10));
+        wfBadge.setForeground(new Color(148, 163, 184));
+        leftPanel.add(wfBadge);
+        bar.add(leftPanel, BorderLayout.WEST);
+
+        // Center 8 Stage Buttons
+        JPanel stagesPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 3, 3));
+        stagesPanel.setOpaque(false);
+
+        for (ProjectStage s : ProjectStage.values()) {
+            boolean isCur = (s == currentStage);
+            ModernButton btn = new ModernButton(s.title,
+                    isCur ? new Color(2, 132, 199) : new Color(24, 33, 53),
+                    isCur ? Color.WHITE : new Color(148, 163, 184),
+                    isCur ? new Color(56, 189, 248) : new Color(51, 65, 85));
+            btn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+            btn.setToolTipText("Stage " + s.title + ": " + s.desc);
+            btn.addActionListener(e -> setStage(s));
+            stageButtons.put(s, btn);
+            stagesPanel.add(btn);
+        }
+        bar.add(stagesPanel, BorderLayout.CENTER);
+
+        // Right Controls: Freeze/Lock Toggle, Prev/Next Navigation
+        JPanel rightControls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 3));
+        rightControls.setOpaque(false);
+
+        stageFreezeBtn = new ModernButton("🔓 Unlock Layer", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
+        stageFreezeBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        stageFreezeBtn.setToolTipText("Freeze / Lock all objects created in this stage to prevent accidental movement");
+        stageFreezeBtn.addActionListener(e -> {
+            boolean locked = Boolean.TRUE.equals(stageLocked.get(currentStage));
+            stageLocked.put(currentStage, !locked);
+            updateStageStepperUI();
+            viewportPanel.repaint();
+        });
+
+        ModernButton prevBtn = new ModernButton("◀ Prev", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
+        prevBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        prevBtn.addActionListener(e -> navigateStage(-1));
+
+        ModernButton nextBtn = new ModernButton("Next Stage ▶", new Color(13, 148, 136), Color.WHITE, new Color(45, 212, 191));
+        nextBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        nextBtn.addActionListener(e -> navigateStage(1));
+
+        rightControls.add(stageFreezeBtn);
+        rightControls.add(new JSeparator(JSeparator.VERTICAL));
+        rightControls.add(prevBtn);
+        rightControls.add(nextBtn);
+        bar.add(rightControls, BorderLayout.EAST);
+
+        updateStageStepperUI();
+        return bar;
+    }
+
+    private void navigateStage(int delta) {
+        ProjectStage[] all = ProjectStage.values();
+        int nextIdx = currentStage.ordinal() + delta;
+        if (nextIdx >= 0 && nextIdx < all.length) {
+            setStage(all[nextIdx]);
+        }
+    }
+
+    public void setStage(ProjectStage stage) {
+        this.currentStage = stage;
+        clearSelection();
+
+        // Auto-switch catalog sidebar card to relevant block library category
+        if (catalogCardLayout != null && catalogContentCards != null && stage.defaultCatalogCard != null) {
+            catalogCardLayout.show(catalogContentCards, stage.defaultCatalogCard);
+            ModernToggle tab = catalogTabs.get(stage.defaultCatalogCard);
+            if (tab != null) tab.setSelected(true);
+        }
+
+        // Auto-activate default drawing tool if applicable
+        if (stage == ProjectStage.STAGE_1_WALLS) {
+            currentTool = ToolMode.DRAW_WALL;
+            selectToolButton(ToolMode.DRAW_WALL);
+        } else if (stage == ProjectStage.STAGE_5_FLOORING) {
+            currentTool = ToolMode.FLOOR_ZONE;
+            selectToolButton(ToolMode.FLOOR_ZONE);
+        } else if (stage == ProjectStage.STAGE_7_DIMENSIONS) {
+            currentTool = ToolMode.MEASURE;
+            selectToolButton(ToolMode.MEASURE);
+        } else {
+            currentTool = ToolMode.SELECT;
+            selectToolButton(ToolMode.SELECT);
+        }
+
+        // Run audit if Stage 8 (Architect Agent) is opened
+        if (stage == ProjectStage.STAGE_8_AGENT) {
+            runArchitectAgentAudit();
+        }
+
+        updateStageStepperUI();
+        updateProperties();
+        if (viewportPanel != null) viewportPanel.repaint();
+    }
+
+    private void updateStageStepperUI() {
+        for (ProjectStage s : ProjectStage.values()) {
+            ModernButton btn = stageButtons.get(s);
+            if (btn == null) continue;
+            boolean isCur = (s == currentStage);
+            boolean isLocked = Boolean.TRUE.equals(stageLocked.get(s));
+
+            String prefix = isLocked ? "🔒 " : (isCur ? "► " : "");
+            btn.setText(prefix + s.title);
+
+            if (isCur) {
+                btn.bg = new Color(2, 132, 199);
+                btn.fg = Color.WHITE;
+                btn.border = new Color(56, 189, 248);
+            } else if (isLocked) {
+                btn.bg = new Color(30, 41, 59);
+                btn.fg = new Color(251, 191, 36);
+                btn.border = new Color(245, 158, 11);
+            } else {
+                btn.bg = new Color(24, 33, 53);
+                btn.fg = new Color(148, 163, 184);
+                btn.border = new Color(51, 65, 85);
+            }
+            btn.repaint();
+        }
+
+        if (stageFreezeBtn != null) {
+            boolean curLocked = Boolean.TRUE.equals(stageLocked.get(currentStage));
+            if (curLocked) {
+                stageFreezeBtn.setText("🔒 Stage Locked (Frozen)");
+                stageFreezeBtn.bg = new Color(120, 53, 15);
+                stageFreezeBtn.fg = new Color(254, 240, 138);
+                stageFreezeBtn.border = new Color(245, 158, 11);
+                stageFreezeBtn.setToolTipText("Click to UNFREEZE objects in this stage so they can be edited");
+            } else {
+                stageFreezeBtn.setText("❄ Freeze Stage Layer");
+                stageFreezeBtn.bg = new Color(24, 33, 53);
+                stageFreezeBtn.fg = new Color(148, 163, 184);
+                stageFreezeBtn.border = new Color(51, 65, 85);
+                stageFreezeBtn.setToolTipText("Click to FREEZE / LOCK all elements of this stage from accidental movement");
+            }
+            stageFreezeBtn.repaint();
+        }
+    }
+
+    public ProjectStage getObjectStage(Object obj) {
+        if (obj instanceof Wall) return ProjectStage.STAGE_1_WALLS;
+        if (obj instanceof CADDimension) return ProjectStage.STAGE_7_DIMENSIONS;
+        if (obj instanceof CADElement) {
+            CADElement el = (CADElement) obj;
+            String t = el.type.toLowerCase();
+            if (t.startsWith("door") || t.startsWith("window") || t.startsWith("column") || t.startsWith("stair")) {
+                return ProjectStage.STAGE_1_WALLS;
+            }
+            if (t.startsWith("floor-")) return ProjectStage.STAGE_5_FLOORING;
+            if (t.startsWith("tree") || t.startsWith("shrub") || t.startsWith("plant") || t.startsWith("car")
+                    || t.startsWith("bike") || t.startsWith("bicycle") || t.startsWith("road") || t.startsWith("parking")
+                    || t.startsWith("street") || t.startsWith("pathway") || t.startsWith("bollard")) {
+                return ProjectStage.STAGE_6_EXTERIOR;
+            }
+            if (t.startsWith("fan") || t.startsWith("ceiling-fan") || t.startsWith("light") || t.startsWith("switch") || t.startsWith("ac")) {
+                return ProjectStage.STAGE_3_ELECTRICAL;
+            }
+            if (t.startsWith("toilet") || t.startsWith("basin") || t.startsWith("bath") || t.startsWith("shower")
+                    || t.startsWith("washer") || t.startsWith("kitchen") || t.startsWith("stove") || t.startsWith("fridge")) {
+                return ProjectStage.STAGE_4_PLUMBING;
+            }
+            if (t.equals("tag") || t.startsWith("north")) {
+                return ProjectStage.STAGE_7_DIMENSIONS;
+            }
+            return ProjectStage.STAGE_2_FURNITURE;
+        }
+        return ProjectStage.STAGE_1_WALLS;
+    }
+
+    public boolean isObjectLocked(Object obj) {
+        ProjectStage stage = getObjectStage(obj);
+        return Boolean.TRUE.equals(stageLocked.get(stage));
+    }
+
     // --- Catalog Sidebar ---
 
     private JPanel createCatalogSidebar() {
@@ -526,25 +794,36 @@ public class HousePlanCADApp extends JFrame {
         titleLbl.setBorder(new EmptyBorder(12, 10, 8, 10));
         sidebar.add(titleLbl, BorderLayout.NORTH);
 
-        CardLayout cardLayout = new CardLayout();
-        JPanel contentCards = new JPanel(cardLayout);
-        contentCards.setBackground(new Color(15, 23, 42));
+        catalogCardLayout = new CardLayout();
+        catalogContentCards = new JPanel(catalogCardLayout);
+        catalogContentCards.setBackground(new Color(15, 23, 42));
 
         JPanel catBar = new JPanel(new GridLayout(5, 2, 3, 3));
         catBar.setBackground(new Color(15, 23, 42));
         catBar.setBorder(new EmptyBorder(4, 6, 6, 6));
 
         ButtonGroup catGroup = new ButtonGroup();
-        ModernToggle setsTab = createCategoryTab("Room Sets", "ROOM_SETS", cardLayout, contentCards, catGroup, true);
-        ModernToggle floorTab = createCategoryTab("Flooring", "FLOORING", cardLayout, contentCards, catGroup, false);
-        ModernToggle doorsTab = createCategoryTab("Doors", "DOORS", cardLayout, contentCards, catGroup, false);
-        ModernToggle windowsTab = createCategoryTab("Windows", "WINDOWS", cardLayout, contentCards, catGroup, false);
-        ModernToggle kitchenTab = createCategoryTab("Kitchen", "KITCHEN", cardLayout, contentCards, catGroup, false);
-        ModernToggle bathTab = createCategoryTab("Bath", "BATH", cardLayout, contentCards, catGroup, false);
-        ModernToggle livingTab = createCategoryTab("Living", "LIVING", cardLayout, contentCards, catGroup, false);
-        ModernToggle structTab = createCategoryTab("Struct", "STRUCT", cardLayout, contentCards, catGroup, false);
-        ModernToggle elecTab = createCategoryTab("Elect", "ELEC", cardLayout, contentCards, catGroup, false);
-        ModernToggle siteTab = createCategoryTab("Site/Ext", "SITE_EXT", cardLayout, contentCards, catGroup, false);
+        ModernToggle setsTab = createCategoryTab("Room Sets", "ROOM_SETS", catalogCardLayout, catalogContentCards, catGroup, true);
+        ModernToggle floorTab = createCategoryTab("Flooring", "FLOORING", catalogCardLayout, catalogContentCards, catGroup, false);
+        ModernToggle doorsTab = createCategoryTab("Doors", "DOORS", catalogCardLayout, catalogContentCards, catGroup, false);
+        ModernToggle windowsTab = createCategoryTab("Windows", "WINDOWS", catalogCardLayout, catalogContentCards, catGroup, false);
+        ModernToggle kitchenTab = createCategoryTab("Kitchen", "KITCHEN", catalogCardLayout, catalogContentCards, catGroup, false);
+        ModernToggle bathTab = createCategoryTab("Bath", "BATH", catalogCardLayout, catalogContentCards, catGroup, false);
+        ModernToggle livingTab = createCategoryTab("Living", "LIVING", catalogCardLayout, catalogContentCards, catGroup, false);
+        ModernToggle structTab = createCategoryTab("Struct", "STRUCT", catalogCardLayout, catalogContentCards, catGroup, false);
+        ModernToggle elecTab = createCategoryTab("Elect", "ELEC", catalogCardLayout, catalogContentCards, catGroup, false);
+        ModernToggle siteTab = createCategoryTab("Site/Ext", "SITE_EXT", catalogCardLayout, catalogContentCards, catGroup, false);
+
+        catalogTabs.put("ROOM_SETS", setsTab);
+        catalogTabs.put("FLOORING", floorTab);
+        catalogTabs.put("DOORS", doorsTab);
+        catalogTabs.put("WINDOWS", windowsTab);
+        catalogTabs.put("KITCHEN", kitchenTab);
+        catalogTabs.put("BATH", bathTab);
+        catalogTabs.put("LIVING", livingTab);
+        catalogTabs.put("STRUCT", structTab);
+        catalogTabs.put("ELEC", elecTab);
+        catalogTabs.put("SITE_EXT", siteTab);
 
         catBar.add(setsTab); catBar.add(floorTab);
         catBar.add(doorsTab); catBar.add(windowsTab);
@@ -567,7 +846,7 @@ public class HousePlanCADApp extends JFrame {
         addHatchPatternItem(floorPanel, "Bathroom Mosaic 4\"", "floor-mosaic");
         addHatchPatternItem(floorPanel, "Concrete / Floor Screed", "floor-concrete");
         addHatchPatternItem(floorPanel, "Driveway Stone Pavers", "floor-pavers");
-        contentCards.add(wrapInScroll(floorPanel), "FLOORING");
+        catalogContentCards.add(wrapInScroll(floorPanel), "FLOORING");
 
         // ROOM SETS (Full pre-arranged furnished room layouts)
         JPanel roomSetsPanel = createCatalogCategoryPanel();
@@ -581,7 +860,7 @@ public class HousePlanCADApp extends JFrame {
         addCatalogItem(roomSetsPanel, "Spa Luxury Bath (12'×10')", "set-bath-luxury", 12.0, 10.0);
         addCatalogItem(roomSetsPanel, "Living Room Suite (16'×12')", "set-living-full", 16.0, 12.0);
         addCatalogItem(roomSetsPanel, "Dining Room Set (12'×10')", "set-dining-full", 12.0, 10.0);
-        contentCards.add(wrapInScroll(roomSetsPanel), "ROOM_SETS");
+        catalogContentCards.add(wrapInScroll(roomSetsPanel), "ROOM_SETS");
 
         // DOORS
         JPanel doorsPanel = createCatalogCategoryPanel();
@@ -592,7 +871,7 @@ public class HousePlanCADApp extends JFrame {
         addCatalogItem(doorsPanel, "Sliding Patio 6'-0\"", "door-sliding", 6.0, 0.75);
         addCatalogItem(doorsPanel, "Pocket Cavity 3'-0\"", "door-pocket", 3.0, 0.75);
         addCatalogItem(doorsPanel, "Bifold Closet 4'-0\"", "door-bifold", 4.0, 0.75);
-        contentCards.add(wrapInScroll(doorsPanel), "DOORS");
+        catalogContentCards.add(wrapInScroll(doorsPanel), "DOORS");
 
         // WINDOWS
         JPanel windowsPanel = createCatalogCategoryPanel();
@@ -602,7 +881,7 @@ public class HousePlanCADApp extends JFrame {
         addCatalogItem(windowsPanel, "Sliding 2-Track 5'-0\"", "window-sliding", 5.0, 0.75);
         addCatalogItem(windowsPanel, "Bay Picture 8'-0\"", "window-bay", 8.0, 1.2);
         addCatalogItem(windowsPanel, "Toilet Vent 2'-0\"", "window-vent", 2.0, 0.75);
-        contentCards.add(wrapInScroll(windowsPanel), "WINDOWS");
+        catalogContentCards.add(wrapInScroll(windowsPanel), "WINDOWS");
 
         // KITCHEN (Rich architectural shapes & standard layouts)
         JPanel kitchenPanel = createCatalogCategoryPanel();
@@ -623,7 +902,7 @@ public class HousePlanCADApp extends JFrame {
         addCatalogItem(kitchenPanel, "Refrigerator (3'×2'-6\")", "fridge", 3.0, 2.5);
         addCatalogItem(kitchenPanel, "Built-in Oven Tower (2'×2')", "kitchen-oven", 2.0, 2.0);
         addCatalogItem(kitchenPanel, "Dishwasher Unit (2'×2')", "kitchen-dishwasher", 2.0, 2.0);
-        contentCards.add(wrapInScroll(kitchenPanel), "KITCHEN");
+        catalogContentCards.add(wrapInScroll(kitchenPanel), "KITCHEN");
 
         // BATH
         JPanel bathPanel = createCatalogCategoryPanel();
@@ -632,7 +911,7 @@ public class HousePlanCADApp extends JFrame {
         addCatalogItem(bathPanel, "Bathtub 5'×2'-6\"", "bathtub", 5.0, 2.5);
         addCatalogItem(bathPanel, "Shower Stall 3'×3'", "shower", 3.0, 3.0);
         addCatalogItem(bathPanel, "Washing Machine 2'×2'", "washer", 2.0, 2.0);
-        contentCards.add(wrapInScroll(bathPanel), "BATH");
+        catalogContentCards.add(wrapInScroll(bathPanel), "BATH");
 
         // LIVING
         JPanel furnPanel = createCatalogCategoryPanel();
@@ -645,7 +924,7 @@ public class HousePlanCADApp extends JFrame {
         addCatalogItem(furnPanel, "Wardrobe 5'×2'", "wardrobe", 5.0, 2.0);
         addCatalogItem(furnPanel, "TV Console 5'×1'-6\"", "tv-unit", 5.0, 1.5);
         addCatalogItem(furnPanel, "Bookshelf 4'×1'", "bookshelf", 4.0, 1.0);
-        contentCards.add(wrapInScroll(furnPanel), "LIVING");
+        catalogContentCards.add(wrapInScroll(furnPanel), "LIVING");
 
         // STRUCTURAL
         JPanel structPanel = createCatalogCategoryPanel();
@@ -655,7 +934,7 @@ public class HousePlanCADApp extends JFrame {
         addCatalogItem(structPanel, "Square Column 9\"×9\"", "column-sq", 0.75, 0.75);
         addCatalogItem(structPanel, "North Arrow", "north-arrow", 3.0, 3.0);
         addCatalogItem(structPanel, "Room Area Tag", "tag", 14.0, 10.0);
-        contentCards.add(wrapInScroll(structPanel), "STRUCT");
+        catalogContentCards.add(wrapInScroll(structPanel), "STRUCT");
 
         // ELECTRICAL
         JPanel elecPanel = createCatalogCategoryPanel();
@@ -663,7 +942,7 @@ public class HousePlanCADApp extends JFrame {
         addCatalogItem(elecPanel, "AC Split Unit 3'×1'", "ac-unit", 3.0, 1.0);
         addCatalogItem(elecPanel, "Light Point 1'×1'", "light-point", 1.0, 1.0);
         addCatalogItem(elecPanel, "Switch Board 1'×0'-6\"", "switchboard", 1.0, 0.5);
-        contentCards.add(wrapInScroll(elecPanel), "ELEC");
+        catalogContentCards.add(wrapInScroll(elecPanel), "ELEC");
 
         // SITE, LANDSCAPE, VEHICLES & INFRASTRUCTURE
         JPanel siteExtPanel = createCatalogCategoryPanel();
@@ -683,12 +962,12 @@ public class HousePlanCADApp extends JFrame {
         addCatalogItem(siteExtPanel, "Street Light Pole (3'×3')", "streetlight", 3.0, 3.0);
         addCatalogItem(siteExtPanel, "Garden Pathway (12'×3')", "pathway", 12.0, 3.0);
         addCatalogItem(siteExtPanel, "Bollard Light (1'-6\"×1'-6\")", "bollard-light", 1.5, 1.5);
-        contentCards.add(wrapInScroll(siteExtPanel), "SITE_EXT");
+        catalogContentCards.add(wrapInScroll(siteExtPanel), "SITE_EXT");
 
         JPanel centerPanel = new JPanel(new BorderLayout());
         centerPanel.setBackground(new Color(15, 23, 42));
         centerPanel.add(catBar, BorderLayout.NORTH);
-        centerPanel.add(contentCards, BorderLayout.CENTER);
+        centerPanel.add(catalogContentCards, BorderLayout.CENTER);
         sidebar.add(centerPanel, BorderLayout.CENTER);
         return sidebar;
     }
@@ -909,10 +1188,83 @@ public class HousePlanCADApp extends JFrame {
         body.add(propEmptyPanel, "EMPTY");
         body.add(propMultiPanel, "MULTI");
         body.add(propContentPanel, "CONTENT");
+        body.add(createAgentInspectorPanel(), "AGENT");
         inspector.add(body, BorderLayout.CENTER);
 
         setupInspectorListeners();
         return inspector;
+    }
+
+    private JPanel createAgentInspectorPanel() {
+        agentInspectorPanel = new JPanel();
+        agentInspectorPanel.setLayout(new BoxLayout(agentInspectorPanel, BoxLayout.Y_AXIS));
+        agentInspectorPanel.setOpaque(false);
+        agentInspectorPanel.setBorder(new EmptyBorder(10, 12, 12, 12));
+
+        // Score Card
+        JPanel scoreCard = new JPanel(new BorderLayout(8, 0));
+        scoreCard.setBackground(new Color(24, 33, 53));
+        scoreCard.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true),
+                new EmptyBorder(10, 10, 10, 10)));
+        scoreCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, 64));
+        scoreCard.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        agentGradeLabel = new JLabel("A+");
+        agentGradeLabel.setFont(new Font("Segoe UI", Font.BOLD, 26));
+        agentGradeLabel.setForeground(new Color(52, 211, 153));
+        agentGradeLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        agentGradeLabel.setPreferredSize(new Dimension(50, 44));
+        scoreCard.add(agentGradeLabel, BorderLayout.WEST);
+
+        JPanel scoreText = new JPanel();
+        scoreText.setLayout(new BoxLayout(scoreText, BoxLayout.Y_AXIS));
+        scoreText.setOpaque(false);
+
+        agentScoreLabel = new JLabel("Plan Health: 100 / 100");
+        agentScoreLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        agentScoreLabel.setForeground(Color.WHITE);
+
+        agentSummaryLabel = new JLabel("0 Errors  \u00b7  0 Warnings");
+        agentSummaryLabel.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+        agentSummaryLabel.setForeground(new Color(148, 163, 184));
+
+        scoreText.add(agentScoreLabel);
+        scoreText.add(Box.createVerticalStrut(3));
+        scoreText.add(agentSummaryLabel);
+        scoreCard.add(scoreText, BorderLayout.CENTER);
+
+        agentInspectorPanel.add(scoreCard);
+        agentInspectorPanel.add(Box.createVerticalStrut(10));
+
+        // Action Row: Re-check plan button
+        ModernButton recheckBtn = new ModernButton("⚡ Re-Analyze Plan Now", new Color(2, 132, 199), Color.WHITE, new Color(56, 189, 248));
+        recheckBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+        recheckBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        recheckBtn.addActionListener(e -> runArchitectAgentAudit());
+        agentInspectorPanel.add(recheckBtn);
+        agentInspectorPanel.add(Box.createVerticalStrut(10));
+
+        JLabel issuesTitle = new JLabel("AUDIT FINDINGS & SUGGESTIONS:");
+        issuesTitle.setFont(new Font("Consolas", Font.BOLD, 10));
+        issuesTitle.setForeground(new Color(148, 163, 184));
+        issuesTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
+        agentInspectorPanel.add(issuesTitle);
+        agentInspectorPanel.add(Box.createVerticalStrut(6));
+
+        // Scrollable issues list
+        agentIssuesListPanel = new JPanel();
+        agentIssuesListPanel.setLayout(new BoxLayout(agentIssuesListPanel, BoxLayout.Y_AXIS));
+        agentIssuesListPanel.setOpaque(false);
+
+        JScrollPane issuesScroll = new JScrollPane(agentIssuesListPanel);
+        issuesScroll.setBorder(BorderFactory.createLineBorder(new Color(30, 41, 59), 1));
+        issuesScroll.getViewport().setBackground(new Color(15, 23, 42));
+        issuesScroll.setAlignmentX(Component.LEFT_ALIGNMENT);
+        issuesScroll.getVerticalScrollBar().setUnitIncrement(12);
+
+        agentInspectorPanel.add(issuesScroll);
+        return agentInspectorPanel;
     }
 
     private JTextField createStyledTextField() {
@@ -1010,6 +1362,11 @@ public class HousePlanCADApp extends JFrame {
         isUpdatingInspector = true;
         try {
             CardLayout cl = (CardLayout) propContentPanel.getParent().getLayout();
+            if (currentStage == ProjectStage.STAGE_8_AGENT) {
+                cl.show(propContentPanel.getParent(), "AGENT");
+                propTypeBadge.setText("ARCHITECT AGENT");
+                return;
+            }
             if (selectedObjects.isEmpty()) {
                 cl.show(propContentPanel.getParent(), "EMPTY");
                 propTypeBadge.setText("NONE");
@@ -1028,6 +1385,14 @@ public class HousePlanCADApp extends JFrame {
                 propNameField.setText("Wall (" + (int)w.thicknessInches + "\")");
                 propWidthField.setText(String.format("%.2f", w.getLength() / FT_PX));
                 propHeightField.setText(String.format("%.2f", w.thicknessInches / 12.0));
+                propRotSlider.setEnabled(false);
+            } else if (primarySelected instanceof CADDimension) {
+                CADDimension d = (CADDimension) primarySelected;
+                propTypeBadge.setText("DIMENSION");
+                propNameField.setText("Linear Dimension");
+                double dist = Point2D.distance(d.x1, d.y1, d.x2, d.y2);
+                propWidthField.setText(String.format("%.2f", dist / FT_PX));
+                propHeightField.setText(String.format("%.2f", d.offset));
                 propRotSlider.setEnabled(false);
             } else if (primarySelected instanceof CADElement) {
                 CADElement elem = (CADElement) primarySelected;
@@ -1364,16 +1729,34 @@ public class HousePlanCADApp extends JFrame {
         List<Object> result = new ArrayList<>();
 
         for (CADElement el : elements) {
+            if (isObjectLocked(el)) continue;
             Rectangle2D.Double elBounds = new Rectangle2D.Double(el.x, el.y, el.w, el.h);
             if (mustFullyEnclose) { if (rect.contains(elBounds)) result.add(el); }
             else { if (rect.intersects(elBounds)) result.add(el); }
         }
         for (Wall w : walls) {
+            if (isObjectLocked(w)) continue;
             Rectangle2D.Double wallBounds = new Rectangle2D.Double(
                     Math.min(w.x1, w.x2), Math.min(w.y1, w.y2),
                     Math.abs(w.x2 - w.x1) + 1, Math.abs(w.y2 - w.y1) + 1);
             if (mustFullyEnclose) { if (rect.contains(wallBounds)) result.add(w); }
             else { if (rect.intersects(wallBounds)) result.add(w); }
+        }
+        for (CADDimension d : dimensions) {
+            if (isObjectLocked(d)) continue;
+            double dx = d.x2 - d.x1, dy = d.y2 - d.y1;
+            double len = Math.hypot(dx, dy);
+            double perpX = (len > 0) ? (-dy / len) * (d.offset / zoom) : 0;
+            double perpY = (len > 0) ? (dx / len) * (d.offset / zoom) : 0;
+            double d1x = d.x1 + perpX, d1y = d.y1 + perpY;
+            double d2x = d.x2 + perpX, d2y = d.y2 + perpY;
+            double dMinX = Math.min(Math.min(d.x1, d.x2), Math.min(d1x, d2x));
+            double dMaxX = Math.max(Math.max(d.x1, d.x2), Math.max(d1x, d2x));
+            double dMinY = Math.min(Math.min(d.y1, d.y2), Math.min(d1y, d2y));
+            double dMaxY = Math.max(Math.max(d.y1, d.y2), Math.max(d1y, d2y));
+            Rectangle2D.Double dimBounds = new Rectangle2D.Double(dMinX, dMinY, Math.max(4, dMaxX - dMinX), Math.max(4, dMaxY - dMinY));
+            if (mustFullyEnclose) { if (rect.contains(dimBounds)) result.add(d); }
+            else { if (rect.intersects(dimBounds)) result.add(d); }
         }
         return result;
     }
@@ -2112,6 +2495,9 @@ public class HousePlanCADApp extends JFrame {
                             } else if (obj instanceof Wall) {
                                 Wall w = (Wall) obj;
                                 w.x1 += dx; w.y1 += dy; w.x2 += dx; w.y2 += dy;
+                            } else if (obj instanceof CADDimension) {
+                                CADDimension d = (CADDimension) obj;
+                                d.x1 += dx; d.y1 += dy; d.x2 += dx; d.y2 += dy;
                             }
                         }
                         lastDragWorld = new Point2D.Double(mouseWorld.x, mouseWorld.y);
@@ -2323,8 +2709,33 @@ public class HousePlanCADApp extends JFrame {
 
         private Object hitTest(double wx, double wy) {
             double hitPad = Math.max(12.0, 16.0 / zoom);
+            Point mouseScr = worldToScreen(wx, wy);
+
+            // 1. Dimensions hit test (topmost interactive layer)
+            for (int i = dimensions.size() - 1; i >= 0; i--) {
+                CADDimension d = dimensions.get(i);
+                if (isObjectLocked(d)) continue;
+                Point p1 = worldToScreen(d.x1, d.y1);
+                Point p2 = worldToScreen(d.x2, d.y2);
+                double dx = p2.x - p1.x, dy = p2.y - p1.y;
+                double len = Math.hypot(dx, dy);
+                if (len < 6) continue;
+                double offset = d.offset;
+                double perpX = (-dy / len) * offset, perpY = (dx / len) * offset;
+                double d1x = p1.x + perpX, d1y = p1.y + perpY;
+                double d2x = p2.x + perpX, d2y = p2.y + perpY;
+
+                // Hit test dimension line
+                if (Line2D.ptSegDist(d1x, d1y, d2x, d2y, mouseScr.x, mouseScr.y) <= 12.0) return d;
+                // Hit test extension witness lines
+                if (Line2D.ptSegDist(p1.x, p1.y, d1x, d1y, mouseScr.x, mouseScr.y) <= 8.0) return d;
+                if (Line2D.ptSegDist(p2.x, p2.y, d2x, d2y, mouseScr.x, mouseScr.y) <= 8.0) return d;
+            }
+
+            // 2. Elements hit test
             for (int i = elements.size() - 1; i >= 0; i--) {
                 CADElement el = elements.get(i);
+                if (isObjectLocked(el)) continue;
                 if (el.points != null && el.points.size() >= 3) {
                     Path2D.Double poly = el.getPolygonPath();
                     if (poly != null && poly.contains(wx, wy)) return el;
@@ -2344,8 +2755,11 @@ public class HousePlanCADApp extends JFrame {
                 }
                 if (Math.abs(lx) <= hw + effPad && Math.abs(ly) <= hh + effPad) return el;
             }
+
+            // 3. Walls hit test
             for (int i = walls.size() - 1; i >= 0; i--) {
                 Wall w = walls.get(i);
+                if (isObjectLocked(w)) continue;
                 double wallThickPx = (w.thicknessInches / 12.0) * FT_PX;
                 if (new Line2D.Double(w.x1, w.y1, w.x2, w.y2).ptSegDist(wx, wy) <= (wallThickPx / 2.0) + hitPad)
                     return w;
@@ -2372,6 +2786,9 @@ public class HousePlanCADApp extends JFrame {
             drawDynamicDimensions(g2);
             drawSelectionRectangle(g2);
             drawActiveTools(g2);
+            if (currentStage == ProjectStage.STAGE_8_AGENT) {
+                drawArchitectAgentOverlay(g2);
+            }
             if (isSnipMode) {
                 drawSnipOverlay(g2);
             }
@@ -5303,12 +5720,17 @@ public class HousePlanCADApp extends JFrame {
             for (CADDimension d : dimensions) {
                 Point p1 = worldToScreen(d.x1, d.y1);
                 Point p2 = worldToScreen(d.x2, d.y2);
+                boolean isSel = isSelected(d);
                 drawCADDimension(g2, p1.x, p1.y, p2.x, p2.y,
-                        formatImperial(Point2D.distance(d.x1, d.y1, d.x2, d.y2)), (int) Math.round(d.offset));
+                        formatImperial(Point2D.distance(d.x1, d.y1, d.x2, d.y2)), (int) Math.round(d.offset), isSel);
             }
         }
 
         private void drawCADDimension(Graphics2D g2, int p1x, int p1y, int p2x, int p2y, String text, int offset) {
+            drawCADDimension(g2, p1x, p1y, p2x, p2y, text, offset, false);
+        }
+
+        private void drawCADDimension(Graphics2D g2, int p1x, int p1y, int p2x, int p2y, String text, int offset, boolean isSel) {
             double dx = p2x - p1x, dy = p2y - p1y;
             double len = Math.hypot(dx, dy);
             if (len < 6) return;
@@ -5319,16 +5741,25 @@ public class HousePlanCADApp extends JFrame {
             double extX = (offset != 0) ? (perpX / offset) * 3.5 : 0;
             double extY = (offset != 0) ? (perpY / offset) * 3.5 : 0;
 
-            g2.setColor(new Color(56, 189, 248));
-            g2.setStroke(new BasicStroke(0.85f));
+            Color dimColor = isSel ? new Color(56, 189, 248) : new Color(56, 189, 248, 200);
+            g2.setColor(dimColor);
+            g2.setStroke(isSel ? new BasicStroke(1.8f) : new BasicStroke(0.85f));
             g2.draw(new Line2D.Double(p1x, p1y, d1x + extX, d1y + extY));
             g2.draw(new Line2D.Double(p2x, p2y, d2x + extX, d2y + extY));
             g2.draw(new Line2D.Double(d1x, d1y, d2x, d2y));
 
             double tick = 4.0;
-            g2.setStroke(new BasicStroke(1.2f));
+            g2.setStroke(new BasicStroke(isSel ? 2.0f : 1.2f));
             g2.draw(new Line2D.Double(d1x - tick, d1y - tick, d1x + tick, d1y + tick));
             g2.draw(new Line2D.Double(d2x - tick, d2y - tick, d2x + tick, d2y + tick));
+
+            if (isSel) {
+                // Grips on dimension points and text center
+                drawGrip(g2, (int) Math.round(d1x), (int) Math.round(d1y));
+                drawGrip(g2, (int) Math.round(d2x), (int) Math.round(d2y));
+                drawGrip(g2, p1x, p1y);
+                drawGrip(g2, p2x, p2y);
+            }
 
             g2.setFont(new Font("Consolas", Font.BOLD, 10));
             FontMetrics fm = g2.getFontMetrics();
@@ -5336,9 +5767,12 @@ public class HousePlanCADApp extends JFrame {
             int midX = (int)((d1x + d2x) / 2), midY = (int)((d1y + d2y) / 2);
             g2.setColor(new Color(15, 23, 42));
             g2.fillRect(midX - tw / 2 - 4, midY - 7, tw + 8, 14);
-            g2.setColor(new Color(56, 189, 248));
+            g2.setColor(isSel ? new Color(251, 191, 36) : new Color(56, 189, 248));
             g2.drawRect(midX - tw / 2 - 4, midY - 7, tw + 8, 14);
             g2.drawString(text, midX - tw / 2, midY + 4);
+            if (isSel) {
+                drawGrip(g2, midX, midY);
+            }
         }
 
         // --- Dynamic Dimensions (Live Spacing & Clearance) ---
@@ -5728,6 +6162,54 @@ public class HousePlanCADApp extends JFrame {
             addHUDButton(g2, hudX + 134, hudY, 38, 18, "\u2715 Del", HousePlanCADApp.this::deleteSelected);
         }
 
+        private void drawArchitectAgentOverlay(Graphics2D g2) {
+            if (currentAuditReport == null) return;
+
+            // Draw issue markers and callout tags on canvas
+            for (AuditIssue issue : currentAuditReport.issues) {
+                Point sp = worldToScreen(issue.markerX, issue.markerY);
+                Color c = (issue.severity == AuditIssue.Severity.ERROR) ? new Color(244, 63, 94) :
+                          (issue.severity == AuditIssue.Severity.WARNING) ? new Color(245, 158, 11) : new Color(56, 189, 248);
+
+                // Pulsing hazard beacon
+                g2.setColor(new Color(c.getRed(), c.getGreen(), c.getBlue(), 45));
+                g2.fillOval(sp.x - 18, sp.y - 18, 36, 36);
+                g2.setColor(c);
+                g2.setStroke(new BasicStroke(1.8f));
+                g2.drawOval(sp.x - 12, sp.y - 12, 24, 24);
+                g2.fillOval(sp.x - 4, sp.y - 4, 8, 8);
+
+                // Callout badge
+                String tag = (issue.severity == AuditIssue.Severity.ERROR ? "✕ " : "⚠ ") + issue.title;
+                g2.setFont(new Font("Segoe UI", Font.BOLD, 10));
+                FontMetrics fm = g2.getFontMetrics();
+                int tw = fm.stringWidth(tag) + 12;
+                int bx = sp.x + 14, by = sp.y - 12;
+                g2.setColor(new Color(15, 23, 42, 225));
+                g2.fillRoundRect(bx, by - 12, tw, 18, 6, 6);
+                g2.setColor(c);
+                g2.drawRoundRect(bx, by - 12, tw, 18, 6, 6);
+                g2.drawString(tag, bx + 6, by + 2);
+            }
+
+            // Top-left persistent Health Banner in viewport
+            int scrW = getWidth();
+            int bannerW = 280, bannerH = 34;
+            int bx = 16, by = 16;
+            g2.setColor(new Color(15, 23, 42, 230));
+            g2.fillRoundRect(bx, by, bannerW, bannerH, 8, 8);
+            g2.setColor(currentAuditReport.errorCount > 0 ? new Color(244, 63, 94) : new Color(52, 211, 153));
+            g2.setStroke(new BasicStroke(1.2f));
+            g2.drawRoundRect(bx, by, bannerW, bannerH, 8, 8);
+
+            g2.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            g2.setColor(Color.WHITE);
+            g2.drawString("Architect Health: " + currentAuditReport.score + "/100 (" + currentAuditReport.grade + ")", bx + 12, by + 16);
+            g2.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+            g2.setColor(new Color(148, 163, 184));
+            g2.drawString(currentAuditReport.errorCount + " Errors \u00b7 " + currentAuditReport.warningCount + " Warnings \u00b7 Auto-fixes in Inspector", bx + 12, by + 28);
+        }
+
         private void addHUDButton(Graphics2D g2, int x, int y, int w, int h, String text, Runnable action) {
             Rectangle rect = new Rectangle(x, y, w, h);
             hudButtons.add(new HUDButton(rect, text, action));
@@ -5742,6 +6224,285 @@ public class HousePlanCADApp extends JFrame {
             g2.drawString(text, x + (w - fm.stringWidth(text)) / 2, y + 13);
         }
     } // end CADViewportPanel
+
+    // =====================================================================
+    // ====================  STAGE 8: ARCHITECT AGENT  =====================
+    // =====================================================================
+
+    public void runArchitectAgentAudit() {
+        ArchitectAuditReport rep = new ArchitectAuditReport();
+
+        // Rule 1: Door Swing Clearance & Obstacle Detection
+        for (CADElement el : elements) {
+            if (el.type.startsWith("door")) {
+                double rad = Math.toRadians(el.rotation);
+                double swingR = el.w; // door swing radius
+                double hingeX = el.x + (el.flipH ? el.w : 0);
+                double hingeY = el.y + el.h / 2.0;
+
+                // Test if any furniture or fixtures overlap the 90° door swing arc
+                for (CADElement obs : elements) {
+                    if (obs == el || obs.isOpening() || obs.type.startsWith("floor-")) continue;
+                    Rectangle2D.Double obsBounds = new Rectangle2D.Double(obs.x, obs.y, obs.w, obs.h);
+                    double dist = Point2D.distance(hingeX, hingeY, obs.x + obs.w / 2.0, obs.y + obs.h / 2.0);
+                    if (dist < swingR + Math.min(obs.w, obs.h) / 2.0 && obsBounds.intersects(el.x - 10, el.y - 10, el.w + 20, el.h + 20)) {
+                        rep.issues.add(new AuditIssue(
+                                AuditIssue.Severity.ERROR,
+                                "Door Swing Blocked",
+                                "Door '" + el.name + "' swings into " + obs.name + " causing obstruction.",
+                                "Flip door swing direction or move obstacle away from opening path.",
+                                el, el.x + el.w / 2.0, el.y + el.h / 2.0,
+                                () -> { el.flipH = !el.flipH; viewportPanel.repaint(); runArchitectAgentAudit(); }
+                        ));
+                    }
+                }
+            }
+        }
+
+        // Rule 2: Bedroom Natural Light & Ventilation Code Check (IBC / NBC)
+        boolean hasBed = false;
+        CADElement firstBed = null;
+        for (CADElement el : elements) {
+            if (el.type.startsWith("bed-") || el.name.toLowerCase().contains("bedroom")) {
+                hasBed = true;
+                if (firstBed == null) firstBed = el;
+            }
+        }
+        if (hasBed) {
+            boolean hasWindowNearBed = false;
+            for (CADElement w : elements) {
+                if (w.isWindow()) {
+                    if (firstBed != null && Point2D.distance(firstBed.x, firstBed.y, w.x, w.y) < 20.0 * FT_PX) {
+                        hasWindowNearBed = true; break;
+                    }
+                }
+            }
+            if (!hasWindowNearBed) {
+                final CADElement bedRef = firstBed;
+                rep.issues.add(new AuditIssue(
+                        AuditIssue.Severity.ERROR,
+                        "Bedroom Lacks Window",
+                        "Habitable bedroom requires minimum 8% floor area natural light / ventilation window.",
+                        "Add a Casement or Sliding Window to the exterior wall adjacent to the bed.",
+                        bedRef, bedRef.x + bedRef.w / 2.0, bedRef.y - 20,
+                        () -> {
+                            // 1-Click Auto-Fix: Find closest exterior wall and insert a 4' window
+                            Wall closest = null; double minD = Double.MAX_VALUE;
+                            for (Wall w : walls) {
+                                double d = Line2D.ptSegDist(w.x1, w.y1, w.x2, w.y2, bedRef.x, bedRef.y);
+                                if (d < minD) { minD = d; closest = w; }
+                            }
+                            if (closest != null) {
+                                CADElement win = new CADElement("window", "Window 4'-0\"", (closest.x1 + closest.x2) / 2.0 - 2.0 * FT_PX,
+                                        (closest.y1 + closest.y2) / 2.0 - 0.375 * FT_PX, 4.0 * FT_PX, 0.75 * FT_PX);
+                                elements.add(win);
+                                viewportPanel.repaint();
+                                runArchitectAgentAudit();
+                            }
+                        }
+                ));
+            }
+        }
+
+        // Rule 3: Bathroom Ventilation Check
+        for (CADElement el : elements) {
+            if (el.type.equals("toilet") || el.type.startsWith("set-bath")) {
+                boolean hasVent = false;
+                for (CADElement w : elements) {
+                    if (w.type.equals("window-vent") || w.isWindow()) {
+                        if (Point2D.distance(el.x, el.y, w.x, w.y) < 14.0 * FT_PX) {
+                            hasVent = true; break;
+                        }
+                    }
+                }
+                if (!hasVent) {
+                    final CADElement bathRef = el;
+                    rep.issues.add(new AuditIssue(
+                            AuditIssue.Severity.WARNING,
+                            "Bathroom Missing Exhaust / Vent",
+                            "Sanitary bathroom requires exterior ventilation louver/window (NBC 2'-0\" Vent).",
+                            "Install a 2' ventilation window or exhaust duct on the external wall.",
+                            bathRef, bathRef.x + bathRef.w / 2.0, bathRef.y,
+                            () -> {
+                                Wall closest = null; double minD = Double.MAX_VALUE;
+                                for (Wall w : walls) {
+                                    double d = Line2D.ptSegDist(w.x1, w.y1, w.x2, w.y2, bathRef.x, bathRef.y);
+                                    if (d < minD) { minD = d; closest = w; }
+                                }
+                                if (closest != null) {
+                                    CADElement vent = new CADElement("window-vent", "Toilet Vent 2'-0\"", (closest.x1 + closest.x2) / 2.0 - 1.0 * FT_PX,
+                                            (closest.y1 + closest.y2) / 2.0 - 0.375 * FT_PX, 2.0 * FT_PX, 0.75 * FT_PX);
+                                    elements.add(vent);
+                                    viewportPanel.repaint();
+                                    runArchitectAgentAudit();
+                                }
+                            }
+                    ));
+                    break;
+                }
+            }
+        }
+
+        // Rule 4: Bed Walking Clearance Check (< 1.5 ft clearance warning)
+        for (CADElement el : elements) {
+            if (el.type.startsWith("bed-")) {
+                double leftDist = Double.MAX_VALUE, rightDist = Double.MAX_VALUE;
+                for (Wall w : walls) {
+                    if (Math.abs(w.x1 - w.x2) < 2) { // Vertical wall
+                        double wx = w.x1;
+                        if (wx < el.x && Math.max(w.y1, w.y2) >= el.y && Math.min(w.y1, w.y2) <= el.y + el.h) {
+                            leftDist = Math.min(leftDist, el.x - wx);
+                        }
+                        if (wx > el.x + el.w && Math.max(w.y1, w.y2) >= el.y && Math.min(w.y1, w.y2) <= el.y + el.h) {
+                            rightDist = Math.min(rightDist, wx - (el.x + el.w));
+                        }
+                    }
+                }
+                if (leftDist < 1.2 * FT_PX && leftDist > 0.05 * FT_PX) {
+                    rep.issues.add(new AuditIssue(
+                            AuditIssue.Severity.WARNING,
+                            "Tight Bed Walkway (" + formatImperial(leftDist) + ")",
+                            "Bed '" + el.name + "' has less than 2'-0\" walkway on left side.",
+                            "Shift bed position towards center for comfortable bedside access.",
+                            el, el.x, el.y + el.h / 2.0,
+                            () -> { el.x += 1.0 * FT_PX; viewportPanel.repaint(); runArchitectAgentAudit(); }
+                    ));
+                }
+            }
+        }
+
+        // Rule 5: Room Minimum Area Standard Check
+        for (CADElement el : elements) {
+            if ("tag".equals(el.type)) {
+                double sqft = (el.w / FT_PX) * (el.h / FT_PX);
+                String nameLower = el.name.toLowerCase();
+                if (nameLower.contains("bed") && sqft < 100.0) {
+                    rep.issues.add(new AuditIssue(
+                            AuditIssue.Severity.WARNING,
+                            "Substandard Bedroom Area (" + Math.round(sqft) + " sqft)",
+                            "Standard master/double bedroom requires at least 100 sqft (IBC/NBC min 9.5 m²).",
+                            "Expand perimeter walls or re-tag zone as study or guest room.",
+                            el, el.x + el.w / 2.0, el.y + el.h / 2.0, null
+                    ));
+                } else if (nameLower.contains("bath") && sqft < 30.0) {
+                    rep.issues.add(new AuditIssue(
+                            AuditIssue.Severity.WARNING,
+                            "Compact Bath Area (" + Math.round(sqft) + " sqft)",
+                            "3-fixture bathroom typically requires minimum 35–40 sqft (5'×7' or 5'×8').",
+                            "Enlarge bathroom boundary walls to accommodate standard clearance.",
+                            el, el.x + el.w / 2.0, el.y + el.h / 2.0, null
+                    ));
+                }
+            }
+        }
+
+        // Rule 6: Plan North Arrow Orientation
+        boolean hasNorth = false;
+        for (CADElement el : elements) {
+            if (el.type.startsWith("north")) { hasNorth = true; break; }
+        }
+        if (!hasNorth) {
+            rep.issues.add(new AuditIssue(
+                    AuditIssue.Severity.INFO,
+                    "North Arrow Missing",
+                    "Architectural submission drawings require a North Arrow for sun orientation.",
+                    "Place a North Arrow symbol in the site/title corner.",
+                    null, 180, 180,
+                    () -> {
+                        CADElement na = new CADElement("north-arrow", "North Arrow", 140, 140, 3.0 * FT_PX, 3.0 * FT_PX);
+                        elements.add(na);
+                        viewportPanel.repaint();
+                        runArchitectAgentAudit();
+                    }
+            ));
+        }
+
+        // Calculate score & grade
+        rep.errorCount = 0; rep.warningCount = 0; rep.infoCount = 0;
+        for (AuditIssue iss : rep.issues) {
+            if (iss.severity == AuditIssue.Severity.ERROR) rep.errorCount++;
+            else if (iss.severity == AuditIssue.Severity.WARNING) rep.warningCount++;
+            else rep.infoCount++;
+        }
+        int penalty = rep.errorCount * 20 + rep.warningCount * 8 + rep.infoCount * 3;
+        rep.score = Math.max(25, 100 - penalty);
+        if (rep.score >= 95) rep.grade = "A+";
+        else if (rep.score >= 88) rep.grade = "A";
+        else if (rep.score >= 78) rep.grade = "B";
+        else if (rep.score >= 65) rep.grade = "C";
+        else rep.grade = "Needs Work";
+
+        currentAuditReport = rep;
+        updateAgentInspectorUI();
+        if (viewportPanel != null) viewportPanel.repaint();
+    }
+
+    private void updateAgentInspectorUI() {
+        if (agentScoreLabel == null || currentAuditReport == null) return;
+
+        agentScoreLabel.setText("Plan Health: " + currentAuditReport.score + " / 100");
+        agentGradeLabel.setText(currentAuditReport.grade);
+        agentGradeLabel.setForeground(currentAuditReport.score >= 88 ? new Color(52, 211, 153) :
+                (currentAuditReport.score >= 70 ? new Color(251, 191, 36) : new Color(244, 63, 94)));
+
+        agentSummaryLabel.setText(currentAuditReport.errorCount + " Errors  \u00b7  "
+                + currentAuditReport.warningCount + " Warnings  \u00b7  "
+                + currentAuditReport.infoCount + " Notices");
+
+        if (agentIssuesListPanel != null) {
+            agentIssuesListPanel.removeAll();
+            if (currentAuditReport.issues.isEmpty()) {
+                JPanel cleanP = new JPanel();
+                cleanP.setOpaque(false);
+                cleanP.setBorder(new EmptyBorder(16, 8, 16, 8));
+                JLabel cleanLbl = new JLabel("<html><center><b style='color:#34d399'>✔ Plan Fully Compliant!</b><br>"
+                        + "<span style='color:#94a3b8'>No clearance violations, missing windows, or design flaws detected.</span></center></html>");
+                cleanP.add(cleanLbl);
+                agentIssuesListPanel.add(cleanP);
+            } else {
+                for (AuditIssue issue : currentAuditReport.issues) {
+                    JPanel item = new JPanel();
+                    item.setLayout(new BoxLayout(item, BoxLayout.Y_AXIS));
+                    item.setBackground(new Color(24, 33, 53));
+                    Color bColor = (issue.severity == AuditIssue.Severity.ERROR) ? new Color(244, 63, 94) :
+                            (issue.severity == AuditIssue.Severity.WARNING) ? new Color(245, 158, 11) : new Color(56, 189, 248);
+                    item.setBorder(BorderFactory.createCompoundBorder(
+                            BorderFactory.createMatteBorder(0, 3, 0, 0, bColor),
+                            new EmptyBorder(6, 8, 6, 8)));
+                    item.setMaximumSize(new Dimension(Integer.MAX_VALUE, 110));
+                    item.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+                    JLabel title = new JLabel((issue.severity == AuditIssue.Severity.ERROR ? "✕ " : "⚠ ") + issue.title);
+                    title.setFont(new Font("Segoe UI", Font.BOLD, 11));
+                    title.setForeground(bColor);
+                    title.setAlignmentX(Component.LEFT_ALIGNMENT);
+                    item.add(title);
+                    item.add(Box.createVerticalStrut(3));
+
+                    JLabel msg = new JLabel("<html><span style='color:#cbd5e1'>" + issue.message + "</span><br><i style='color:#94a3b8'>" + issue.recommendation + "</i></html>");
+                    msg.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+                    msg.setAlignmentX(Component.LEFT_ALIGNMENT);
+                    item.add(msg);
+
+                    if (issue.autoFixAction != null) {
+                        item.add(Box.createVerticalStrut(5));
+                        ModernButton fixBtn = new ModernButton("⚡ 1-Click Auto-Fix", new Color(13, 148, 136), Color.WHITE, new Color(45, 212, 191));
+                        fixBtn.setFont(new Font("Segoe UI", Font.BOLD, 9));
+                        fixBtn.setPreferredSize(new Dimension(130, 22));
+                        fixBtn.setMaximumSize(new Dimension(130, 22));
+                        fixBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+                        fixBtn.addActionListener(e -> issue.autoFixAction.run());
+                        item.add(fixBtn);
+                    }
+
+                    agentIssuesListPanel.add(item);
+                    agentIssuesListPanel.add(Box.createVerticalStrut(6));
+                }
+            }
+            agentIssuesListPanel.revalidate();
+            agentIssuesListPanel.repaint();
+        }
+    }
 
     // =====================================================================
     // =========================  UTILITY METHODS  =========================
