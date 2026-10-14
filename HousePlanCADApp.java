@@ -253,7 +253,7 @@ public class HousePlanCADApp extends JFrame {
     }
 
     // --- Application State ---
-    public enum ToolMode { SELECT, DRAW_WALL, ROOM_BOX, FLOOR_ZONE, HATCH_POLYGON, MEASURE, PAN }
+    public enum ToolMode { SELECT, DRAW_WALL, ROOM_BOX, FLOOR_ZONE, HATCH_POLYGON, MEASURE, SECTION_LINE, PAN }
 
     // --- 8-Stage Architectural Workflow ---
     public enum ProjectStage {
@@ -391,6 +391,7 @@ public class HousePlanCADApp extends JFrame {
     private JPanel propLockBanner;
     private JLabel propLockLabel;
     private ModernButton propUnfreezeBtn;
+    private ModernButton sectionViewBtn;
     private boolean isUpdatingInspector = false;
 
     // --- Local Project Database & Auto-Save State ---
@@ -546,6 +547,8 @@ public class HousePlanCADApp extends JFrame {
         hatchBtn.setToolTipText("HDE Studio Hatches: Click perimeter corners around any room to fill with active hatch/tile pattern");
         ModernToggle dimBtn = createToolToggle("Dimension", ToolMode.MEASURE, toolButtonGroup, false);
         dimBtn.setToolTipText("Point-to-Point Linear Dimension: Click Point 1, Click Point 2, drag mouse for offset");
+        ModernToggle sectionBtn = createToolToggle("⌖ Section Tag", ToolMode.SECTION_LINE, toolButtonGroup, false);
+        sectionBtn.setToolTipText("Architectural Section Cut Line (Ctrl+Shift+S): Click 2 points to cut plan and view 2D vertical sectional elevation");
 
         ModernToggle panBtn = createToolToggle("Pan [H]", ToolMode.PAN, toolButtonGroup, false);
 
@@ -587,6 +590,7 @@ public class HousePlanCADApp extends JFrame {
         toolsGroup.add(floorBtn);
         toolsGroup.add(hatchBtn);
         toolsGroup.add(dimBtn);
+        toolsGroup.add(sectionBtn);
         toolsGroup.add(autoJoinBtn);
         toolsGroup.add(panBtn);
         toolbar.add(toolsGroup, BorderLayout.CENTER);
@@ -1058,6 +1062,7 @@ public class HousePlanCADApp extends JFrame {
 
         addCatalogItem(tagsDimsPanel, "Room Area Tag", "tag", 14.0, 10.0);
         addCatalogItem(tagsDimsPanel, "North Arrow", "north-arrow", 3.0, 3.0);
+        addCatalogItem(tagsDimsPanel, "Section Cut Line (A-A')", "section-tag", 20.0, 3.0);
         addCatalogItem(tagsDimsPanel, "Hall / Living Tag", "tag", 16.0, 12.0);
         addCatalogItem(tagsDimsPanel, "Master Bedroom Tag", "tag", 14.0, 12.0);
         addCatalogItem(tagsDimsPanel, "Kitchen Tag", "tag", 10.0, 8.0);
@@ -1231,7 +1236,8 @@ public class HousePlanCADApp extends JFrame {
             else if (mode == ToolMode.ROOM_BOX && t.contains("Room Box")) b.setSelected(true);
             else if (mode == ToolMode.FLOOR_ZONE && t.contains("Floor / Tiles")) b.setSelected(true);
             else if (mode == ToolMode.HATCH_POLYGON && t.contains("Hatch Perimeter")) b.setSelected(true);
-            else if (mode == ToolMode.MEASURE && t.contains("Measure")) b.setSelected(true);
+            else if (mode == ToolMode.MEASURE && t.contains("Dimension")) b.setSelected(true);
+            else if (mode == ToolMode.SECTION_LINE && t.contains("Section Tag")) b.setSelected(true);
             else if (mode == ToolMode.PAN && t.contains("Pan")) b.setSelected(true);
         }
     }
@@ -1413,6 +1419,19 @@ public class HousePlanCADApp extends JFrame {
         orderRow.add(frontBtn); orderRow.add(backBtn); orderRow.add(fwdBtn); orderRow.add(bwdBtn);
         propContentPanel.add(orderRow);
         propContentPanel.add(Box.createVerticalStrut(8));
+
+        sectionViewBtn = new ModernButton("⚡ View Sectional Elevation", new Color(14, 116, 144), Color.WHITE, new Color(56, 189, 248));
+        sectionViewBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        sectionViewBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
+        sectionViewBtn.setToolTipText("Generate 2D vertical sectional elevation cut through bathroom, kitchen & walls");
+        sectionViewBtn.setVisible(false);
+        sectionViewBtn.addActionListener(e -> {
+            if (primarySelected instanceof CADElement && "section-tag".equals(((CADElement) primarySelected).type)) {
+                showSectionalElevationDialog((CADElement) primarySelected);
+            }
+        });
+        propContentPanel.add(sectionViewBtn);
+        propContentPanel.add(Box.createVerticalStrut(5));
 
         ModernButton dupBtn = new ModernButton("Duplicate (Ctrl+D)", new Color(24, 33, 53), new Color(56, 189, 248), new Color(14, 116, 144));
         dupBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -1640,6 +1659,7 @@ public class HousePlanCADApp extends JFrame {
             }
 
             if (primarySelected instanceof Wall) {
+                if (sectionViewBtn != null) sectionViewBtn.setVisible(false);
                 Wall w = (Wall) primarySelected;
                 propTypeBadge.setText(isLocked ? "🔒 " + (int)w.thicknessInches + "\" WALL (FROZEN)" : w.thicknessInches + "\" WALL");
                 propTypeBadge.setForeground(isLocked ? new Color(251, 191, 36) : new Color(56, 189, 248));
@@ -1651,6 +1671,7 @@ public class HousePlanCADApp extends JFrame {
                 propHeightField.setEditable(!isLocked);
                 propRotSlider.setEnabled(false);
             } else if (primarySelected instanceof CADDimension) {
+                if (sectionViewBtn != null) sectionViewBtn.setVisible(false);
                 CADDimension d = (CADDimension) primarySelected;
                 propTypeBadge.setText(isLocked ? "🔒 DIMENSION (FROZEN)" : "DIMENSION");
                 propTypeBadge.setForeground(isLocked ? new Color(251, 191, 36) : new Color(56, 189, 248));
@@ -1664,6 +1685,9 @@ public class HousePlanCADApp extends JFrame {
                 propRotSlider.setEnabled(false);
             } else if (primarySelected instanceof CADElement) {
                 CADElement elem = (CADElement) primarySelected;
+                boolean isSecTag = "section-tag".equals(elem.type);
+                if (sectionViewBtn != null) sectionViewBtn.setVisible(isSecTag);
+
                 String typeStr = elem.type.toUpperCase();
                 if (elem.type.startsWith("opening")) {
                     typeStr = "WALL OPENING";
@@ -1673,15 +1697,17 @@ public class HousePlanCADApp extends JFrame {
                     typeStr = "FLOOR FINISH";
                 } else if (elem.type.startsWith("set-")) {
                     typeStr = "ROOM SET (CUSTOM)";
+                } else if (isSecTag) {
+                    typeStr = "SECTION CUT LINE";
                 }
                 propTypeBadge.setText(isLocked ? "🔒 " + typeStr + " (FROZEN)" : typeStr);
-                propTypeBadge.setForeground(isLocked ? new Color(251, 191, 36) : new Color(56, 189, 248));
+                propTypeBadge.setForeground(isLocked ? new Color(251, 191, 36) : (isSecTag ? new Color(245, 158, 11) : new Color(56, 189, 248)));
                 propNameField.setText(elem.name);
                 propWidthField.setText(String.format("%.2f", elem.w / FT_PX));
                 propHeightField.setText(String.format("%.2f", elem.h / FT_PX));
                 propNameField.setEditable(!isLocked);
-                propWidthField.setEditable(!isLocked);
-                propHeightField.setEditable(!isLocked);
+                propWidthField.setEditable(!isLocked && !isSecTag);
+                propHeightField.setEditable(!isLocked && !isSecTag);
                 propRotSlider.setEnabled(!isLocked);
                 propRotSlider.setValue((int) Math.round(elem.rotation));
             }
@@ -1876,7 +1902,12 @@ public class HousePlanCADApp extends JFrame {
 
             if (!isTyping) {
                 // Project and File Shortcuts
-                if (e.isControlDown() && e.isShiftDown() && e.getKeyCode() == KeyEvent.VK_S) { saveCurrentProject(true); return true; }
+                if (e.isControlDown() && e.isShiftDown() && e.getKeyCode() == KeyEvent.VK_S) {
+                    currentTool = ToolMode.SECTION_LINE;
+                    selectToolButton(ToolMode.SECTION_LINE);
+                    viewportPanel.initSectionLine();
+                    return true;
+                }
                 if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_S) { saveCurrentProject(false); return true; }
                 if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_O) { showProjectManagerDialog(); return true; }
                 if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_N) { showNewProjectDialog(); return true; }
@@ -1907,6 +1938,12 @@ public class HousePlanCADApp extends JFrame {
                         selectToolButton(ToolMode.SELECT);
                         return true;
                     }
+                    if (viewportPanel.isSectioning()) {
+                        viewportPanel.cancelSection();
+                        currentTool = ToolMode.SELECT;
+                        selectToolButton(ToolMode.SELECT);
+                        return true;
+                    }
                     if (currentTool == ToolMode.HATCH_POLYGON) {
                         viewportPanel.clearHatchPoly();
                         currentTool = ToolMode.SELECT;
@@ -1922,6 +1959,9 @@ public class HousePlanCADApp extends JFrame {
                 }
                 if (e.getKeyCode() == KeyEvent.VK_S && !e.isControlDown()) {
                     currentTool = ToolMode.SELECT; selectToolButton(ToolMode.SELECT); return true;
+                }
+                if (e.getKeyCode() == KeyEvent.VK_X && !e.isControlDown()) {
+                    currentTool = ToolMode.SECTION_LINE; selectToolButton(ToolMode.SECTION_LINE); viewportPanel.initSectionLine(); return true;
                 }
                 if (e.getKeyCode() == KeyEvent.VK_W && !e.isControlDown()) {
                     currentTool = ToolMode.DRAW_WALL; selectToolButton(ToolMode.DRAW_WALL); return true;
@@ -2485,6 +2525,7 @@ public class HousePlanCADApp extends JFrame {
 
     private boolean isPassableSurface(CADElement el) {
         return el.isOpening() || el.type.equals("tag") || el.type.equals("north-arrow")
+                || el.type.equals("section-tag")
                 || el.type.equals("ceiling-fan") || el.type.equals("light-point")
                 || el.type.startsWith("road") || el.type.equals("parking-bay")
                 || el.type.equals("pathway");
@@ -2659,6 +2700,30 @@ public class HousePlanCADApp extends JFrame {
             repaint();
         }
 
+        // Architectural Section Cut Line Tool
+        private Point2D.Double sectionPt1 = null;
+        private int sectionStep = 0; // 0: wait for start point, 1: wait for second point
+
+        public boolean isSectioning() {
+            return currentTool == ToolMode.SECTION_LINE && sectionStep > 0;
+        }
+
+        public void initSectionLine() {
+            sectionPt1 = null;
+            sectionStep = 0;
+            if (statusCursorLabel != null) {
+                statusCursorLabel.setText(" ⌖ SECTION TAG: Click start point of cutting plane (A) · ESC to cancel ");
+            }
+            repaint();
+        }
+
+        public void cancelSection() {
+            sectionPt1 = null;
+            sectionStep = 0;
+            updateStatusText();
+            repaint();
+        }
+
         // Snipping Tool Canvas Mode
         public boolean isSnipMode = false;
         private boolean isSnipDragging = false;
@@ -2820,6 +2885,58 @@ public class HousePlanCADApp extends JFrame {
                         }
                     }
 
+                    // Architectural Section Cut Line 2-Click Tool
+                    if (currentTool == ToolMode.SECTION_LINE) {
+                        Point2D.Double snapPt = getOsnapPoint(mouseWorld.x, mouseWorld.y);
+                        Point2D.Double pt = (snapPt != null) ? snapPt : new Point2D.Double(snapCoord(mouseWorld.x), snapCoord(mouseWorld.y));
+
+                        if (sectionStep == 0) {
+                            sectionPt1 = pt;
+                            sectionStep = 1;
+                            if (statusCursorLabel != null) {
+                                statusCursorLabel.setText(" ⌖ SECTION TAG: Click end point of cutting plane (A') · ESC to cancel ");
+                            }
+                            repaint();
+                            return;
+                        } else if (sectionStep == 1) {
+                            if (sectionPt1.distance(pt) < 1.0 * FT_PX) return; // avoid zero-length line
+                            Point2D.Double p1 = sectionPt1;
+                            Point2D.Double p2 = pt;
+                            saveUndoState();
+
+                            // Determine next section letter (A-A', B-B', etc.)
+                            int secCount = 0;
+                            for (CADElement el : elements) {
+                                if ("section-tag".equals(el.type)) secCount++;
+                            }
+                            char letter = (char) ('A' + (secCount % 26));
+                            String secName = "Section " + letter + "-" + letter + "'";
+
+                            List<Point2D.Double> pts = new ArrayList<>();
+                            pts.add(new Point2D.Double(p1.x, p1.y));
+                            pts.add(new Point2D.Double(p2.x, p2.y));
+                            CADElement secTag = new CADElement("section-tag", secName, pts);
+                            // Angle of cut line in degrees
+                            secTag.rotation = Math.toDegrees(Math.atan2(p2.y - p1.y, p2.x - p1.x));
+
+                            elements.add(secTag);
+                            clearSelection();
+                            addToSelection(secTag);
+
+                            sectionPt1 = null;
+                            sectionStep = 0;
+                            currentTool = ToolMode.SELECT;
+                            selectToolButton(ToolMode.SELECT);
+                            updateProperties();
+                            updateStatusText();
+                            repaint();
+
+                            // Automatically open Sectional Elevation Viewer dialog
+                            showSectionalElevationDialog(secTag);
+                            return;
+                        }
+                    }
+
                     // Drawing tools (Wall, Room Box, Floor Zone)
                     if (currentTool == ToolMode.DRAW_WALL || currentTool == ToolMode.ROOM_BOX
                             || currentTool == ToolMode.FLOOR_ZONE) {
@@ -2892,6 +3009,15 @@ public class HousePlanCADApp extends JFrame {
                                 } else {
                                     clearSelection();
                                     addToSelection(hit);
+                                }
+                            }
+
+                            // Double click on Section Tag opens the Sectional Elevation Dialog
+                            if (e.getClickCount() >= 2 && hit instanceof CADElement) {
+                                CADElement secEl = (CADElement) hit;
+                                if ("section-tag".equals(secEl.type)) {
+                                    showSectionalElevationDialog(secEl);
+                                    return;
                                 }
                             }
 
@@ -3324,6 +3450,18 @@ public class HousePlanCADApp extends JFrame {
                         || Line2D.ptSegDist(p1.x, p1.y, d1x, d1y, mouseScr.x, mouseScr.y) <= 12.0
                         || Line2D.ptSegDist(p2.x, p2.y, d2x, d2y, mouseScr.x, mouseScr.y) <= 12.0) {
                     hits.add(d);
+                }
+            }
+
+            // Tier 1.5: Architectural Section Lines (Topmost interactive CAD layer)
+            for (int i = elements.size() - 1; i >= 0; i--) {
+                CADElement el = elements.get(i);
+                if (!"section-tag".equals(el.type) || el.points == null || el.points.size() < 2) continue;
+                Point sp1 = worldToScreen(el.points.get(0).x, el.points.get(0).y);
+                Point sp2 = worldToScreen(el.points.get(1).x, el.points.get(1).y);
+                if (sp1.distance(mouseScr) <= 24 || sp2.distance(mouseScr) <= 24
+                        || Line2D.ptSegDist(sp1.x, sp1.y, sp2.x, sp2.y, mouseScr.x, mouseScr.y) <= 16.0) {
+                    hits.add(el);
                 }
             }
 
@@ -5078,11 +5216,61 @@ public class HousePlanCADApp extends JFrame {
                 g2.drawPolygon(needleR);
                 g2.drawLine(cx, topY, cx, botY);
 
-                // "N" label
-                g2.setColor(new Color(56, 189, 248));
+                // Compass Cardinal "N"
                 g2.setFont(new Font("Segoe UI", Font.BOLD, Math.max(11, (int)(14 * zoom))));
                 FontMetrics fm = g2.getFontMetrics();
                 g2.drawString("N", cx - fm.stringWidth("N") / 2, topY - 2);
+
+            // ─── SECTION CUT LINE & CALLOUT TAG ─────────────────────────
+            } else if (type.equals("section-tag")) {
+                // Section cut line with bubbles A & A' and directional arrows
+                int bubR = Math.max(12, (int)(13.0 * zoom));
+                int cx = sw / 2, cy = sh / 2;
+
+                // Main cutting plane line (amber/gold dashed)
+                g2.setColor(new Color(245, 158, 11));
+                g2.setStroke(new BasicStroke(Math.max(2.0f, (float)(2.2 * zoom)), BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, new float[]{12, 4, 3, 4}, 0));
+                g2.drawLine(bubR, cy, sw - bubR, cy);
+
+                // Sight direction arrow pointing UP (towards normal of cut line)
+                int arrowH = Math.max(10, (int)(12.0 * zoom));
+                int arrowW = Math.max(8, (int)(9.0 * zoom));
+                g2.setStroke(new BasicStroke(Math.max(1.5f, (float)(1.8 * zoom))));
+                g2.drawLine(bubR + 4, cy, bubR + 4, cy - arrowH);
+                g2.drawLine(sw - bubR - 4, cy, sw - bubR - 4, cy - arrowH);
+
+                // Arrowheads
+                Polygon arrL = new Polygon(
+                        new int[]{bubR + 4, bubR + 4 - arrowW / 2, bubR + 4 + arrowW / 2},
+                        new int[]{cy - arrowH - 4, cy - arrowH + 2, cy - arrowH + 2}, 3);
+                Polygon arrR = new Polygon(
+                        new int[]{sw - bubR - 4, sw - bubR - 4 - arrowW / 2, sw - bubR - 4 + arrowW / 2},
+                        new int[]{cy - arrowH - 4, cy - arrowH + 2, cy - arrowH + 2}, 3);
+                g2.fillPolygon(arrL);
+                g2.fillPolygon(arrR);
+
+                // Start and end callout bubbles (A and A')
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillOval(0, cy - bubR, bubR * 2, bubR * 2);
+                g2.fillOval(sw - bubR * 2, cy - bubR, bubR * 2, bubR * 2);
+
+                g2.setColor(new Color(245, 158, 11));
+                g2.setStroke(new BasicStroke(Math.max(1.8f, (float)(2.0 * zoom))));
+                g2.drawOval(0, cy - bubR, bubR * 2, bubR * 2);
+                g2.drawOval(sw - bubR * 2, cy - bubR, bubR * 2, bubR * 2);
+
+                // Extract label letter from element name (e.g., "Section A-A'" -> "A")
+                String letter = "A";
+                if (el.name != null && el.name.length() >= 9) {
+                    char ch = el.name.charAt(8);
+                    if (ch >= 'A' && ch <= 'Z') letter = String.valueOf(ch);
+                }
+
+                g2.setFont(new Font("Segoe UI", Font.BOLD, Math.max(10, (int)(11 * zoom))));
+                FontMetrics fmb = g2.getFontMetrics();
+                g2.drawString(letter, bubR - fmb.stringWidth(letter) / 2, cy + fmb.getAscent() / 2 - 2);
+                String letterP = letter + "'";
+                g2.drawString(letterP, sw - bubR - fmb.stringWidth(letterP) / 2, cy + fmb.getAscent() / 2 - 2);
 
             // ─── STAIRCASE ──────────────────────────────────────────────
             } else if (type.startsWith("stair")) {
@@ -6902,6 +7090,75 @@ public class HousePlanCADApp extends JFrame {
                     g2.setColor(new Color(15, 23, 42, 230));
                     g2.fillRoundRect(curScreen.x + 14, curScreen.y - 12, bw, 22, 6, 6);
                     g2.setColor(new Color(56, 189, 248));
+                    g2.drawRoundRect(curScreen.x + 14, curScreen.y - 12, bw, 22, 6, 6);
+                    g2.drawString(badge, curScreen.x + 22, curScreen.y + 3);
+                }
+            }
+
+            // Architectural Section Cut Line Live Drawing Preview
+            if (currentTool == ToolMode.SECTION_LINE) {
+                Point2D.Double snapPt = getOsnapPoint(mouseWorld.x, mouseWorld.y);
+                Point2D.Double curPt = (snapPt != null) ? snapPt : new Point2D.Double(snapCoord(mouseWorld.x), snapCoord(mouseWorld.y));
+                Point curScreen = worldToScreen(curPt.x, curPt.y);
+
+                if (sectionStep == 0) {
+                    g2.setColor(new Color(245, 158, 11));
+                    g2.drawOval(curScreen.x - 7, curScreen.y - 7, 14, 14);
+                    g2.drawLine(curScreen.x - 11, curScreen.y, curScreen.x + 11, curScreen.y);
+                    g2.drawLine(curScreen.x, curScreen.y - 11, curScreen.x, curScreen.y + 11);
+
+                    String badge = "SECTION TAG: Click start point of cutting plane (A)";
+                    g2.setFont(new Font("Segoe UI", Font.BOLD, 11));
+                    FontMetrics fm = g2.getFontMetrics();
+                    int bw = fm.stringWidth(badge) + 16;
+                    g2.setColor(new Color(15, 23, 42, 230));
+                    g2.fillRoundRect(curScreen.x + 14, curScreen.y - 12, bw, 22, 6, 6);
+                    g2.setColor(new Color(245, 158, 11));
+                    g2.drawRoundRect(curScreen.x + 14, curScreen.y - 12, bw, 22, 6, 6);
+                    g2.drawString(badge, curScreen.x + 22, curScreen.y + 3);
+                } else if (sectionStep == 1 && sectionPt1 != null) {
+                    Point sp1 = worldToScreen(sectionPt1.x, sectionPt1.y);
+                    Point sp2 = curScreen;
+
+                    // Dash-dot section line
+                    g2.setColor(new Color(245, 158, 11));
+                    g2.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, new float[]{10, 4, 3, 4}, 0));
+                    g2.drawLine(sp1.x, sp1.y, sp2.x, sp2.y);
+
+                    // Sight direction arrows
+                    double dx = sp2.x - sp1.x, dy = sp2.y - sp1.y;
+                    double len = Math.hypot(dx, dy);
+                    if (len > 12) {
+                        double nx = -dy / len, ny = dx / len;
+                        int ax1 = (int) Math.round(sp1.x + nx * 24), ay1 = (int) Math.round(sp1.y + ny * 24);
+                        int ax2 = (int) Math.round(sp2.x + nx * 24), ay2 = (int) Math.round(sp2.y + ny * 24);
+                        g2.setStroke(new BasicStroke(1.8f));
+                        g2.drawLine(sp1.x, sp1.y, ax1, ay1);
+                        g2.drawLine(sp2.x, sp2.y, ax2, ay2);
+                    }
+
+                    // End callout bubbles
+                    int bubR = 14;
+                    g2.setColor(new Color(15, 23, 42));
+                    g2.fillOval(sp1.x - bubR, sp1.y - bubR, bubR * 2, bubR * 2);
+                    g2.fillOval(sp2.x - bubR, sp2.y - bubR, bubR * 2, bubR * 2);
+                    g2.setColor(new Color(245, 158, 11));
+                    g2.setStroke(new BasicStroke(2.0f));
+                    g2.drawOval(sp1.x - bubR, sp1.y - bubR, bubR * 2, bubR * 2);
+                    g2.drawOval(sp2.x - bubR, sp2.y - bubR, bubR * 2, bubR * 2);
+
+                    g2.setFont(new Font("Segoe UI", Font.BOLD, 12));
+                    FontMetrics fmb = g2.getFontMetrics();
+                    g2.drawString("A", sp1.x - fmb.stringWidth("A") / 2, sp1.y + 4);
+                    g2.drawString("A'", sp2.x - fmb.stringWidth("A'") / 2, sp2.y + 4);
+
+                    String badge = "SECTION TAG (" + formatImperial(sectionPt1.distance(curPt)) + "): Click end point (A')";
+                    g2.setFont(new Font("Segoe UI", Font.BOLD, 11));
+                    FontMetrics fm = g2.getFontMetrics();
+                    int bw = fm.stringWidth(badge) + 16;
+                    g2.setColor(new Color(15, 23, 42, 230));
+                    g2.fillRoundRect(curScreen.x + 14, curScreen.y - 12, bw, 22, 6, 6);
+                    g2.setColor(new Color(245, 158, 11));
                     g2.drawRoundRect(curScreen.x + 14, curScreen.y - 12, bw, 22, 6, 6);
                     g2.drawString(badge, curScreen.x + 22, curScreen.y + 3);
                 }
@@ -9382,6 +9639,655 @@ public class HousePlanCADApp extends JFrame {
     }
 
     /**
+     * Architectural Sectional Elevation Cut Engine & Live Interactive Viewer Dialog:
+     * Cuts the 2D architectural plan along the section line S = [P1, P2].
+     * Computes cutting-plane intersections and projects walls, doors, windows,
+     * structural ceiling slab, parapet, plinth, and realistic 2D elevations of
+     * bathroom fixtures (wash basin, toilet WC, bathtub, shower) and kitchen casework
+     * (countertops, base cabinets, wall upper cabinets, stove/cooktop, sink).
+     */
+    public void showSectionalElevationDialog(CADElement sectionTag) {
+        if (sectionTag == null || sectionTag.points == null || sectionTag.points.size() < 2) {
+            JOptionPane.showMessageDialog(this, "Please select or create a valid Section Tag first.", "Section Tag Required", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        Point2D.Double p1 = sectionTag.points.get(0);
+        Point2D.Double p2 = sectionTag.points.get(1);
+        double cutLengthPx = p1.distance(p2);
+        if (cutLengthPx < 1.0 * FT_PX) {
+            JOptionPane.showMessageDialog(this, "Section cut line is too short to generate an elevation.", "Invalid Section", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        JDialog dlg = new JDialog(this, "⌖ Architectural Sectional Elevation — " + sectionTag.name, true);
+        dlg.setLayout(new BorderLayout());
+        dlg.getContentPane().setBackground(new Color(15, 23, 42));
+
+        // Options panel at top
+        JPanel topBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 8));
+        topBar.setBackground(new Color(24, 33, 53));
+        topBar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(51, 65, 85)));
+
+        JLabel titleLbl = new JLabel("⌖ SECTION: " + sectionTag.name);
+        titleLbl.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        titleLbl.setForeground(new Color(245, 158, 11)); // Amber
+        topBar.add(titleLbl);
+
+        topBar.add(new JSeparator(JSeparator.VERTICAL));
+
+        JLabel hLbl = new JLabel("Ceiling Height:");
+        hLbl.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        hLbl.setForeground(new Color(203, 213, 225));
+        topBar.add(hLbl);
+
+        JComboBox<String> heightCombo = new JComboBox<>(new String[]{"10'-0\" (Standard High)", "9'-0\" (Compact Standard)", "11'-0\" (Grand Ceiling)"});
+        styleComboBox(heightCombo);
+        topBar.add(heightCombo);
+
+        JCheckBox showDimsBox = new JCheckBox("Show Level Datums & Dimensions", true);
+        showDimsBox.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        showDimsBox.setForeground(new Color(203, 213, 225));
+        showDimsBox.setOpaque(false);
+        topBar.add(showDimsBox);
+
+        JCheckBox showFixturesBox = new JCheckBox("Show Fixtures & Casework (Bath/Kitchen)", true);
+        showFixturesBox.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        showFixturesBox.setForeground(new Color(203, 213, 225));
+        showFixturesBox.setOpaque(false);
+        topBar.add(showFixturesBox);
+
+        dlg.add(topBar, BorderLayout.NORTH);
+
+        // Center live elevation drawing canvas
+        final double[] customCeilFt = new double[]{10.0};
+        JPanel elevationCanvas = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+
+                renderSectionalElevationCut(g2, getWidth(), getHeight(), sectionTag,
+                        customCeilFt[0], showDimsBox.isSelected(), showFixturesBox.isSelected(), false);
+                g2.dispose();
+            }
+        };
+        elevationCanvas.setBackground(new Color(11, 15, 25));
+        elevationCanvas.setPreferredSize(new Dimension(980, 560));
+        dlg.add(elevationCanvas, BorderLayout.CENTER);
+
+        heightCombo.addActionListener(e -> {
+            int idx = heightCombo.getSelectedIndex();
+            customCeilFt[0] = (idx == 0 ? 10.0 : (idx == 1 ? 9.0 : 11.0));
+            elevationCanvas.repaint();
+        });
+        showDimsBox.addActionListener(e -> elevationCanvas.repaint());
+        showFixturesBox.addActionListener(e -> elevationCanvas.repaint());
+
+        // Bottom Action Bar
+        JPanel botBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
+        botBar.setBackground(new Color(15, 23, 42));
+        botBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(30, 41, 59)));
+
+        ModernButton exportPngBtn = new ModernButton("Export Section (PNG)", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
+        exportPngBtn.setPreferredSize(new Dimension(160, 32));
+        exportPngBtn.addActionListener(e -> {
+            JFileChooser fc = new JFileChooser();
+            fc.setSelectedFile(new File("Section_" + sectionTag.name.replace(" ", "_").replace("'", "") + "_Elevation.png"));
+            if (fc.showSaveDialog(dlg) == JFileChooser.APPROVE_OPTION) {
+                File f = fc.getSelectedFile();
+                if (!f.getName().toLowerCase().endsWith(".png")) f = new File(f.getParentFile(), f.getName() + ".png");
+                try {
+                    BufferedImage bImg = new BufferedImage(1920, 1080, BufferedImage.TYPE_INT_ARGB);
+                    Graphics2D g2 = bImg.createGraphics();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                    renderSectionalElevationCut(g2, 1920, 1080, sectionTag, customCeilFt[0], showDimsBox.isSelected(), showFixturesBox.isSelected(), true);
+                    g2.dispose();
+                    javax.imageio.ImageIO.write(bImg, "png", f);
+                    JOptionPane.showMessageDialog(dlg, "Sectional elevation saved to:\n" + f.getAbsolutePath(), "Export Successful", JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(dlg, "Error saving section image: " + ex.getMessage(), "Export Failed", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+
+        ModernButton closeBtn = new ModernButton("Close", new Color(14, 116, 144), Color.WHITE, new Color(56, 189, 248));
+        closeBtn.setPreferredSize(new Dimension(90, 32));
+        closeBtn.addActionListener(e -> dlg.dispose());
+
+        botBar.add(exportPngBtn);
+        botBar.add(closeBtn);
+        dlg.add(botBar, BorderLayout.SOUTH);
+
+        dlg.pack();
+        dlg.setLocationRelativeTo(this);
+        dlg.setVisible(true);
+    }
+
+    /**
+     * Core Architectural Section Cut Computation & 2D Vector Rendering Routine:
+     * Projects plan-space intersections onto 2D elevation coordinate space.
+     */
+    public void renderSectionalElevationCut(Graphics2D g2, int canvasW, int canvasH, CADElement sectionTag,
+                                           double ceilingHeightFt, boolean showDatums, boolean showFixtures, boolean isHighResExport) {
+        // Background
+        g2.setColor(isHighResExport ? Color.WHITE : new Color(11, 15, 25));
+        g2.fillRect(0, 0, canvasW, canvasH);
+
+        Point2D.Double p1 = sectionTag.points.get(0);
+        Point2D.Double p2 = sectionTag.points.get(1);
+        double cutLengthPx = p1.distance(p2);
+        if (cutLengthPx < 1.0) return;
+
+        double cutLengthFt = cutLengthPx / FT_PX;
+        double dx = p2.x - p1.x, dy = p2.y - p1.y;
+        double ux = dx / cutLengthPx, uy = dy / cutLengthPx;   // Unit vector along cut line
+        double nx = -uy, ny = ux;                              // Unit normal vector (sight direction)
+
+        // Architectural Vertical Z Datum Heights (all in feet relative to GL = 0'-0")
+        double glFt = 0.0;
+        double plinthFt = 1.5;                                // Plinth Level = +1'-6"
+        double floorFt = plinthFt;
+        double ceilingFt = floorFt + ceilingHeightFt;         // e.g. 1.5 + 10.0 = +11'-6"
+        double slabFt = ceilingFt + 0.5;                      // Roof Slab 6" RCC = +12'-0"
+        double parapetFt = slabFt + 3.0;                      // Parapet Wall = +15'-0"
+        double foundationDepthFt = 3.0;                       // Below ground level = -3'-0"
+        double totalHeightFt = parapetFt + foundationDepthFt + 1.0;
+
+        // Viewport layout margins
+        int leftPad = isHighResExport ? 160 : 100;
+        int rightPad = isHighResExport ? 160 : 90;
+        int topPad = isHighResExport ? 120 : 70;
+        int botPad = isHighResExport ? 120 : 70;
+
+        int drawAreaW = canvasW - leftPad - rightPad;
+        int drawAreaH = canvasH - topPad - botPad;
+        if (drawAreaW <= 50 || drawAreaH <= 50) return;
+
+        double scaleX = drawAreaW / Math.max(12.0, cutLengthFt);
+        double scaleY = drawAreaH / Math.max(16.0, totalHeightFt);
+        double scale = Math.min(scaleX, scaleY);
+
+        int originX = leftPad + (int)((drawAreaW - cutLengthFt * scale) / 2.0);
+        // Base ground level Y on canvas
+        int glY = canvasH - botPad - (int)(foundationDepthFt * scale);
+        int plY = glY - (int)(plinthFt * scale);
+        int ceilY = glY - (int)(ceilingFt * scale);
+        int slabY = glY - (int)(slabFt * scale);
+        int parapetY = glY - (int)(parapetFt * scale);
+        int fdnY = glY + (int)(foundationDepthFt * scale);
+
+        Color cGround = isHighResExport ? new Color(120, 113, 108) : new Color(71, 85, 105);
+        Color cCutWall = isHighResExport ? new Color(30, 41, 59) : new Color(56, 189, 248);
+        Color cWallHatch = isHighResExport ? new Color(71, 85, 105) : new Color(14, 116, 144);
+        Color cBgWall = isHighResExport ? new Color(241, 245, 249) : new Color(15, 23, 42);
+        Color cLine = isHighResExport ? Color.BLACK : new Color(226, 232, 240);
+        Color cSlab = isHighResExport ? new Color(203, 213, 225) : new Color(30, 41, 59);
+        Color cText = isHighResExport ? new Color(15, 23, 42) : new Color(241, 245, 249);
+        Color cAmber = new Color(245, 158, 11);
+        Color cCyan = new Color(56, 189, 248);
+
+        // ─── 1. Background Wall Elevation Envelope ───
+        int secWidthPx = (int)(cutLengthFt * scale);
+        g2.setColor(cBgWall);
+        g2.fillRect(originX, ceilY, secWidthPx, plY - ceilY);
+
+        // ─── 2. Plinth & Ground Mass ───
+        // Earth / Sub-base hatch below GL
+        g2.setColor(isHighResExport ? new Color(245, 245, 244) : new Color(15, 20, 30));
+        g2.fillRect(originX - 30, glY, secWidthPx + 60, fdnY - glY);
+
+        // Ground Level thick baseline
+        g2.setColor(cGround);
+        g2.setStroke(new BasicStroke(isHighResExport ? 3.0f : 2.2f));
+        g2.drawLine(originX - 40, glY, originX + secWidthPx + 40, glY);
+
+        // Plinth masonry base
+        g2.setColor(cSlab);
+        g2.fillRect(originX, plY, secWidthPx, glY - plY);
+        g2.setColor(cLine);
+        g2.setStroke(new BasicStroke(1.5f));
+        g2.drawRect(originX, plY, secWidthPx, glY - plY);
+
+        // ─── 3. Roof RCC Slab & Parapet Terrace ───
+        // Concrete roof slab (6" RCC)
+        g2.setColor(cSlab);
+        g2.fillRect(originX - 10, slabY, secWidthPx + 20, ceilY - slabY);
+        g2.setColor(cLine);
+        g2.setStroke(new BasicStroke(1.8f));
+        g2.drawRect(originX - 10, slabY, secWidthPx + 20, ceilY - slabY);
+
+        // Parapet walls on terrace (3'-0" high)
+        int paraThickPx = Math.max(6, (int)(0.75 * scale)); // 9" parapet
+        g2.setColor(cSlab);
+        g2.fillRect(originX, parapetY, paraThickPx, slabY - parapetY);
+        g2.fillRect(originX + secWidthPx - paraThickPx, parapetY, paraThickPx, slabY - parapetY);
+        g2.setColor(cLine);
+        g2.drawRect(originX, parapetY, paraThickPx, slabY - parapetY);
+        g2.drawRect(originX + secWidthPx - paraThickPx, parapetY, paraThickPx, slabY - parapetY);
+
+        // Coping stones on parapet tops
+        g2.setColor(cAmber);
+        g2.fillRect(originX - 2, parapetY - 4, paraThickPx + 4, 4);
+        g2.fillRect(originX + secWidthPx - paraThickPx - 2, parapetY - 4, paraThickPx + 4, 4);
+
+        // ─── 4. Cut Walls (Cutting Plane Intersections with Wall Segments) ───
+        List<Double> cutWallXList = new ArrayList<>();
+        for (Wall w : walls) {
+            Point2D.Double cross = computeSegmentIntersection(p1.x, p1.y, p2.x, p2.y, w.x1, w.y1, w.x2, w.y2);
+            if (cross != null) {
+                double distAlong = (cross.x - p1.x) * ux + (cross.y - p1.y) * uy;
+                double distFt = distAlong / FT_PX;
+                double wThickFt = w.thicknessInches / 12.0;
+                int wx = originX + (int)(distFt * scale);
+                int wpx = Math.max(6, (int)(wThickFt * scale));
+                int leftX = wx - wpx / 2;
+
+                cutWallXList.add((double) wx);
+
+                // Cut wall vertical column from Plinth to Ceiling
+                g2.setColor(cBgWall);
+                g2.fillRect(leftX, ceilY, wpx, plY - ceilY);
+
+                // ANSI31 45° Brick Hatch pattern inside cut wall
+                Shape oldClip = g2.getClip();
+                g2.clipRect(leftX, ceilY, wpx, plY - ceilY);
+                g2.setColor(cWallHatch);
+                g2.setStroke(new BasicStroke(0.9f));
+                int hatchStep = 8;
+                for (int hx = leftX - (plY - ceilY); hx < leftX + wpx + (plY - ceilY); hx += hatchStep) {
+                    g2.drawLine(hx, plY, hx + (plY - ceilY), ceilY);
+                }
+                g2.setClip(oldClip);
+
+                // Cut wall boundary outline (Heavy cut lines)
+                g2.setColor(cCutWall);
+                g2.setStroke(new BasicStroke(isHighResExport ? 2.5f : 1.8f));
+                g2.drawRect(leftX, ceilY, wpx, plY - ceilY);
+
+                // Wall foundation below ground
+                int fdnW = (int)(wpx * 2.2);
+                int fdnLeft = wx - fdnW / 2;
+                g2.setColor(cSlab);
+                g2.fillRect(fdnLeft, glY, fdnW, fdnY - glY);
+                g2.setColor(cLine);
+                g2.drawRect(fdnLeft, glY, fdnW, fdnY - glY);
+            }
+        }
+
+        // ─── 5. Openings (Doors & Windows Cut or in Background Elevation) ───
+        for (CADElement el : elements) {
+            if (!el.isOpening()) continue;
+            double cx = el.x + el.w / 2.0, cy = el.y + el.h / 2.0;
+            double projAlong = (cx - p1.x) * ux + (cy - p1.y) * uy;
+            double perpDist = (cx - p1.x) * nx + (cy - p1.y) * ny; // distance in sight direction
+
+            // If close to cut line or in background sight view (within 14 ft depth)
+            if (projAlong >= 0 && projAlong <= cutLengthPx && perpDist >= -1.0 * FT_PX && perpDist <= 14.0 * FT_PX) {
+                double distFt = projAlong / FT_PX;
+                double openWidthFt = el.w / FT_PX;
+                int ox = originX + (int)(distFt * scale);
+                int ow = Math.max(12, (int)(openWidthFt * scale));
+                int leftX = ox - ow / 2;
+
+                if (el.isDoor() || el.isWallOpening()) {
+                    // Standard Door Opening: 7'-0" height above plinth
+                    int doorH = (int)(7.0 * scale);
+                    int doorTopY = plY - doorH;
+
+                    // Clear passage / opening
+                    g2.setColor(isHighResExport ? new Color(250, 250, 250) : new Color(18, 26, 43));
+                    g2.fillRect(leftX, doorTopY, ow, doorH);
+
+                    // Door frame & architrave trim
+                    g2.setColor(cLine);
+                    g2.setStroke(new BasicStroke(1.2f));
+                    g2.drawRect(leftX, doorTopY, ow, doorH);
+
+                    if (el.isDoor()) {
+                        // Door leaf panels and handle
+                        int framePad = Math.max(2, (int)(0.2 * scale));
+                        g2.drawRect(leftX + framePad, doorTopY + framePad, ow - framePad * 2, doorH - framePad);
+                        int handleY = plY - (int)(3.0 * scale); // 3'-0" handle height
+                        g2.setColor(cAmber);
+                        g2.fillOval(leftX + ow - framePad - 8, handleY, 5, 5);
+                    }
+
+                    // Lintel beam indicator above door (7' to 7'-9")
+                    g2.setColor(cLine);
+                    g2.setStroke(new BasicStroke(0.8f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, new float[]{4, 4}, 0));
+                    g2.drawLine(leftX - 4, doorTopY, leftX + ow + 4, doorTopY);
+
+                } else if (el.isWindow()) {
+                    // Standard Window: Sill at 3'-0" above plinth, Lintel at 7'-0" (4' high window)
+                    int sillY = plY - (int)(3.0 * scale);
+                    int lintelY = plY - (int)(7.0 * scale);
+                    int winH = sillY - lintelY;
+
+                    // Window glass tint
+                    g2.setColor(isHighResExport ? new Color(224, 242, 254) : new Color(14, 116, 144, 70));
+                    g2.fillRect(leftX, lintelY, ow, winH);
+
+                    // Outer window frame
+                    g2.setColor(cLine);
+                    g2.setStroke(new BasicStroke(1.4f));
+                    g2.drawRect(leftX, lintelY, ow, winH);
+
+                    // Mullions / Casement mullion divide
+                    g2.drawLine(leftX + ow / 2, lintelY, leftX + ow / 2, sillY);
+                    g2.drawLine(leftX, lintelY + winH / 2, leftX + ow, lintelY + winH / 2);
+
+                    // Window sill projection (extended ledge)
+                    g2.setColor(cCyan);
+                    g2.setStroke(new BasicStroke(2.0f));
+                    g2.drawLine(leftX - 4, sillY, leftX + ow + 4, sillY);
+                }
+            }
+        }
+
+        // ─── 6. Realistic 2D Elevation Silhouettes for Bath & Kitchen Fixtures ───
+        if (showFixtures) {
+            for (CADElement el : elements) {
+                if (el.isOpening() || "tag".equals(el.type) || "north-arrow".equals(el.type) || "section-tag".equals(el.type)) continue;
+
+                double cx = el.x + el.w / 2.0, cy = el.y + el.h / 2.0;
+                double projAlong = (cx - p1.x) * ux + (cy - p1.y) * uy;
+                double perpDist = (cx - p1.x) * nx + (cy - p1.y) * ny; // distance in sight direction
+
+                // Within longitudinal cut span and within visible room depth (0 to 8 ft)
+                if (projAlong >= 0 && projAlong <= cutLengthPx && perpDist >= -1.0 * FT_PX && perpDist <= 8.0 * FT_PX) {
+                    double distFt = projAlong / FT_PX;
+                    int ox = originX + (int)(distFt * scale);
+                    String type = el.type;
+
+                    // ════ BATHROOM FIXTURES ════
+                    if (type.equals("toilet")) {
+                        // Toilet WC Elevation (Bowl rim at 1'-4", Cistern tank at 2'-6")
+                        int wcW = Math.max(14, (int)(1.67 * scale));
+                        int wx = ox - wcW / 2;
+                        int rimY = plY - (int)(1.33 * scale);
+                        int tankTopY = plY - (int)(2.6 * scale);
+                        int tankW = (int)(wcW * 0.85);
+                        int tankX = ox - tankW / 2;
+
+                        // Cistern tank
+                        g2.setColor(isHighResExport ? Color.WHITE : new Color(241, 245, 249));
+                        g2.fillRoundRect(tankX, tankTopY, tankW, rimY - tankTopY, 4, 4);
+                        g2.setColor(cLine);
+                        g2.setStroke(new BasicStroke(1.2f));
+                        g2.drawRoundRect(tankX, tankTopY, tankW, rimY - tankTopY, 4, 4);
+
+                        // Flush button
+                        g2.setColor(cAmber);
+                        g2.drawOval(ox - 3, tankTopY + 3, 6, 4);
+
+                        // WC bowl base & seat
+                        g2.setColor(isHighResExport ? Color.WHITE : new Color(241, 245, 249));
+                        g2.fillRoundRect(wx, rimY, wcW, plY - rimY, 6, 6);
+                        g2.setColor(cLine);
+                        g2.drawRoundRect(wx, rimY, wcW, plY - rimY, 6, 6);
+                        g2.setColor(cCyan);
+                        g2.drawRect(wx + 2, rimY - 2, wcW - 4, 3); // toilet seat lid
+
+                    } else if (type.equals("basin")) {
+                        // Wash Basin / Vanity Elevation (Counter rim at 2'-8", Mirror at 3'-6" to 6'-6")
+                        int basW = Math.max(18, (int)(2.5 * scale));
+                        int bx = ox - basW / 2;
+                        int rimY = plY - (int)(2.67 * scale); // 2'-8"
+                        int basH = (int)(0.8 * scale);
+
+                        // Vanity under-counter cabinet / pedestal
+                        g2.setColor(isHighResExport ? new Color(241, 245, 249) : new Color(24, 33, 53));
+                        g2.fillRect(bx + 2, rimY + basH, basW - 4, plY - (rimY + basH));
+                        g2.setColor(cLine);
+                        g2.setStroke(new BasicStroke(1.2f));
+                        g2.drawRect(bx + 2, rimY + basH, basW - 4, plY - (rimY + basH));
+                        // Cabinet door line & knob
+                        g2.drawLine(ox, rimY + basH, ox, plY);
+                        g2.fillOval(ox - 5, rimY + basH + (plY - rimY - basH) / 2, 3, 3);
+                        g2.fillOval(ox + 3, rimY + basH + (plY - rimY - basH) / 2, 3, 3);
+
+                        // Ceramic Basin bowl
+                        g2.setColor(isHighResExport ? Color.WHITE : new Color(248, 250, 252));
+                        g2.fillRoundRect(bx, rimY, basW, basH, 6, 6);
+                        g2.setColor(cLine);
+                        g2.drawRoundRect(bx, rimY, basW, basH, 6, 6);
+
+                        // Faucet / Mixer Tap
+                        g2.setColor(cAmber);
+                        g2.setStroke(new BasicStroke(1.8f));
+                        g2.drawLine(ox, rimY, ox, rimY - (int)(0.4 * scale));
+                        g2.drawLine(ox, rimY - (int)(0.4 * scale), ox + 5, rimY - (int)(0.35 * scale));
+
+                        // Overhead Bathroom Mirror (3'-6" to 6'-0")
+                        int mirBotY = plY - (int)(3.5 * scale);
+                        int mirTopY = plY - (int)(6.0 * scale);
+                        int mirW = (int)(basW * 0.9);
+                        g2.setColor(isHighResExport ? new Color(224, 242, 254) : new Color(56, 189, 248, 50));
+                        g2.fillRect(ox - mirW / 2, mirTopY, mirW, mirBotY - mirTopY);
+                        g2.setColor(cLine);
+                        g2.setStroke(new BasicStroke(1.2f));
+                        g2.drawRect(ox - mirW / 2, mirTopY, mirW, mirBotY - mirTopY);
+
+                    } else if (type.equals("bathtub")) {
+                        // Bathtub Elevation (Rim at 1'-8" / 20" above floor, 5'-0" wide)
+                        int tubW = Math.max(30, (int)(5.0 * scale));
+                        int tx = ox - tubW / 2;
+                        int rimY = plY - (int)(1.67 * scale); // 1'-8"
+
+                        g2.setColor(isHighResExport ? Color.WHITE : new Color(241, 245, 249));
+                        g2.fillRoundRect(tx, rimY, tubW, plY - rimY, 8, 8);
+                        g2.setColor(cLine);
+                        g2.setStroke(new BasicStroke(1.5f));
+                        g2.drawRoundRect(tx, rimY, tubW, plY - rimY, 8, 8);
+
+                        // Tub rim trim & shower mixer
+                        g2.setColor(cCyan);
+                        g2.drawLine(tx - 2, rimY, tx + tubW + 2, rimY);
+                        g2.setColor(cAmber);
+                        g2.drawLine(tx + 8, rimY, tx + 8, rimY - (int)(0.5 * scale));
+
+                    } else if (type.equals("shower")) {
+                        // Shower Stall (Glass partition enclosure 6'-6" high)
+                        int shwW = Math.max(22, (int)(3.0 * scale));
+                        int sx = ox - shwW / 2;
+                        int shwTopY = plY - (int)(6.5 * scale);
+
+                        g2.setColor(isHighResExport ? new Color(240, 249, 255) : new Color(14, 116, 144, 40));
+                        g2.fillRect(sx, shwTopY, shwW, plY - shwTopY);
+                        g2.setColor(cCyan);
+                        g2.setStroke(new BasicStroke(1.2f));
+                        g2.drawRect(sx, shwTopY, shwW, plY - shwTopY);
+
+                        // Overhead rain shower head
+                        g2.setColor(cAmber);
+                        g2.setStroke(new BasicStroke(2.0f));
+                        g2.drawLine(sx + shwW / 2, shwTopY, sx + shwW / 2, shwTopY + 14);
+                        g2.drawLine(sx + shwW / 2 - 8, shwTopY + 14, sx + shwW / 2 + 8, shwTopY + 14);
+
+                    // ════ KITCHEN FIXTURES & CASEWORK ════
+                    } else if (type.startsWith("kitchen") || type.equals("stove") || type.equals("fridge")) {
+                        // Standard Kitchen Ergonomics:
+                        // Base Cabinet / Countertop: 2'-10" (34") above plinth
+                        // Backsplash / Mid-zone: 2'-10" to 4'-6"
+                        // Upper Wall Mounted Overhead Cabinets: 4'-6" to 7'-0"
+                        int baseH = (int)(2.83 * scale); // 2'-10"
+                        int baseTopY = plY - baseH;
+                        int wallCabTopY = plY - (int)(7.0 * scale);
+                        int wallCabBotY = plY - (int)(4.5 * scale);
+
+                        if (type.equals("fridge")) {
+                            // Refrigerator Elevation (6'-0" tall appliance)
+                            int fW = Math.max(18, (int)(2.5 * scale));
+                            int fx = ox - fW / 2;
+                            int fTopY = plY - (int)(6.0 * scale);
+
+                            g2.setColor(isHighResExport ? new Color(241, 245, 249) : new Color(30, 41, 59));
+                            g2.fillRoundRect(fx, fTopY, fW, plY - fTopY, 6, 6);
+                            g2.setColor(cLine);
+                            g2.setStroke(new BasicStroke(1.5f));
+                            g2.drawRoundRect(fx, fTopY, fW, plY - fTopY, 6, 6);
+
+                            // Freezer / Fridge door split line & handles
+                            int splitY = fTopY + (plY - fTopY) / 3;
+                            g2.drawLine(fx, splitY, fx + fW, splitY);
+                            g2.setColor(cAmber);
+                            g2.drawLine(fx + fW - 4, fTopY + 8, fx + fW - 4, splitY - 8);
+                            g2.drawLine(fx + fW - 4, splitY + 8, fx + fW - 4, plY - 14);
+
+                        } else {
+                            // Kitchen counter run / module
+                            double elemWidthFt = Math.max(2.0, el.w / FT_PX);
+                            int kw = Math.max(20, (int)(elemWidthFt * scale));
+                            int kx = ox - kw / 2;
+
+                            // 1. Base Cabinets with drawers & doors
+                            g2.setColor(isHighResExport ? new Color(248, 250, 252) : new Color(24, 33, 53));
+                            g2.fillRect(kx, baseTopY, kw, baseH);
+
+                            // Granite countertop slab (1.5" bullnose overhang)
+                            g2.setColor(isHighResExport ? new Color(71, 85, 105) : new Color(56, 189, 248));
+                            g2.fillRect(kx - 2, baseTopY, kw + 4, Math.max(3, (int)(0.125 * scale)));
+
+                            g2.setColor(cLine);
+                            g2.setStroke(new BasicStroke(1.2f));
+                            g2.drawRect(kx, baseTopY, kw, baseH);
+
+                            // Base cabinet door divisions & drawer lines
+                            int modules = Math.max(1, (int) Math.round(elemWidthFt / 2.0));
+                            int modW = kw / modules;
+                            int drawerH = Math.max(10, (int)(0.6 * scale));
+                            for (int m = 0; m < modules; m++) {
+                                int mx = kx + m * modW;
+                                g2.setColor(cLine);
+                                g2.setStroke(new BasicStroke(0.8f));
+                                g2.drawRect(mx + 2, baseTopY + 5, modW - 4, drawerH); // cutlery drawer
+                                g2.drawRect(mx + 2, baseTopY + drawerH + 7, modW - 4, baseH - drawerH - 12); // door
+                                // Sleek metal handle
+                                g2.setColor(cAmber);
+                                g2.drawLine(mx + modW / 2 - 8, baseTopY + 5 + drawerH / 2, mx + modW / 2 + 8, baseTopY + 5 + drawerH / 2);
+                                g2.drawLine(mx + modW - 8, baseTopY + drawerH + 16, mx + modW - 8, baseTopY + drawerH + 32);
+                            }
+
+                            // 2. Cooktop or Sink fixture on counter if applicable
+                            if (type.contains("sink")) {
+                                g2.setColor(cAmber);
+                                g2.setStroke(new BasicStroke(2.0f));
+                                g2.drawLine(ox, baseTopY, ox, baseTopY - (int)(0.6 * scale));
+                                g2.drawLine(ox, baseTopY - (int)(0.6 * scale), ox + 8, baseTopY - (int)(0.5 * scale));
+                            } else if (type.contains("stove") || type.equals("kitchen-compact") || type.equals("kitchen-linear")) {
+                                // Stainless steel cooktop burners + Chimney hood overhead
+                                g2.setColor(cAmber);
+                                g2.fillRect(ox - 10, baseTopY - 4, 20, 4);
+                                // Chimney exhaust hood overhead (at 5'-6" to 7'-0")
+                                int chimW = Math.max(18, (int)(2.5 * scale));
+                                int chimX = ox - chimW / 2;
+                                int chimBotY = plY - (int)(5.5 * scale);
+                                Polygon chimHood = new Polygon(
+                                        new int[]{chimX, chimX + chimW, chimX + chimW - 8, chimX + 8},
+                                        new int[]{chimBotY, chimBotY, wallCabTopY, wallCabTopY}, 4);
+                                g2.setColor(isHighResExport ? new Color(203, 213, 225) : new Color(51, 65, 85));
+                                g2.fillPolygon(chimHood);
+                                g2.setColor(cLine);
+                                g2.drawPolygon(chimHood);
+                            }
+
+                            // 3. Wall Mounted Overhead Upper Cabinets (4'-6" to 7'-0")
+                            int wallCabH = wallCabBotY - wallCabTopY;
+                            g2.setColor(isHighResExport ? new Color(241, 245, 249) : new Color(30, 41, 59));
+                            g2.fillRect(kx, wallCabTopY, kw, wallCabH);
+                            g2.setColor(cLine);
+                            g2.setStroke(new BasicStroke(1.2f));
+                            g2.drawRect(kx, wallCabTopY, kw, wallCabH);
+
+                            for (int m = 0; m < modules; m++) {
+                                int mx = kx + m * modW;
+                                g2.drawRect(mx + 2, wallCabTopY + 3, modW - 4, wallCabH - 6);
+                                g2.setColor(cAmber);
+                                g2.fillOval(mx + modW - 8, wallCabBotY - 14, 3, 3);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ─── 7. Architectural Level Datums, Labels & Imperial Dimensions ───
+        if (showDatums) {
+            drawArchitecturalLevelDatum(g2, originX + secWidthPx + 15, glY, "±0'-0\" GROUND LEVEL (GL)", isHighResExport);
+            drawArchitecturalLevelDatum(g2, originX + secWidthPx + 15, plY, "+1'-6\" PLINTH LEVEL (PL)", isHighResExport);
+            drawArchitecturalLevelDatum(g2, originX + secWidthPx + 15, plY - (int)(7.0 * scale), "+8'-6\" LINTEL LEVEL", isHighResExport);
+            drawArchitecturalLevelDatum(g2, originX + secWidthPx + 15, ceilY, String.format("+%d'-6\" CEILING LEVEL", (int)(1.5 + ceilingHeightFt)), isHighResExport);
+            drawArchitecturalLevelDatum(g2, originX + secWidthPx + 15, slabY, String.format("+%d'-0\" ROOF SLAB TOP", (int)(2.0 + ceilingHeightFt)), isHighResExport);
+            drawArchitecturalLevelDatum(g2, originX + secWidthPx + 15, parapetY, String.format("+%d'-0\" PARAPET LVL", (int)(5.0 + ceilingHeightFt)), isHighResExport);
+
+            // Left side overall clear room height vertical dimension (Plinth to Ceiling)
+            int dimX = originX - 35;
+            g2.setColor(cCyan);
+            g2.setStroke(new BasicStroke(1.2f));
+            g2.drawLine(dimX, plY, dimX, ceilY);
+            // End ticks
+            g2.drawLine(dimX - 5, plY, dimX + 5, plY);
+            g2.drawLine(dimX - 5, ceilY, dimX + 5, ceilY);
+
+            // Dimension text rotated vertical
+            String hText = String.format("%.0f'-0\" CLEAR CEILING HEIGHT", ceilingHeightFt);
+            g2.setFont(new Font("Consolas", Font.BOLD, isHighResExport ? 12 : 10));
+            AffineTransform oldT = g2.getTransform();
+            g2.translate(dimX - 8, (plY + ceilY) / 2);
+            g2.rotate(-Math.PI / 2.0);
+            FontMetrics fmh = g2.getFontMetrics();
+            g2.drawString(hText, -fmh.stringWidth(hText) / 2, 0);
+            g2.setTransform(oldT);
+        }
+
+        // ─── 8. Section Title & Drawing Scale Badge ───
+        g2.setFont(new Font("Segoe UI", Font.BOLD, isHighResExport ? 16 : 13));
+        g2.setColor(cText);
+        String titleStr = "SECTIONAL ELEVATION " + sectionTag.name.toUpperCase();
+        g2.drawString(titleStr, originX, topPad - 20);
+
+        g2.setFont(new Font("Consolas", Font.PLAIN, isHighResExport ? 12 : 10));
+        g2.setColor(cAmber);
+        String scaleStr = String.format("CUT SPAN: %.1f FT  |  CEILING HT: %.1f FT  |  HDE CAD STUDIO", cutLengthFt, ceilingHeightFt);
+        g2.drawString(scaleStr, originX, topPad - 4);
+    }
+
+    private void drawArchitecturalLevelDatum(Graphics2D g2, int x, int y, String label, boolean isHighRes) {
+        g2.setColor(new Color(245, 158, 11)); // Amber level datum
+        g2.setStroke(new BasicStroke(1.2f));
+        g2.drawLine(x, y, x + 15, y);
+
+        // AutoCAD style level datum symbol (inverted triangle with line)
+        Polygon tri = new Polygon(
+                new int[]{x + 15, x + 25, x + 20},
+                new int[]{y - 7, y - 7, y}, 3);
+        g2.fillPolygon(tri);
+
+        g2.setFont(new Font("Consolas", Font.BOLD, isHighRes ? 11 : 9));
+        g2.setColor(isHighRes ? new Color(15, 23, 42) : new Color(226, 232, 240));
+        g2.drawString(label, x + 30, y + 4);
+    }
+
+    private Point2D.Double computeSegmentIntersection(double x1, double y1, double x2, double y2,
+                                                     double x3, double y3, double x4, double y4) {
+        double d = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+        if (Math.abs(d) < 1e-6) return null;
+
+        double t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / d;
+        double u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / d;
+
+        if (t >= 0.0 && t <= 1.0 && u >= 0.0 && u <= 1.0) {
+            return new Point2D.Double(x1 + t * (x2 - x1), y1 + t * (y2 - y1));
+        }
+        return null;
+    }
+
+    /**
      * Dialog for professional architectural drawing export in multiple aspect ratios,
      * monochrome working drawing style or color presentation style, and PDF or PNG format.
      */
@@ -11115,6 +12021,51 @@ public class HousePlanCADApp extends JFrame {
             int shelves = 4;
             int sp = sw / shelves;
             for (int i = 1; i < shelves; i++) g2.drawLine(i * sp, 0, i * sp, sh);
+
+        // ─── SECTION CUT LINE & CALLOUT TAG (AutoCAD Standard) ───
+        } else if (type.equals("section-tag")) {
+            int bubR = Math.max(10, (int)(11.0 * scale));
+            int cy = sh / 2;
+
+            g2.setColor(isMonochrome ? Color.BLACK : new Color(245, 158, 11));
+            g2.setStroke(new BasicStroke((float)(2.0 * scale), BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, new float[]{12, 4, 3, 4}, 0));
+            g2.drawLine(bubR, cy, sw - bubR, cy);
+
+            int arrowH = Math.max(8, (int)(10.0 * scale));
+            int arrowW = Math.max(6, (int)(8.0 * scale));
+            g2.setStroke(new BasicStroke((float)(1.5 * scale)));
+            g2.drawLine(bubR + 3, cy, bubR + 3, cy - arrowH);
+            g2.drawLine(sw - bubR - 3, cy, sw - bubR - 3, cy - arrowH);
+
+            Polygon arrL = new Polygon(
+                    new int[]{bubR + 3, bubR + 3 - arrowW / 2, bubR + 3 + arrowW / 2},
+                    new int[]{cy - arrowH - 3, cy - arrowH + 2, cy - arrowH + 2}, 3);
+            Polygon arrR = new Polygon(
+                    new int[]{sw - bubR - 3, sw - bubR - 3 - arrowW / 2, sw - bubR - 3 + arrowW / 2},
+                    new int[]{cy - arrowH - 3, cy - arrowH + 2, cy - arrowH + 2}, 3);
+            g2.fillPolygon(arrL);
+            g2.fillPolygon(arrR);
+
+            g2.setColor(Color.WHITE);
+            g2.fillOval(0, cy - bubR, bubR * 2, bubR * 2);
+            g2.fillOval(sw - bubR * 2, cy - bubR, bubR * 2, bubR * 2);
+
+            g2.setColor(isMonochrome ? Color.BLACK : new Color(245, 158, 11));
+            g2.setStroke(new BasicStroke((float)(1.8 * scale)));
+            g2.drawOval(0, cy - bubR, bubR * 2, bubR * 2);
+            g2.drawOval(sw - bubR * 2, cy - bubR, bubR * 2, bubR * 2);
+
+            String letter = "A";
+            if (el.name != null && el.name.length() >= 9) {
+                char ch = el.name.charAt(8);
+                if (ch >= 'A' && ch <= 'Z') letter = String.valueOf(ch);
+            }
+
+            g2.setFont(new Font("Segoe UI", Font.BOLD, Math.max(8, (int)(9 * scale))));
+            FontMetrics fmb = g2.getFontMetrics();
+            g2.drawString(letter, bubR - fmb.stringWidth(letter) / 2, cy + fmb.getAscent() / 2 - 2);
+            String letterP = letter + "'";
+            g2.drawString(letterP, sw - bubR - fmb.stringWidth(letterP) / 2, cy + fmb.getAscent() / 2 - 2);
 
         // ─── TOILET WC ───
         } else if (type.equals("toilet")) {
