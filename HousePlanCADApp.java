@@ -179,9 +179,10 @@ public class HousePlanCADApp extends JFrame {
             }
         }
 
-        public boolean isOpening() { return type.startsWith("door") || type.startsWith("window"); }
+        public boolean isOpening() { return type.startsWith("door") || type.startsWith("window") || type.startsWith("opening"); }
         public boolean isDoor() { return type.startsWith("door"); }
         public boolean isWindow() { return type.startsWith("window"); }
+        public boolean isWallOpening() { return type.startsWith("opening"); }
 
         public Path2D.Double getPolygonPath() {
             if (points == null || points.size() < 3) return null;
@@ -751,7 +752,7 @@ public class HousePlanCADApp extends JFrame {
         if (obj instanceof CADElement) {
             CADElement el = (CADElement) obj;
             String t = el.type.toLowerCase();
-            if (t.startsWith("door") || t.startsWith("window") || t.startsWith("column") || t.startsWith("stair")) {
+            if (t.startsWith("door") || t.startsWith("window") || t.startsWith("opening") || t.startsWith("column") || t.startsWith("stair")) {
                 return ProjectStage.STAGE_1_WALLS;
             }
             if (t.startsWith("floor-")) return ProjectStage.STAGE_5_FLOORING;
@@ -862,8 +863,12 @@ public class HousePlanCADApp extends JFrame {
         addCatalogItem(roomSetsPanel, "Dining Room Set (12'×10')", "set-dining-full", 12.0, 10.0);
         catalogContentCards.add(wrapInScroll(roomSetsPanel), "ROOM_SETS");
 
-        // DOORS
+        // DOORS & OPENINGS
         JPanel doorsPanel = createCatalogCategoryPanel();
+        addCatalogItem(doorsPanel, "Wall Opening 3'-0\"", "opening-wall", 3.0, 0.75);
+        addCatalogItem(doorsPanel, "Wall Opening 3'-6\"", "opening-wall", 3.5, 0.75);
+        addCatalogItem(doorsPanel, "Wall Opening 4'-0\"", "opening-wall", 4.0, 0.75);
+        addCatalogItem(doorsPanel, "Wall Opening 5'-0\"", "opening-wall", 5.0, 0.75);
         addCatalogItem(doorsPanel, "Single Door 3'-0\"", "door", 3.0, 0.75);
         addCatalogItem(doorsPanel, "Main Door 3'-6\"", "door", 3.5, 0.75);
         addCatalogItem(doorsPanel, "Large Entry 4'-0\"", "door", 4.0, 0.75);
@@ -1396,7 +1401,9 @@ public class HousePlanCADApp extends JFrame {
                 propRotSlider.setEnabled(false);
             } else if (primarySelected instanceof CADElement) {
                 CADElement elem = (CADElement) primarySelected;
-                if (elem.type.startsWith("kitchen")) {
+                if (elem.type.startsWith("opening")) {
+                    propTypeBadge.setText("WALL OPENING");
+                } else if (elem.type.startsWith("kitchen")) {
                     propTypeBadge.setText("KITCHEN (CUSTOM)");
                 } else if (elem.type.startsWith("floor-")) {
                     propTypeBadge.setText("FLOOR FINISH");
@@ -3237,8 +3244,22 @@ public class HousePlanCADApp extends JFrame {
         private void renderCADElement(Graphics2D g2, CADElement el, int sw, int sh) {
             String type = el.type;
 
+            // ─── CASED / FRAMELess WALL OPENING ─────────────────────────
+            if (type.startsWith("opening")) {
+                // Clear passage through wall without door leaf, frame, or swing arc
+                // Render delicate architectural jamb return stop lines (casing return)
+                g2.setColor(new Color(203, 213, 225));
+                g2.setStroke(new BasicStroke(1.5f));
+                g2.drawLine(0, 0, 0, sh);       // Left wall edge
+                g2.drawLine(sw, 0, sw, sh);     // Right wall edge
+
+                // Optional subtle architectural lintel indicator overhead (dashed)
+                g2.setColor(new Color(56, 189, 248, 120));
+                g2.setStroke(new BasicStroke(0.85f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, new float[]{4, 3}, 0));
+                g2.drawLine(0, sh / 2, sw, sh / 2);
+
             // ─── SINGLE DOOR ────────────────────────────────────────────
-            if (type.equals("door")) {
+            } else if (type.equals("door")) {
                 int jw = Math.max(3, (int)(2.5 * zoom));   // jamb width
                 int leafLen = sw - jw * 2;                  // swing radius
                 int leafThick = Math.max(3, (int)(2.0 * zoom));
@@ -8113,8 +8134,19 @@ public class HousePlanCADApp extends JFrame {
         float sHair  = (float) Math.max(0.6, 0.75 / scale);
         float[] dashPattern = new float[]{ Math.max(3.0f, 4.0f / (float) scale), Math.max(2.0f, 3.0f / (float) scale) };
 
+        // ─── WALL OPENING (Clean cased passage without leaf or frame) ───
+        if (type.startsWith("opening")) {
+            g2.setColor(primaryCol);
+            g2.setStroke(new BasicStroke(sHeavy));
+            g2.drawLine(0, 0, 0, sh);
+            g2.drawLine(sw, 0, sw, sh);
+            // Overhead lintel centerline (dashed)
+            g2.setColor(isMonochrome ? new Color(120, 120, 120) : new Color(14, 116, 144));
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
+            g2.drawLine(0, sh / 2, sw, sh / 2);
+
         // ─── DOORS (AutoCAD Standard Architectural Symbols) ───
-        if (type.equals("door")) {
+        } else if (type.equals("door")) {
             int jw = Math.max(3, (int)(4.0 / scale));
             int leafLen = sw - jw * 2;
             int leafThick = Math.max(2, (int)(3.0 / scale));
