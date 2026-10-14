@@ -508,6 +508,10 @@ public class HousePlanCADApp extends JFrame {
             else if (idx == 3) loadPreset20x30();
         });
 
+        ModernButton learnBtn = new ModernButton("📖 Learn", new Color(30, 41, 59), new Color(147, 197, 253), new Color(59, 130, 246));
+        learnBtn.setToolTipText("Learn HDE Studio: Step-by-Step Interactive Tutorials & Shortcuts (F1)");
+        learnBtn.addActionListener(e -> showLearnStudioDialog());
+
         ModernButton exportBtn = new ModernButton("Export PDF...", new Color(2, 132, 199), Color.WHITE, new Color(56, 189, 248));
         exportBtn.setToolTipText("Export architectural drawing as A4 or A3 PDF");
         exportBtn.addActionListener(e -> showExportDialog());
@@ -521,6 +525,7 @@ public class HousePlanCADApp extends JFrame {
         actionPanel.add(undoBtn); actionPanel.add(redoBtn);
         actionPanel.add(new JSeparator(JSeparator.VERTICAL));
         actionPanel.add(presetsCombo);
+        actionPanel.add(learnBtn);
         actionPanel.add(exportBtn);
         actionPanel.add(clearBtn);
         header.add(actionPanel, BorderLayout.EAST);
@@ -1981,6 +1986,9 @@ public class HousePlanCADApp extends JFrame {
             }
 
             if (!isTyping) {
+                // Learn Studio Help (F1)
+                if (e.getKeyCode() == KeyEvent.VK_F1) { showLearnStudioDialog(); return true; }
+
                 // Project and File Shortcuts
                 if (e.isControlDown() && e.isShiftDown() && e.getKeyCode() == KeyEvent.VK_S) { saveCurrentProject(true); return true; }
                 if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_S) { saveCurrentProject(false); return true; }
@@ -11204,6 +11212,376 @@ public class HousePlanCADApp extends JFrame {
             return new Point2D.Double(x1 + t * (x2 - x1), y1 + t * (y2 - y1));
         }
         return null;
+    }
+
+    /**
+     * Learn HDE Studio Dialog:
+     * Interactive Step-by-Step Architectural CAD Tutorials, Modules, and Keyboard Shortcuts.
+     */
+    public void showLearnStudioDialog() {
+        JDialog dlg = new JDialog(this, "📖 Learn HDE Studio — Interactive Tutorials & Architectural Guide", true);
+        dlg.setLayout(new BorderLayout());
+        dlg.getContentPane().setBackground(new Color(15, 23, 42));
+        dlg.setSize(980, 680);
+        dlg.setLocationRelativeTo(this);
+
+        // Header Banner
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        headerPanel.setOpaque(false);
+        headerPanel.setBorder(new EmptyBorder(14, 20, 14, 20));
+
+        JPanel titleGrp = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        titleGrp.setOpaque(false);
+        JLabel titleLbl = new JLabel("LEARN HDE STUDIO");
+        titleLbl.setFont(new Font("Segoe UI", Font.BOLD, 17));
+        titleLbl.setForeground(Color.WHITE);
+        JLabel badgeLbl = new JLabel(" STEP-BY-STEP TUTORIALS ");
+        badgeLbl.setFont(new Font("Consolas", Font.BOLD, 10));
+        badgeLbl.setForeground(new Color(56, 189, 248));
+        badgeLbl.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(56, 189, 248, 140), 1, true),
+                BorderFactory.createEmptyBorder(2, 6, 2, 6)));
+        titleGrp.add(titleLbl);
+        titleGrp.add(badgeLbl);
+
+        JLabel subLbl = new JLabel("Comprehensive architectural CAD guide: Master drafting, room layouts, finishes, dimensions & vector exports.");
+        subLbl.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        subLbl.setForeground(new Color(148, 163, 184));
+        subLbl.setBorder(new EmptyBorder(4, 8, 0, 0));
+
+        JPanel topBox = new JPanel(new BorderLayout());
+        topBox.setOpaque(false);
+        topBox.add(titleGrp, BorderLayout.NORTH);
+        topBox.add(subLbl, BorderLayout.SOUTH);
+        headerPanel.add(topBox, BorderLayout.WEST);
+
+        dlg.add(headerPanel, BorderLayout.NORTH);
+
+        // Main Split: Left Category List + Right HTML Content Pane
+        JPanel bodyPanel = new JPanel(new BorderLayout(14, 0));
+        bodyPanel.setOpaque(false);
+        bodyPanel.setBorder(new EmptyBorder(0, 20, 12, 20));
+
+        // Category List Model & JList
+        String[] moduleNames = {
+            "1. 🚀 Quick Start & Workspace Tour",
+            "2. 🧱 Precision Wall Drafting & Columns",
+            "3. 🚪 Doors, Windows & Openings",
+            "4. 🛋️ CAD Block Library & 8 Room Sets",
+            "5. 🎨 Floor Finishes & Tile Hatching",
+            "6. 📏 Dimensions & Room Area Tags",
+            "7. 🗂️ Layers, Properties & Revisions",
+            "8. 🖨️ PDF & Blueprint Vector Export"
+        };
+
+        DefaultListModel<String> listModel = new DefaultListModel<>();
+        for (String m : moduleNames) listModel.addElement(m);
+
+        JList<String> categoryList = new JList<>(listModel);
+        categoryList.setBackground(new Color(24, 33, 53));
+        categoryList.setForeground(new Color(226, 232, 240));
+        categoryList.setSelectionBackground(new Color(2, 132, 199));
+        categoryList.setSelectionForeground(Color.WHITE);
+        categoryList.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        categoryList.setFixedCellHeight(44);
+        categoryList.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(51, 65, 85)),
+                new EmptyBorder(4, 4, 4, 4)));
+
+        JScrollPane leftScroll = new JScrollPane(categoryList);
+        leftScroll.setPreferredSize(new Dimension(290, 500));
+        leftScroll.setBorder(BorderFactory.createLineBorder(new Color(30, 41, 59)));
+        leftScroll.getViewport().setBackground(new Color(24, 33, 53));
+
+        // Right HTML Content Pane
+        JEditorPane contentPane = new JEditorPane();
+        contentPane.setContentType("text/html");
+        contentPane.setEditable(false);
+        contentPane.setBackground(new Color(15, 23, 42));
+
+        JScrollPane rightScroll = new JScrollPane(contentPane);
+        rightScroll.setBorder(BorderFactory.createLineBorder(new Color(30, 41, 59)));
+        rightScroll.getViewport().setBackground(new Color(15, 23, 42));
+
+        // Listener to switch tutorial content
+        categoryList.addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                int idx = categoryList.getSelectedIndex();
+                if (idx >= 0) {
+                    contentPane.setText(getTutorialHtml(idx));
+                    contentPane.setCaretPosition(0);
+                }
+            }
+        });
+        categoryList.setSelectedIndex(0);
+
+        bodyPanel.add(leftScroll, BorderLayout.WEST);
+        bodyPanel.add(rightScroll, BorderLayout.CENTER);
+        dlg.add(bodyPanel, BorderLayout.CENTER);
+
+        // Footer Bar: Open Markdown Guide + Close Button
+        JPanel footer = new JPanel(new BorderLayout());
+        footer.setOpaque(false);
+        footer.setBorder(new EmptyBorder(10, 20, 16, 20));
+
+        ModernButton openGuideBtn = new ModernButton("📄 Open Full Documentation (Markdown)", new Color(30, 41, 59), new Color(56, 189, 248), new Color(14, 116, 144));
+        openGuideBtn.setToolTipText("Open the complete Learn HDE Studio documentation file");
+        openGuideBtn.addActionListener(e -> {
+            try {
+                File docFile = new File("C:\\Users\\Thyagaraja\\.gemini\\antigravity-cli\\brain\\d20cecaf-5b7d-49e8-a232-a509005d8c03\\learn-hde-studio.md");
+                if (docFile.exists() && Desktop.isDesktopSupported()) {
+                    Desktop.getDesktop().open(docFile);
+                } else {
+                    JOptionPane.showMessageDialog(dlg, "Documentation file location:\n" + docFile.getAbsolutePath(), "Learn HDE Studio", JOptionPane.INFORMATION_MESSAGE);
+                }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dlg, "Could not open document: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        ModernButton closeBtn = new ModernButton("Close", new Color(51, 65, 85), Color.WHITE, new Color(100, 116, 139));
+        closeBtn.addActionListener(e -> dlg.dispose());
+
+        JPanel fLeft = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0)); fLeft.setOpaque(false); fLeft.add(openGuideBtn);
+        JPanel fRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0)); fRight.setOpaque(false); fRight.add(closeBtn);
+
+        footer.add(fLeft, BorderLayout.WEST);
+        footer.add(fRight, BorderLayout.EAST);
+        dlg.add(footer, BorderLayout.SOUTH);
+
+        dlg.setVisible(true);
+    }
+
+    private String getTutorialHtml(int idx) {
+        String baseCss = "<style>"
+                + "body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #0f172a; color: #cbd5e1; padding: 14px; margin: 0; }"
+                + "h2 { color: #38bdf8; font-size: 16px; margin-top: 0; padding-bottom: 5px; border-bottom: 1px solid #334155; }"
+                + "h3 { color: #f8fafc; font-size: 13px; margin: 12px 0 4px 0; }"
+                + "p { font-size: 12px; line-height: 1.5; color: #94a3b8; margin: 4px 0 8px 0; }"
+                + "ol, ul { margin: 4px 0 10px 18px; padding: 0; }"
+                + "li { font-size: 12px; line-height: 1.6; color: #e2e8f0; margin-bottom: 4px; }"
+                + ".card { background-color: #1e293b; border: 1px solid #334155; padding: 10px; margin-bottom: 12px; }"
+                + ".badge { background-color: #0284c7; color: #ffffff; padding: 2px 6px; font-size: 10px; font-weight: bold; }"
+                + ".kbd { background-color: #334155; color: #f1f5f9; padding: 2px 6px; font-family: Consolas, monospace; font-size: 11px; border: 1px solid #475569; font-weight: bold; }"
+                + ".tip { background-color: #0c4a6e; border-left: 3px solid #38bdf8; padding: 8px; color: #e0f2fe; font-size: 11px; margin-top: 8px; }"
+                + ".tbl { border-collapse: collapse; width: 100%; margin-top: 6px; }"
+                + ".tbl th { background-color: #334155; color: #38bdf8; text-align: left; padding: 6px; font-size: 11px; }"
+                + ".tbl td { border-bottom: 1px solid #334155; padding: 6px; font-size: 11px; color: #cbd5e1; }"
+                + "</style>";
+
+        switch (idx) {
+            case 0:
+                return "<html><head>" + baseCss + "</head><body>"
+                        + "<h2>1. 🚀 Quick Start & Workspace Tour</h2>"
+                        + "<p>Welcome to <b>HDE Studio</b>, the professional 2D architectural CAD software designed for drafting residential house plans, room layouts, and construction drawings.</p>"
+                        + "<div class='card'>"
+                        + "<h3>Workspace Layout Overview</h3>"
+                        + "<ul>"
+                        + "<li><b>Top Header Bar:</b> Project management (New, Projects Hub, Save), Undo/Redo, Presets, and PDF Export.</li>"
+                        + "<li><b>Drafting Toolbar:</b> Architectural drawing tools (Select, Draw Wall, Room Builder, Column Grid, Floor/Tiles, Dimensions).</li>"
+                        + "<li><b>Left CAD Block Library:</b> Doors, Windows, 8 Room Sets, Sanitary, Electrical, Landscape, and Annotation blocks.</li>"
+                        + "<li><b>Central CAD Canvas:</b> High-precision vector drafting workspace with dynamic zoom, pan, and real-time dimension HUD.</li>"
+                        + "<li><b>Right Property Inspector:</b> Real-time attribute tuning for selected elements, wall thickness, layers, and rotation.</li>"
+                        + "</ul>"
+                        + "</div>"
+                        + "<div class='card'>"
+                        + "<h3>Canvas Navigation & Controls</h3>"
+                        + "<table class='tbl'>"
+                        + "<tr><th>Action</th><th>Shortcut / Control</th></tr>"
+                        + "<tr><td>Pan Canvas</td><td><span class='kbd'>Middle Mouse Drag</span> or <span class='kbd'>Space + Drag</span> or <span class='kbd'>H</span></td></tr>"
+                        + "<tr><td>Zoom In / Out</td><td><span class='kbd'>Mouse Wheel</span> or <span class='kbd'>Ctrl + '+' / '-'</span></td></tr>"
+                        + "<tr><td>Fit Screen</td><td><span class='kbd'>Home</span> or <span class='kbd'>Ctrl + 0</span></td></tr>"
+                        + "<tr><td>Toggle Snap Grid</td><td><span class='kbd'>G</span> key (6\" / 1'-0\" magnetic snap)</td></tr>"
+                        + "<tr><td>Ortho Lock (90°)</td><td>Hold <span class='kbd'>Shift</span> while drawing walls</td></tr>"
+                        + "</table>"
+                        + "</div>"
+                        + "<div class='tip'><b>Pro Tip:</b> Always hold <span class='kbd'>Shift</span> when drawing perimeter walls to ensure perfectly square 90-degree corners.</div>"
+                        + "</body></html>";
+
+            case 1:
+                return "<html><head>" + baseCss + "</head><body>"
+                        + "<h2>2. 🧱 Precision Wall Drafting & Structural Elements</h2>"
+                        + "<p>Learn how to sketch accurate load-bearing exterior walls, partition walls, and generate complete rooms.</p>"
+                        + "<div class='card'>"
+                        + "<h3>Step-by-Step: Drawing Walls from Scratch</h3>"
+                        + "<ol>"
+                        + "<li>Click <b>Draw Wall [W]</b> on the top toolbar or press <span class='kbd'>W</span>.</li>"
+                        + "<li>Select your <b>Wall Thickness:</b> <code>9\" Wall (Ext)</code> for outer envelope, <code>6\" Wall (Part)</code> for room partitions, or <code>4.5\" Wall</code> for utility screens.</li>"
+                        + "<li>Select <b>Wall Hatch:</b> <code>45° Brick Hatch</code> (ANSI31 masonry), <code>Solid Black Poché</code>, or <code>Hollow</code>.</li>"
+                        + "<li>Click on canvas to set the start point, drag in the desired direction (watch the HUD measurement e.g. <code>30'-0\"</code>), and click to set the endpoint.</li>"
+                        + "<li>Continue clicking to draw connected walls. HDE Studio automatically creates clean mitered corner welds.</li>"
+                        + "</ol>"
+                        + "</div>"
+                        + "<div class='card'>"
+                        + "<h3>⊞ Parametric Room Builder (Ctrl+Shift+R)</h3>"
+                        + "<p>Generate complete four-wall enclosed rooms in 1 click:</p>"
+                        + "<ul>"
+                        + "<li>Click <b>⊞ Room Builder</b>, enter Width (e.g. <code>14'</code>), Height (e.g. <code>12'</code>), and choose wall thickness.</li>"
+                        + "<li>Enable auto-door, auto-window, or dimension tags, then click <b>Generate Room</b> to place on canvas.</li>"
+                        + "</ul>"
+                        + "</div>"
+                        + "<div class='card'>"
+                        + "<h3>▦ Structural Column Grid & Auto-Join</h3>"
+                        + "<ul>"
+                        + "<li>Click <b>▦ Column Grid</b> (Ctrl+Shift+G) to place reinforced RCC column pillars (9\"x9\" or 9\"x12\") at all wall junctions.</li>"
+                        + "<li>Click <b>Auto-Join</b> to automatically weld overlapping wall segments and clean up T-junctions.</li>"
+                        + "</ul>"
+                        + "</div>"
+                        + "</body></html>";
+
+            case 2:
+                return "<html><head>" + baseCss + "</head><body>"
+                        + "<h2>3. 🚪 Doors, Windows & Wall Openings</h2>"
+                        + "<p>HDE Studio features smart wall-cutting: doors and windows automatically detect walls, cut openings, and snap flush.</p>"
+                        + "<div class='card'>"
+                        + "<h3>Inserting Doors</h3>"
+                        + "<ol>"
+                        + "<li>In the left sidebar under <b>Doors</b>, choose: <i>Single Swing (3'-0\"x7'-0\")</i>, <i>Double French (5'-0\"x7'-0\")</i>, <i>Sliding Glass (6'-0\"x7'-0\")</i>, or <i>Pocket Door</i>.</li>"
+                        + "<li>Hover over any wall on the canvas. The opening cut and swing arc preview automatically.</li>"
+                        + "<li>Left-click to place the door into the wall.</li>"
+                        + "<li><b>Flip Swing:</b> Select the door and press <span class='kbd'>F</span> to flip inside/outside swing, or <span class='kbd'>M</span> to mirror left/right hinge side.</li>"
+                        + "</ol>"
+                        + "</div>"
+                        + "<div class='card'>"
+                        + "<h3>Inserting Windows</h3>"
+                        + "<ol>"
+                        + "<li>Under <b>Windows</b> in the sidebar, select <code>3'-0\"</code> (small/ventilator), <code>4'-0\"</code> (bedroom), or <code>5'-0\" / 6'-0\"</code> (living room).</li>"
+                        + "<li>Hover over any exterior wall and click to insert. The wall automatically creates the sill lines and glass pane indicators.</li>"
+                        + "</ol>"
+                        + "</div>"
+                        + "<div class='tip'><b>Tip:</b> If you move or delete a door or window, HDE Studio automatically heals the wall opening back seamlessly!</div>"
+                        + "</body></html>";
+
+            case 3:
+                return "<html><head>" + baseCss + "</head><body>"
+                        + "<h2>4. 🛋️ CAD Block Library & 8 Room Sets</h2>"
+                        + "<p>Populate your architectural plans with realistic, pre-dimensioned furniture suites and CAD symbols.</p>"
+                        + "<div class='card'>"
+                        + "<h3>The 8 Specialized Room Set Categories</h3>"
+                        + "<p>Click <b>Room Sets</b> in the sidebar to access dedicated category tabs:</p>"
+                        + "<ul>"
+                        + "<li><b>🛋️ Living Room Sets:</b> Grand 20'x16', Sectional 14'x12', Compact 12'x10', Square Lounge 14'x14'.</li>"
+                        + "<li><b>🛏️ Bedroom Sets:</b> Grand Master 16'x14', Master 14'x12', Standard 12'x11', Single 10'x10', Twin 14'x11'.</li>"
+                        + "<li><b>🍳 Kitchen Sets:</b> Chef Island 14'x12', U-Shape 12'x11', L-Shape 12'x10', Galley 12'x8', Linear 10'x7'.</li>"
+                        + "<li><b>🍽️ Dining Room Sets:</b> 8-Seater Formal 16'x11', 6-Seater 12'x10', Round 11'x11', Breakfast Nook 9'x8'.</li>"
+                        + "<li><b>🚪 Guest Room Sets:</b> Deluxe Suite 13'x11', Sofa-Bed Studio 12'x10', Compact 10'x9'.</li>"
+                        + "<li><b>🧸 Children Room Sets:</b> Bunk Bed & Play 12'x10', Single Kid 11'x9', Nursery Suite 11'x10'.</li>"
+                        + "<li><b>📚 Study / Home Office Sets:</b> Executive 14'x12', Dual Workstation 13'x10', Library 12'x11', Alcove 9'x7'.</li>"
+                        + "<li><b>🚿 Bathroom Sets:</b> Master Spa 12'x9', Linear 3-Fixture 10'x6', Corner Shower 8'x7', Powder 6'x4.5'.</li>"
+                        + "</ul>"
+                        + "</div>"
+                        + "<div class='card'>"
+                        + "<h3>Transforming & Aligning Blocks</h3>"
+                        + "<ul>"
+                        + "<li><b>Rotate:</b> Select block and press <span class='kbd'>R</span> (rotates 90° clockwise).</li>"
+                        + "<li><b>Mirror:</b> Select block and press <span class='kbd'>M</span>.</li>"
+                        + "<li><b>Micro-Nudge:</b> Use Arrow keys for 1-inch precision adjustments.</li>"
+                        + "<li><b>Delete:</b> Press <span class='kbd'>Delete</span> or <span class='kbd'>Backspace</span>.</li>"
+                        + "</ul>"
+                        + "</div>"
+                        + "</body></html>";
+
+            case 4:
+                return "<html><head>" + baseCss + "</head><body>"
+                        + "<h2>5. 🎨 Floor Finishes & Tile Hatching</h2>"
+                        + "<p>Add realistic architectural surface textures, tiling patterns, and floor finishes to any room.</p>"
+                        + "<div class='card'>"
+                        + "<h3>Rectangular Floor Zone (Floor / Tiles [T])</h3>"
+                        + "<ol>"
+                        + "<li>Click <b>Floor / Tiles [T]</b> on the drafting toolbar.</li>"
+                        + "<li>Choose your material: <i>Vitrified Ceramic Tiles (24\"x24\")</i>, <i>Hardwood Timber Planks</i>, <i>Italian Marble</i>, <i>Chevron Parquet</i>, or <i>Anti-Skid Matte</i>.</li>"
+                        + "<li>Click on one corner of the room and drag a rectangle to the opposite corner.</li>"
+                        + "<li>Release the mouse. The floor finish renders with accurate scale, joint grout lines, and soft ambient shading.</li>"
+                        + "</ol>"
+                        + "</div>"
+                        + "<div class='card'>"
+                        + "<h3>Perimeter Polygon Hatching (Hatch Perimeter [P])</h3>"
+                        + "<p>For L-shaped living rooms, angled hallways, or complex room perimeters:</p>"
+                        + "<ol>"
+                        + "<li>Click <b>Hatch Perimeter [P]</b> on the toolbar.</li>"
+                        + "<li>Click on each corner around the room perimeter in sequence.</li>"
+                        + "<li>Double-click or press <span class='kbd'>Enter</span> to close the polygon and fill with the active tile texture.</li>"
+                        + "</ol>"
+                        + "</div>"
+                        + "</body></html>";
+
+            case 5:
+                return "<html><head>" + baseCss + "</head><body>"
+                        + "<h2>6. 📏 Dimensions & Room Area Tags</h2>"
+                        + "<p>Dimensioning and space labeling are essential for architectural approvals and client presentations.</p>"
+                        + "<div class='card'>"
+                        + "<h3>Point-to-Point Linear Dimensions</h3>"
+                        + "<ol>"
+                        + "<li>Click <b>Dimension</b> on the toolbar.</li>"
+                        + "<li>Click <b>Point 1</b> (e.g. interior corner of left wall).</li>"
+                        + "<li>Click <b>Point 2</b> (interior corner of right wall).</li>"
+                        + "<li>Drag mouse perpendicular to the wall to adjust the leader line offset, then left-click to lock.</li>"
+                        + "<li>Renders architectural dimension lines with ticks/arrows and exact feet-and-inches text (e.g. <code>14'-0\"</code>).</li>"
+                        + "</ol>"
+                        + "</div>"
+                        + "<div class='card'>"
+                        + "<h3>Room Area Tags</h3>"
+                        + "<ul>"
+                        + "<li>Select <b>Room Tag</b> from the sidebar and click inside any room.</li>"
+                        + "<li>Double-click the tag to edit room title (e.g. <code>LIVING / DINING</code>).</li>"
+                        + "<li>Automatically calculates and displays room square footage (e.g. <code>224 Sq.Ft</code>).</li>"
+                        + "</ul>"
+                        + "</div>"
+                        + "<div class='card'>"
+                        + "<h3>North Arrow</h3>"
+                        + "<p>Drag the <b>North Arrow</b> symbol from Annotations to the top-right corner of your site plan. Rotate to match true site North.</p>"
+                        + "</div>"
+                        + "</body></html>";
+
+            case 6:
+                return "<html><head>" + baseCss + "</head><body>"
+                        + "<h2>7. 🗂️ Layers, Properties & Revisions</h2>"
+                        + "<p>Manage architectural layers, project files, and revision history.</p>"
+                        + "<div class='card'>"
+                        + "<h3>CAD Layer Separation</h3>"
+                        + "<p>HDE Studio categorizes all elements into industry-standard CAD layers:</p>"
+                        + "<ul>"
+                        + "<li><b>A-WALL:</b> Exterior brickwork, interior partitions, and poché hatches.</li>"
+                        + "<li><b>A-DOOR & A-GLAZ:</b> Door leaves, swing arcs, and window frames.</li>"
+                        + "<li><b>A-FLOR:</b> Floor finishes, wood planks, and tile hatching.</li>"
+                        + "<li><b>A-FURN:</b> Furniture suites, bedroom sets, kitchen counters.</li>"
+                        + "<li><b>A-ANNO:</b> Linear dimensions, room tags, and text callouts.</li>"
+                        + "<li><b>E-LITE:</b> Electrical fixtures, ceiling fans, switchboards.</li>"
+                        + "</ul>"
+                        + "<p>Toggle the eye icon (👁️) to hide furniture when generating structural-only or electrical plans.</p>"
+                        + "</div>"
+                        + "<div class='card'>"
+                        + "<h3>Project Database & Save Hub</h3>"
+                        + "<ul>"
+                        + "<li><b>Save:</b> Click <b>💾 Save</b> or press <span class='kbd'>Ctrl + S</span>.</li>"
+                        + "<li><b>Projects Hub:</b> Click <b>📁 Projects</b> (<span class='kbd'>Ctrl + O</span>) to view revisions, thumbnails, and load past drawings.</li>"
+                        + "<li><b>Undo / Redo:</b> Full multi-step undo (<span class='kbd'>Ctrl + Z</span>) and redo (<span class='kbd'>Ctrl + Y</span>).</li>"
+                        + "</ul>"
+                        + "</div>"
+                        + "</body></html>";
+
+            case 7:
+                return "<html><head>" + baseCss + "</head><body>"
+                        + "<h2>8. 🖨️ PDF & Blueprint Vector Export</h2>"
+                        + "<p>Generate high-resolution, print-ready architectural vector PDF sheets and blueprint PNG images.</p>"
+                        + "<div class='card'>"
+                        + "<h3>Exporting Vector PDF Step-by-Step</h3>"
+                        + "<ol>"
+                        + "<li>Click <b>Export PDF...</b> in the top header bar.</li>"
+                        + "<li><b>Sheet Size:</b> Select <code>A4 (210 × 297 mm)</code> or <code>A3 (297 × 420 mm)</code>.</li>"
+                        + "<li><b>Orientation:</b> Select <code>Landscape</code> or <code>Portrait</code>.</li>"
+                        + "<li><b>Drawing Scale:</b> Choose <code>Fit to Page</code>, <code>1:50</code>, <code>1:100</code>, or <code>1/4\" = 1'-0\"</code>.</li>"
+                        + "<li><b>Theme:</b> Choose <i>Modern White CAD (Standard)</i> or <i>Classic AutoCAD Blueprint (Dark Navy/Cyan)</i>.</li>"
+                        + "<li><b>Title Block:</b> Fill in Project Name, Client Name, Architect/Engineer, Date, and Sheet Number.</li>"
+                        + "<li>Click <b>Save PDF File</b> to generate a crisp vector PDF suitable for printing on large format plotters.</li>"
+                        + "</ol>"
+                        + "</div>"
+                        + "<div class='tip'><b>Tip:</b> Vector PDFs retain 100% sharpness at any zoom level and comply with standard municipal submission guidelines.</div>"
+                        + "</body></html>";
+
+            default:
+                return "<html><head>" + baseCss + "</head><body><p>Select a tutorial category on the left to begin.</p></body></html>";
+        }
     }
 
     /**
