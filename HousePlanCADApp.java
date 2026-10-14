@@ -828,11 +828,11 @@ public class HousePlanCADApp extends JFrame {
         if (obj instanceof CADElement) {
             CADElement el = (CADElement) obj;
             String t = el.type.toLowerCase();
-            if (t.startsWith("door") || t.startsWith("window") || t.startsWith("opening")) {
+            if (t.startsWith("door") || t.startsWith("window") || t.startsWith("opening") || t.startsWith("column")) {
                 return ProjectStage.STAGE_1_WALLS;
             }
             if (t.startsWith("floor-")) return ProjectStage.STAGE_5_FLOORING;
-            if (t.startsWith("column") || t.startsWith("stair") || t.startsWith("tree") || t.startsWith("shrub") || t.startsWith("plant") || t.startsWith("car")
+            if (t.startsWith("stair") || t.startsWith("tree") || t.startsWith("shrub") || t.startsWith("plant") || t.startsWith("car")
                     || t.startsWith("bike") || t.startsWith("bicycle") || t.startsWith("road") || t.startsWith("parking")
                     || t.startsWith("street") || t.startsWith("pathway") || t.startsWith("bollard")) {
                 return ProjectStage.STAGE_6_EXTERIOR;
@@ -4981,16 +4981,38 @@ public class HousePlanCADApp extends JFrame {
 
             // ─── RCC / SQUARE COLUMN ────────────────────────────────────
             } else if (type.startsWith("column")) {
-                g2.setColor(new Color(71, 85, 105));
+                // High-visibility architectural concrete fill (pure white/ivory so it pops boldly over dark walls)
+                g2.setColor(new Color(248, 250, 252));
                 g2.fillRect(0, 0, sw, sh);
-                g2.setColor(new Color(203, 213, 225));
-                g2.setStroke(new BasicStroke(1.2f));
-                g2.drawRect(0, 0, sw, sh);
-                // Cross hatching (structural convention)
-                g2.setColor(new Color(56, 189, 248));
-                g2.setStroke(new BasicStroke(1.0f));
+
+                // Internal light slate concrete core
+                if (sw > 6 && sh > 6) {
+                    g2.setColor(new Color(226, 232, 240));
+                    g2.fillRect(2, 2, sw - 4, sh - 4);
+                }
+
+                // Structural Cross-Hatch (AutoCAD standard)
+                g2.setColor(new Color(15, 23, 42)); // Bold dark slate cross
+                g2.setStroke(new BasicStroke(Math.max(1.0f, (float)(1.2 * zoom))));
                 g2.drawLine(0, 0, sw, sh);
                 g2.drawLine(0, sh, sw, 0);
+
+                // 4 RCC Rebar corner steel dots (Structural engineering detail)
+                if (sw >= 12 && sh >= 12) {
+                    g2.setColor(new Color(239, 68, 68)); // High-visibility steel rebar dots
+                    int dotR = Math.max(2, (int)(2.5 * zoom));
+                    int padX = Math.max(3, sw / 5);
+                    int padY = Math.max(3, sh / 5);
+                    g2.fillOval(padX - dotR, padY - dotR, dotR * 2, dotR * 2);
+                    g2.fillOval(sw - padX - dotR, padY - dotR, dotR * 2, dotR * 2);
+                    g2.fillOval(padX - dotR, sh - padY - dotR, dotR * 2, dotR * 2);
+                    g2.fillOval(sw - padX - dotR, sh - padY - dotR, dotR * 2, dotR * 2);
+                }
+
+                // Bold cyan/amber outer structural collar border (stands out above any wall)
+                g2.setColor(new Color(56, 189, 248)); // Architectural Cyan outline
+                g2.setStroke(new BasicStroke(Math.max(1.5f, (float)(2.0 * zoom))));
+                g2.drawRect(0, 0, sw, sh);
 
             // ─── NORTH ARROW ────────────────────────────────────────────
             } else if (type.equals("north-arrow")) {
@@ -9157,47 +9179,100 @@ public class HousePlanCADApp extends JFrame {
         List<Point2D.Double> targetPoints = new ArrayList<>();
         double tol = 1.5 * FT_PX; // 1.5 ft cluster tolerance
 
-        // 1. Collect all wall endpoints (Corners & T-junctions)
-        for (Wall w : walls) {
-            addUniquePoint(targetPoints, w.x1, w.y1, tol);
-            addUniquePoint(targetPoints, w.x2, w.y2, tol);
-        }
-
-        // 2. Subdivide long unbraced wall spans exceeding maxSpanFt
-        if (rule != 1) { // Not corners only
-            double maxSpanPx = maxSpanFt * FT_PX;
-            for (Wall w : walls) {
-                double len = w.getLength();
-                if (len > maxSpanPx) {
-                    int divisions = (int) Math.ceil(len / maxSpanPx);
-                    double dx = (w.x2 - w.x1) / divisions;
-                    double dy = (w.y2 - w.y1) / divisions;
-                    for (int i = 1; i < divisions; i++) {
-                        addUniquePoint(targetPoints, w.x1 + dx * i, w.y1 + dy * i, tol);
-                    }
-                }
-            }
-        }
-
-        // 3. Filter for Exterior Corners Only if rule == 1
-        if (rule == 1) {
+        if (rule == 2) {
+            // ─── RULE 2: Full Rectangular Structural Grid Matrix ───
             double minX = Double.MAX_VALUE, maxX = -Double.MAX_VALUE;
             double minY = Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
             for (Wall w : walls) {
                 minX = Math.min(minX, Math.min(w.x1, w.x2)); maxX = Math.max(maxX, Math.max(w.x1, w.x2));
                 minY = Math.min(minY, Math.min(w.y1, w.y2)); maxY = Math.max(maxY, Math.max(w.y1, w.y2));
             }
-            List<Point2D.Double> extOnly = new ArrayList<>();
-            for (Point2D.Double pt : targetPoints) {
-                if (Math.abs(pt.x - minX) < tol || Math.abs(pt.x - maxX) < tol ||
-                    Math.abs(pt.y - minY) < tol || Math.abs(pt.y - maxY) < tol) {
-                    extOnly.add(pt);
+
+            double bayPx = Math.max(6.0, maxSpanFt) * FT_PX;
+            int xSteps = Math.max(1, (int) Math.round((maxX - minX) / bayPx));
+            int ySteps = Math.max(1, (int) Math.round((maxY - minY) / bayPx));
+            double dx = (maxX - minX) / xSteps;
+            double dy = (maxY - minY) / ySteps;
+
+            for (int i = 0; i <= xSteps; i++) {
+                double gx = minX + i * dx;
+                for (int j = 0; j <= ySteps; j++) {
+                    double gy = minY + j * dy;
+                    // Keep candidate if it is near an existing wall
+                    boolean nearWall = false;
+                    for (Wall w : walls) {
+                        if (Line2D.ptSegDist(w.x1, w.y1, w.x2, w.y2, gx, gy) <= tol * 2.0) {
+                            nearWall = true;
+                            break;
+                        }
+                    }
+                    if (nearWall) {
+                        addUniquePoint(targetPoints, gx, gy, tol);
+                    }
                 }
             }
-            targetPoints = extOnly;
+        } else {
+            // ─── RULE 0 & 1: Wall Corners, T-Junctions & Mid-Spans ───
+            // 1. Collect all wall endpoints (Corners & free ends)
+            for (Wall w : walls) {
+                addUniquePoint(targetPoints, w.x1, w.y1, tol);
+                addUniquePoint(targetPoints, w.x2, w.y2, tol);
+            }
+
+            // 1b. Collect T-junctions and Cross-intersections where walls meet or cross
+            for (int i = 0; i < walls.size(); i++) {
+                Wall w1 = walls.get(i);
+                for (int j = i + 1; j < walls.size(); j++) {
+                    Wall w2 = walls.get(j);
+                    // Check if w1 endpoint lands along w2 interior
+                    checkAndAddTeeJunction(targetPoints, w1.x1, w1.y1, w2, tol);
+                    checkAndAddTeeJunction(targetPoints, w1.x2, w1.y2, w2, tol);
+                    checkAndAddTeeJunction(targetPoints, w2.x1, w2.y1, w1, tol);
+                    checkAndAddTeeJunction(targetPoints, w2.x2, w2.y2, w1, tol);
+
+                    // Check if segments cross
+                    if (Line2D.linesIntersect(w1.x1, w1.y1, w1.x2, w1.y2, w2.x1, w2.y1, w2.x2, w2.y2)) {
+                        Point2D.Double crossPt = computeLineIntersection(w1, w2);
+                        if (crossPt != null) addUniquePoint(targetPoints, crossPt.x, crossPt.y, tol);
+                    }
+                }
+            }
+
+            // 2. Subdivide long unbraced wall spans exceeding maxSpanFt
+            if (rule == 0) { // All corners + midpoints
+                double maxSpanPx = maxSpanFt * FT_PX;
+                for (Wall w : walls) {
+                    double len = w.getLength();
+                    if (len > maxSpanPx) {
+                        int divisions = (int) Math.ceil(len / maxSpanPx);
+                        double segDx = (w.x2 - w.x1) / divisions;
+                        double segDy = (w.y2 - w.y1) / divisions;
+                        for (int k = 1; k < divisions; k++) {
+                            addUniquePoint(targetPoints, w.x1 + segDx * k, w.y1 + segDy * k, tol);
+                        }
+                    }
+                }
+            } else if (rule == 1) {
+                // Exterior Perimeter Corners Only
+                double minX = Double.MAX_VALUE, maxX = -Double.MAX_VALUE;
+                double minY = Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
+                for (Wall w : walls) {
+                    minX = Math.min(minX, Math.min(w.x1, w.x2)); maxX = Math.max(maxX, Math.max(w.x1, w.x2));
+                    minY = Math.min(minY, Math.min(w.y1, w.y2)); maxY = Math.max(maxY, Math.max(w.y1, w.y2));
+                }
+                List<Point2D.Double> extOnly = new ArrayList<>();
+                for (Point2D.Double pt : targetPoints) {
+                    if (Math.abs(pt.x - minX) < tol || Math.abs(pt.x - maxX) < tol ||
+                        Math.abs(pt.y - minY) < tol || Math.abs(pt.y - maxY) < tol) {
+                        extOnly.add(pt);
+                    }
+                }
+                targetPoints = extOnly;
+            }
         }
 
-        // 4. Place CADElement columns centered on candidate coordinates
+        // 3. Place CADElement columns centered on candidate coordinates & auto-select them
+        clearSelection();
         int count = 0;
         for (Point2D.Double pt : targetPoints) {
             // Check if column already exists at this spot
@@ -9212,13 +9287,42 @@ public class HousePlanCADApp extends JFrame {
             if (!exists) {
                 CADElement col = new CADElement("column", "RCC Column", pt.x - colW / 2.0, pt.y - colH / 2.0, colW, colH);
                 elements.add(col);
+                addToSelection(col);
                 count++;
             }
         }
 
+        // Switch to SELECT mode so user can immediately move/inspect/resize placed columns
+        currentTool = ToolMode.SELECT;
+        selectToolButton(ToolMode.SELECT);
+
         markProjectDirty(true);
+        updateProperties();
         viewportPanel.repaint();
         return count;
+    }
+
+    private void checkAndAddTeeJunction(List<Point2D.Double> list, double px, double py, Wall w, double tol) {
+        double d = Line2D.ptSegDist(w.x1, w.y1, w.x2, w.y2, px, py);
+        if (d < tol) {
+            // Project onto segment
+            double dx = w.x2 - w.x1, dy = w.y2 - w.y1;
+            double lenSq = dx * dx + dy * dy;
+            if (lenSq > 0.001) {
+                double t = Math.max(0, Math.min(1, ((px - w.x1) * dx + (py - w.y1) * dy) / lenSq));
+                addUniquePoint(list, w.x1 + t * dx, w.y1 + t * dy, tol);
+            }
+        }
+    }
+
+    private Point2D.Double computeLineIntersection(Wall w1, Wall w2) {
+        double x1 = w1.x1, y1 = w1.y1, x2 = w1.x2, y2 = w1.y2;
+        double x3 = w2.x1, y3 = w2.y1, x4 = w2.x2, y4 = w2.y2;
+        double denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+        if (Math.abs(denom) < 1e-6) return null;
+        double px = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / denom;
+        double py = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / denom;
+        return new Point2D.Double(px, py);
     }
 
     private void addUniquePoint(List<Point2D.Double> list, double x, double y, double tol) {
@@ -11142,6 +11246,15 @@ public class HousePlanCADApp extends JFrame {
             g2.setStroke(new BasicStroke(sMed));
             g2.drawLine(0, 0, sw, sh);
             g2.drawLine(0, sh, sw, 0);
+            if (sw >= 12 && sh >= 12) {
+                g2.setColor(isMonochrome ? Color.BLACK : new Color(220, 38, 38));
+                int dotR = Math.max(2, (int)(2.0 / scale));
+                int px = Math.max(3, sw / 5), py = Math.max(3, sh / 5);
+                g2.fillOval(px - dotR, py - dotR, dotR * 2, dotR * 2);
+                g2.fillOval(sw - px - dotR, py - dotR, dotR * 2, dotR * 2);
+                g2.fillOval(px - dotR, sh - py - dotR, dotR * 2, dotR * 2);
+                g2.fillOval(sw - px - dotR, sh - py - dotR, dotR * 2, dotR * 2);
+            }
 
         } else if (type.startsWith("stair")) {
             g2.setColor(Color.WHITE); g2.fillRect(0, 0, sw, sh);
