@@ -388,6 +388,9 @@ public class HousePlanCADApp extends JFrame {
     private JLabel propTypeBadge;
     private JPanel propContentPanel, propEmptyPanel, propMultiPanel;
     private JLabel multiSelectLabel;
+    private JPanel propLockBanner;
+    private JLabel propLockLabel;
+    private ModernButton propUnfreezeBtn;
     private boolean isUpdatingInspector = false;
 
     public HousePlanCADApp() {
@@ -695,14 +698,11 @@ public class HousePlanCADApp extends JFrame {
             if (tab != null) tab.setSelected(true);
         }
 
-        // Auto-activate default drawing tool if applicable
-        if (stage == ProjectStage.STAGE_1_WALLS) {
+        // Default to SELECT mode so user can immediately click, inspect, and select objects
+        if (stage == ProjectStage.STAGE_1_WALLS && walls.isEmpty()) {
             currentTool = ToolMode.DRAW_WALL;
             selectToolButton(ToolMode.DRAW_WALL);
-        } else if (stage == ProjectStage.STAGE_5_FLOORING) {
-            currentTool = ToolMode.FLOOR_ZONE;
-            selectToolButton(ToolMode.FLOOR_ZONE);
-        } else if (stage == ProjectStage.STAGE_7_DIMENSIONS) {
+        } else if (stage == ProjectStage.STAGE_7_DIMENSIONS && dimensions.isEmpty()) {
             currentTool = ToolMode.MEASURE;
             selectToolButton(ToolMode.MEASURE);
         } else {
@@ -1265,6 +1265,29 @@ public class HousePlanCADApp extends JFrame {
         propContentPanel.setOpaque(false);
         propContentPanel.setBorder(new EmptyBorder(10, 14, 14, 14));
 
+        propLockBanner = new JPanel(new BorderLayout(6, 4));
+        propLockBanner.setBackground(new Color(69, 26, 3, 220));
+        propLockBanner.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(245, 158, 11), 1, true),
+                BorderFactory.createEmptyBorder(6, 8, 6, 8)));
+        propLockBanner.setMaximumSize(new Dimension(Integer.MAX_VALUE, 58));
+        propLockBanner.setAlignmentX(Component.LEFT_ALIGNMENT);
+        propLockBanner.setVisible(false);
+
+        propLockLabel = new JLabel("🔒 Stage is Frozen (Locked)");
+        propLockLabel.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        propLockLabel.setForeground(new Color(251, 191, 36));
+
+        propUnfreezeBtn = new ModernButton("🔓 Unfreeze Stage to Edit", new Color(180, 83, 9), Color.WHITE, new Color(245, 158, 11));
+        propUnfreezeBtn.setPreferredSize(new Dimension(140, 24));
+        propUnfreezeBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+
+        propLockBanner.add(propLockLabel, BorderLayout.CENTER);
+        propLockBanner.add(propUnfreezeBtn, BorderLayout.SOUTH);
+
+        propContentPanel.add(propLockBanner);
+        propContentPanel.add(Box.createVerticalStrut(4));
+
         propNameField = createStyledTextField();
         propWidthField = createStyledTextField();
         propHeightField = createStyledTextField();
@@ -1542,38 +1565,67 @@ public class HousePlanCADApp extends JFrame {
                 return;
             }
             cl.show(propContentPanel.getParent(), "CONTENT");
+            boolean isLocked = primarySelected != null && isObjectLocked(primarySelected);
+            ProjectStage objStage = primarySelected != null ? getObjectStage(primarySelected) : null;
+
+            if (isLocked && objStage != null) {
+                propLockBanner.setVisible(true);
+                propLockLabel.setText("🔒 " + objStage.title + " is Frozen");
+                for (java.awt.event.ActionListener al : propUnfreezeBtn.getActionListeners()) propUnfreezeBtn.removeActionListener(al);
+                propUnfreezeBtn.addActionListener(e -> {
+                    stageLocked.put(objStage, false);
+                    updateStageStepperUI();
+                    updateProperties();
+                    viewportPanel.repaint();
+                });
+            } else {
+                propLockBanner.setVisible(false);
+            }
+
             if (primarySelected instanceof Wall) {
                 Wall w = (Wall) primarySelected;
-                propTypeBadge.setText(w.thicknessInches + "\" WALL");
+                propTypeBadge.setText(isLocked ? "🔒 " + (int)w.thicknessInches + "\" WALL (FROZEN)" : w.thicknessInches + "\" WALL");
+                propTypeBadge.setForeground(isLocked ? new Color(251, 191, 36) : new Color(56, 189, 248));
                 propNameField.setText("Wall (" + (int)w.thicknessInches + "\")");
                 propWidthField.setText(String.format("%.2f", w.getLength() / FT_PX));
                 propHeightField.setText(String.format("%.2f", w.thicknessInches / 12.0));
+                propNameField.setEditable(!isLocked);
+                propWidthField.setEditable(!isLocked);
+                propHeightField.setEditable(!isLocked);
                 propRotSlider.setEnabled(false);
             } else if (primarySelected instanceof CADDimension) {
                 CADDimension d = (CADDimension) primarySelected;
-                propTypeBadge.setText("DIMENSION");
+                propTypeBadge.setText(isLocked ? "🔒 DIMENSION (FROZEN)" : "DIMENSION");
+                propTypeBadge.setForeground(isLocked ? new Color(251, 191, 36) : new Color(56, 189, 248));
                 propNameField.setText("Linear Dimension");
                 double dist = Point2D.distance(d.x1, d.y1, d.x2, d.y2);
                 propWidthField.setText(String.format("%.2f", dist / FT_PX));
                 propHeightField.setText(String.format("%.2f", d.offset));
+                propNameField.setEditable(false);
+                propWidthField.setEditable(false);
+                propHeightField.setEditable(false);
                 propRotSlider.setEnabled(false);
             } else if (primarySelected instanceof CADElement) {
                 CADElement elem = (CADElement) primarySelected;
+                String typeStr = elem.type.toUpperCase();
                 if (elem.type.startsWith("opening")) {
-                    propTypeBadge.setText("WALL OPENING");
+                    typeStr = "WALL OPENING";
                 } else if (elem.type.startsWith("kitchen")) {
-                    propTypeBadge.setText("KITCHEN (CUSTOM)");
+                    typeStr = "KITCHEN (CUSTOM)";
                 } else if (elem.type.startsWith("floor-")) {
-                    propTypeBadge.setText("FLOOR FINISH");
+                    typeStr = "FLOOR FINISH";
                 } else if (elem.type.startsWith("set-")) {
-                    propTypeBadge.setText("ROOM SET (CUSTOM)");
-                } else {
-                    propTypeBadge.setText(elem.type.toUpperCase());
+                    typeStr = "ROOM SET (CUSTOM)";
                 }
+                propTypeBadge.setText(isLocked ? "🔒 " + typeStr + " (FROZEN)" : typeStr);
+                propTypeBadge.setForeground(isLocked ? new Color(251, 191, 36) : new Color(56, 189, 248));
                 propNameField.setText(elem.name);
                 propWidthField.setText(String.format("%.2f", elem.w / FT_PX));
                 propHeightField.setText(String.format("%.2f", elem.h / FT_PX));
-                propRotSlider.setEnabled(true);
+                propNameField.setEditable(!isLocked);
+                propWidthField.setEditable(!isLocked);
+                propHeightField.setEditable(!isLocked);
+                propRotSlider.setEnabled(!isLocked);
                 propRotSlider.setValue((int) Math.round(elem.rotation));
             }
         } finally { isUpdatingInspector = false; }
@@ -1878,6 +1930,19 @@ public class HousePlanCADApp extends JFrame {
         else addToSelection(obj);
     }
 
+    private String getObjectName(Object obj) {
+        if (obj instanceof Wall) {
+            Wall w = (Wall) obj;
+            return "Wall (" + (int)w.thicknessInches + "\" · " + formatImperial(w.getLength()) + ")";
+        } else if (obj instanceof CADElement) {
+            return ((CADElement) obj).name;
+        } else if (obj instanceof CADDimension) {
+            CADDimension d = (CADDimension) obj;
+            return "Dimension (" + formatImperial(Point2D.distance(d.x1, d.y1, d.x2, d.y2)) + ")";
+        }
+        return "Object";
+    }
+
     private boolean isSelected(Object obj) { return selectedObjects.contains(obj); }
 
     private void selectAll() {
@@ -1911,9 +1976,10 @@ public class HousePlanCADApp extends JFrame {
         }
         for (Wall w : walls) {
             if (isObjectLocked(w)) continue;
+            double halfThick = ((w.thicknessInches / 12.0) * FT_PX) / 2.0;
             Rectangle2D.Double wallBounds = new Rectangle2D.Double(
-                    Math.min(w.x1, w.x2), Math.min(w.y1, w.y2),
-                    Math.abs(w.x2 - w.x1) + 1, Math.abs(w.y2 - w.y1) + 1);
+                    Math.min(w.x1, w.x2) - halfThick, Math.min(w.y1, w.y2) - halfThick,
+                    Math.abs(w.x2 - w.x1) + halfThick * 2.0, Math.abs(w.y2 - w.y1) + halfThick * 2.0);
             if (mustFullyEnclose) { if (rect.contains(wallBounds)) result.add(w); }
             else { if (rect.intersects(wallBounds)) result.add(w); }
         }
@@ -2023,8 +2089,24 @@ public class HousePlanCADApp extends JFrame {
 
     private void deleteSelected() {
         if (selectedObjects.isEmpty()) return;
+        List<Object> toDelete = new ArrayList<>();
+        boolean hadLocked = false;
+        for (Object obj : selectedObjects) {
+            if (isObjectLocked(obj)) {
+                hadLocked = true;
+            } else {
+                toDelete.add(obj);
+            }
+        }
+        if (hadLocked && toDelete.isEmpty()) {
+            if (statusCursorLabel != null) {
+                statusCursorLabel.setText(" 🔒 CANNOT DELETE: Object is frozen in a locked stage. Unfreeze stage to delete. ");
+            }
+            return;
+        }
+        if (toDelete.isEmpty()) return;
         saveUndoState();
-        for (Object obj : new ArrayList<>(selectedObjects)) {
+        for (Object obj : toDelete) {
             if (obj instanceof Wall) walls.remove(obj);
             else if (obj instanceof CADElement) elements.remove(obj);
             else if (obj instanceof CADDimension) dimensions.remove(obj);
@@ -2417,6 +2499,11 @@ public class HousePlanCADApp extends JFrame {
         private boolean isWindowSelecting = false;
         private Point2D.Double selRectStart = null;
 
+        // Selection Cycling & Hover Feedback
+        private Object hoveredObject = null;
+        private Point lastClickScreen = null;
+        private int cycleHitIndex = 0;
+
         // Wall grip editing
         private Wall gripWall = null;
         private boolean gripIsP1 = false;
@@ -2662,32 +2749,70 @@ public class HousePlanCADApp extends JFrame {
                             Wall w = (Wall) primarySelected;
                             Point sp1 = worldToScreen(w.x1, w.y1);
                             Point sp2 = worldToScreen(w.x2, w.y2);
-                            if (sp1.distance(mouseScreen) <= 8) {
-                                saveUndoState(); gripWall = w; gripIsP1 = true; return;
+                            if (sp1.distance(mouseScreen) <= 10) {
+                                if (!isObjectLocked(w)) {
+                                    saveUndoState(); gripWall = w; gripIsP1 = true; return;
+                                }
                             }
-                            if (sp2.distance(mouseScreen) <= 8) {
-                                saveUndoState(); gripWall = w; gripIsP1 = false; return;
+                            if (sp2.distance(mouseScreen) <= 10) {
+                                if (!isObjectLocked(w)) {
+                                    saveUndoState(); gripWall = w; gripIsP1 = false; return;
+                                }
                             }
                         }
 
-                        // Hit test
-                        Object hit = hitTest(mouseWorld.x, mouseWorld.y);
+                        // Multi-candidate hit testing for selection & cycling
+                        List<Object> candidates = findAllHits(mouseScreen, mouseWorld);
+                        Object hit = null;
+
+                        if (!candidates.isEmpty()) {
+                            if (lastClickScreen != null && mouseScreen.distance(lastClickScreen) <= 8) {
+                                // Clicked repeatedly at the same position -> cycle through overlapping candidates!
+                                cycleHitIndex = (cycleHitIndex + 1) % candidates.size();
+                            } else {
+                                // First click -> pick the topmost unlocked candidate if available
+                                cycleHitIndex = 0;
+                                for (int ci = 0; ci < candidates.size(); ci++) {
+                                    if (!isObjectLocked(candidates.get(ci))) {
+                                        cycleHitIndex = ci;
+                                        break;
+                                    }
+                                }
+                            }
+                            lastClickScreen = mouseScreen;
+                            hit = candidates.get(cycleHitIndex);
+                        } else {
+                            lastClickScreen = null;
+                            cycleHitIndex = 0;
+                        }
 
                         if (hit != null) {
                             if (e.isShiftDown()) {
                                 toggleSelection(hit);
                             } else {
                                 if (isSelected(hit)) {
-                                    // Already selected - start drag
+                                    // Already selected
                                 } else {
                                     clearSelection();
                                     addToSelection(hit);
                                 }
                             }
-                            // Prepare for dragging
-                            saveUndoState();
-                            isDragging = true;
-                            lastDragWorld = new Point2D.Double(mouseWorld.x, mouseWorld.y);
+
+                            boolean isLocked = isObjectLocked(hit);
+                            if (isLocked) {
+                                if (statusCursorLabel != null) {
+                                    ProjectStage st = getObjectStage(hit);
+                                    statusCursorLabel.setText(" 🔒 SELECTED: " + getObjectName(hit) + " (FROZEN in " + (st != null ? st.title : "Locked Stage") + ") · Movement prevented ");
+                                }
+                            } else {
+                                // Prepare for dragging unlocked objects
+                                saveUndoState();
+                                isDragging = true;
+                                lastDragWorld = new Point2D.Double(mouseWorld.x, mouseWorld.y);
+                                if (candidates.size() > 1 && statusCursorLabel != null) {
+                                    statusCursorLabel.setText(" Selected: " + getObjectName(hit) + " · (" + (cycleHitIndex + 1) + "/" + candidates.size() + ") Click again to cycle overlapping objects ");
+                                }
+                            }
                         } else {
                             // Clicked on empty space - start selection rectangle
                             if (!e.isShiftDown()) clearSelection();
@@ -2751,6 +2876,18 @@ public class HousePlanCADApp extends JFrame {
 
                     // Multi-object dragging
                     if (isDragging && !selectedObjects.isEmpty()) {
+                        // Prevent movement if any selected object is frozen/locked
+                        boolean anyLocked = false;
+                        for (Object obj : selectedObjects) {
+                            if (isObjectLocked(obj)) { anyLocked = true; break; }
+                        }
+                        if (anyLocked) {
+                            if (statusCursorLabel != null) {
+                                statusCursorLabel.setText(" 🔒 OBJECT IS FROZEN · Accidental movement prevented. Unfreeze stage in Properties to edit. ");
+                            }
+                            return;
+                        }
+
                         double dx = mouseWorld.x - lastDragWorld.x;
                         double dy = mouseWorld.y - lastDragWorld.y;
 
@@ -2842,9 +2979,27 @@ public class HousePlanCADApp extends JFrame {
                         Point handlePt = getRotationHandleScreen((CADElement) primarySelected);
                         if (handlePt != null && handlePt.distance(mouseScreen) <= ROT_HANDLE_RADIUS + 4) {
                             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-                        } else { setCursor(Cursor.getDefaultCursor()); }
-                    } else { setCursor(Cursor.getDefaultCursor()); }
-                    repaint();
+                            repaint();
+                            return;
+                        }
+                    }
+
+                    // Hover feedback for selectable walls and objects
+                    if (currentTool == ToolMode.SELECT || currentTool == ToolMode.DRAW_WALL) {
+                        Object hit = hitTest(mouseWorld.x, mouseWorld.y);
+                        if (hit != hoveredObject) {
+                            hoveredObject = hit;
+                            repaint();
+                        }
+                        if (hit != null) {
+                            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+                        } else {
+                            setCursor(currentTool == ToolMode.DRAW_WALL ? Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR) : Cursor.getDefaultCursor());
+                        }
+                    } else {
+                        if (hoveredObject != null) { hoveredObject = null; repaint(); }
+                        setCursor(Cursor.getDefaultCursor());
+                    }
                 }
 
                 @Override
@@ -2888,6 +3043,19 @@ public class HousePlanCADApp extends JFrame {
                                 walls.add(wall);
                                 clearSelection(); addToSelection(wall);
                                 checkAllCollisions(); updateProperties();
+                            } else {
+                                // User clicked on an existing wall or object while in DRAW_WALL mode
+                                Object clicked = hitTest(mouseWorld.x, mouseWorld.y);
+                                if (clicked != null) {
+                                    clearSelection();
+                                    addToSelection(clicked);
+                                    currentTool = ToolMode.SELECT;
+                                    selectToolButton(ToolMode.SELECT);
+                                    updateProperties();
+                                    if (statusCursorLabel != null) {
+                                        statusCursorLabel.setText(" Selected: " + getObjectName(clicked) + " · Switched to Select Tool ");
+                                    }
+                                }
                             }
                         } else if (currentTool == ToolMode.ROOM_BOX) {
                             saveUndoState();
@@ -2909,6 +3077,15 @@ public class HousePlanCADApp extends JFrame {
                                 elements.add(floor);
                                 clearSelection(); addToSelection(floor);
                                 updateProperties();
+                            } else {
+                                Object clicked = hitTest(mouseWorld.x, mouseWorld.y);
+                                if (clicked != null) {
+                                    clearSelection();
+                                    addToSelection(clicked);
+                                    currentTool = ToolMode.SELECT;
+                                    selectToolButton(ToolMode.SELECT);
+                                    updateProperties();
+                                }
                             }
                         }
                     }
@@ -3025,14 +3202,13 @@ public class HousePlanCADApp extends JFrame {
             return null;
         }
 
-        private Object hitTest(double wx, double wy) {
-            double hitPad = Math.max(12.0, 16.0 / zoom);
-            Point mouseScr = worldToScreen(wx, wy);
+        private List<Object> findAllHits(Point mouseScr, Point2D.Double mouseWorld) {
+            List<Object> hits = new ArrayList<>();
+            double wx = mouseWorld.x, wy = mouseWorld.y;
 
-            // 1. Dimensions hit test (topmost interactive layer)
+            // Tier 1: Dimensions & Measure lines (topmost interactive layer)
             for (int i = dimensions.size() - 1; i >= 0; i--) {
                 CADDimension d = dimensions.get(i);
-                if (isObjectLocked(d)) continue;
                 Point p1 = worldToScreen(d.x1, d.y1);
                 Point p2 = worldToScreen(d.x2, d.y2);
                 double dx = p2.x - p1.x, dy = p2.y - p1.y;
@@ -3046,22 +3222,39 @@ public class HousePlanCADApp extends JFrame {
                 // Hit test dimension text label center
                 double midX = (d1x + d2x) / 2.0, midY = (d1y + d2y) / 2.0;
                 Rectangle2D textHit = new Rectangle2D.Double(midX - 35, midY - 14, 70, 28);
-                if (textHit.contains(mouseScr.x, mouseScr.y)) return d;
-
-                // Hit test dimension line
-                if (Line2D.ptSegDist(d1x, d1y, d2x, d2y, mouseScr.x, mouseScr.y) <= 16.0) return d;
-                // Hit test extension witness lines
-                if (Line2D.ptSegDist(p1.x, p1.y, d1x, d1y, mouseScr.x, mouseScr.y) <= 12.0) return d;
-                if (Line2D.ptSegDist(p2.x, p2.y, d2x, d2y, mouseScr.x, mouseScr.y) <= 12.0) return d;
+                if (textHit.contains(mouseScr.x, mouseScr.y)
+                        || Line2D.ptSegDist(d1x, d1y, d2x, d2y, mouseScr.x, mouseScr.y) <= 16.0
+                        || Line2D.ptSegDist(p1.x, p1.y, d1x, d1y, mouseScr.x, mouseScr.y) <= 12.0
+                        || Line2D.ptSegDist(p2.x, p2.y, d2x, d2y, mouseScr.x, mouseScr.y) <= 12.0) {
+                    hits.add(d);
+                }
             }
 
-            // 2. Elements hit test
+            // Tier 2: Openings (Doors, Windows, Cased openings embedded in walls)
             for (int i = elements.size() - 1; i >= 0; i--) {
                 CADElement el = elements.get(i);
-                if (isObjectLocked(el)) continue;
+                if (!el.isOpening()) continue;
+                double cx = el.x + el.w / 2.0, cy = el.y + el.h / 2.0;
+                double rad = Math.toRadians(-el.rotation);
+                double cos = Math.cos(rad), sin = Math.sin(rad);
+                double dx = wx - cx, dy = wy - cy;
+                double lx = dx * cos - dy * sin, ly = dx * sin + dy * cos;
+                double hw = el.w / 2.0, hh = Math.max(el.h / 2.0, 1.2 * FT_PX);
+                if (el.type.startsWith("door")) hh = Math.max(hh, el.w / 2.0 + 10.0);
+                double effPad = Math.max(12.0, 16.0 / zoom);
+                if (Math.abs(lx) <= hw + effPad && Math.abs(ly) <= hh + effPad) {
+                    hits.add(el);
+                }
+            }
+
+            // Tier 3: Foreground CAD blocks & Furniture (excluding floor elements and room area tags)
+            for (int i = elements.size() - 1; i >= 0; i--) {
+                CADElement el = elements.get(i);
+                if (el.isOpening() || el.type.startsWith("floor-") || el.type.equals("tag")
+                        || el.type.equals("room-box") || el.type.equals("floor-zone")) continue;
                 if (el.points != null && el.points.size() >= 3) {
                     Path2D.Double poly = el.getPolygonPath();
-                    if (poly != null && poly.contains(wx, wy)) return el;
+                    if (poly != null && poly.contains(wx, wy)) { hits.add(el); continue; }
                 }
                 double cx = el.x + el.w / 2.0, cy = el.y + el.h / 2.0;
                 double rad = Math.toRadians(-el.rotation);
@@ -3069,25 +3262,67 @@ public class HousePlanCADApp extends JFrame {
                 double dx = wx - cx, dy = wy - cy;
                 double lx = dx * cos - dy * sin, ly = dx * sin + dy * cos;
                 double hw = el.w / 2.0, hh = el.h / 2.0;
-                double effPad = hitPad;
-                if (el.isOpening()) {
-                    // Generous hit test tolerance for doors & windows on walls
-                    effPad = Math.max(hitPad, 18.0 / zoom);
-                    hh = Math.max(hh, 1.2 * FT_PX);
-                    if (el.type.startsWith("door")) hh = Math.max(hh, el.w / 2.0 + 10.0);
+                double effPad = Math.max(8.0, 12.0 / zoom);
+                if (Math.abs(lx) <= hw + effPad && Math.abs(ly) <= hh + effPad) {
+                    hits.add(el);
                 }
-                if (Math.abs(lx) <= hw + effPad && Math.abs(ly) <= hh + effPad) return el;
             }
 
-            // 3. Walls hit test
+            // Tier 4: Room Area Tags - Hit test on the visible centered label badge only!
+            for (int i = elements.size() - 1; i >= 0; i--) {
+                CADElement el = elements.get(i);
+                if (!el.type.equals("tag")) continue;
+                Point tagCenter = worldToScreen(el.x + el.w / 2.0, el.y + el.h / 2.0);
+                if (Math.abs(mouseScr.x - tagCenter.x) <= 75 && Math.abs(mouseScr.y - tagCenter.y) <= 30) {
+                    hits.add(el);
+                }
+            }
+
+            // Tier 5: WALLS Hit Test (screen space with generous 14px pickbox tolerance + wall thickness)
             for (int i = walls.size() - 1; i >= 0; i--) {
                 Wall w = walls.get(i);
-                if (isObjectLocked(w)) continue;
-                double wallThickPx = (w.thicknessInches / 12.0) * FT_PX;
-                if (new Line2D.Double(w.x1, w.y1, w.x2, w.y2).ptSegDist(wx, wy) <= (wallThickPx / 2.0) + hitPad)
-                    return w;
+                Point sp1 = worldToScreen(w.x1, w.y1);
+                Point sp2 = worldToScreen(w.x2, w.y2);
+                double distScreen = Line2D.ptSegDist(sp1.x, sp1.y, sp2.x, sp2.y, mouseScr.x, mouseScr.y);
+                double visualHalfThick = Math.max(4.0, (w.thicknessInches / 12.0) * FT_PX * zoom / 2.0);
+                if (distScreen <= visualHalfThick + 14.0) {
+                    hits.add(w);
+                }
             }
-            return null;
+
+            // Tier 6: Floor Finishes & Background Area Hatches (Lowest interactive priority)
+            for (int i = elements.size() - 1; i >= 0; i--) {
+                CADElement el = elements.get(i);
+                if (!el.type.startsWith("floor-") && !el.type.equals("room-box") && !el.type.equals("floor-zone")) continue;
+                if (el.points != null && el.points.size() >= 3) {
+                    Path2D.Double poly = el.getPolygonPath();
+                    if (poly != null && poly.contains(wx, wy)) { hits.add(el); continue; }
+                }
+                double cx = el.x + el.w / 2.0, cy = el.y + el.h / 2.0;
+                double rad = Math.toRadians(-el.rotation);
+                double cos = Math.cos(rad), sin = Math.sin(rad);
+                double dx = wx - cx, dy = wy - cy;
+                double lx = dx * cos - dy * sin, ly = dx * sin + dy * cos;
+                double hw = el.w / 2.0, hh = el.h / 2.0;
+                if (Math.abs(lx) <= hw && Math.abs(ly) <= hh) {
+                    hits.add(el);
+                }
+            }
+
+            return hits;
+        }
+
+        private Object hitTest(double wx, double wy) {
+            Point mouseScr = worldToScreen(wx, wy);
+            List<Object> hits = findAllHits(mouseScr, new Point2D.Double(wx, wy));
+            if (hits.isEmpty()) return null;
+
+            // Prioritize unlocked objects over locked objects
+            for (Object obj : hits) {
+                if (!isObjectLocked(obj)) return obj;
+            }
+            // If only locked objects exist, return the first locked object
+            return hits.get(0);
         }
 
         // ====================  PAINTING  ====================
@@ -3105,6 +3340,7 @@ public class HousePlanCADApp extends JFrame {
             drawFloorElements(g2);
             drawWallsWithCutThrough(g2);
             drawElements(g2);
+            drawHoverHighlight(g2);
             drawDimensions(g2);
             drawDynamicDimensions(g2);
             drawSelectionRectangle(g2);
@@ -3114,6 +3350,61 @@ public class HousePlanCADApp extends JFrame {
             }
             if (isSnipMode) {
                 drawSnipOverlay(g2);
+            }
+        }
+
+        private void drawHoverHighlight(Graphics2D g2) {
+            if (hoveredObject == null || isSelected(hoveredObject) || isDrawing || isDragging || isRotating) return;
+
+            if (hoveredObject instanceof Wall) {
+                Wall hw = (Wall) hoveredObject;
+                Point p1 = worldToScreen(hw.x1, hw.y1);
+                Point p2 = worldToScreen(hw.x2, hw.y2);
+                float thickS = (float) (((hw.thicknessInches / 12.0) * FT_PX) * zoom);
+                g2.setColor(new Color(56, 189, 248, 120));
+                g2.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                g2.draw(createWallSegmentPath(p1, p2, thickS + 4));
+            } else if (hoveredObject instanceof CADElement) {
+                CADElement el = (CADElement) hoveredObject;
+                if (el.points != null && el.points.size() >= 3) {
+                    Path2D.Double polyScreen = new Path2D.Double();
+                    Point p0 = worldToScreen(el.points.get(0).x, el.points.get(0).y);
+                    polyScreen.moveTo(p0.x, p0.y);
+                    for (int i = 1; i < el.points.size(); i++) {
+                        Point pi = worldToScreen(el.points.get(i).x, el.points.get(i).y);
+                        polyScreen.lineTo(pi.x, pi.y);
+                    }
+                    polyScreen.closePath();
+                    g2.setColor(new Color(56, 189, 248, 150));
+                    g2.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    g2.draw(polyScreen);
+                } else {
+                    Point center = worldToScreen(el.x + el.w / 2.0, el.y + el.h / 2.0);
+                    int sw = (int) Math.round(el.w * zoom);
+                    int sh = (int) Math.round(el.h * zoom);
+                    AffineTransform old = g2.getTransform();
+                    g2.translate(center.x, center.y);
+                    g2.rotate(Math.toRadians(el.rotation));
+                    g2.setColor(new Color(56, 189, 248, 140));
+                    g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, new float[]{4, 3}, 0));
+                    g2.drawRect(-sw / 2 - 2, -sh / 2 - 2, sw + 4, sh + 4);
+                    g2.setTransform(old);
+                }
+            } else if (hoveredObject instanceof CADDimension) {
+                CADDimension d = (CADDimension) hoveredObject;
+                Point p1 = worldToScreen(d.x1, d.y1);
+                Point p2 = worldToScreen(d.x2, d.y2);
+                double dx = p2.x - p1.x, dy = p2.y - p1.y;
+                double len = Math.hypot(dx, dy);
+                if (len >= 6) {
+                    double offset = d.offset;
+                    double perpX = (-dy / len) * offset, perpY = (dx / len) * offset;
+                    double d1x = p1.x + perpX, d1y = p1.y + perpY;
+                    double d2x = p2.x + perpX, d2y = p2.y + perpY;
+                    g2.setColor(new Color(56, 189, 248, 160));
+                    g2.setStroke(new BasicStroke(1.8f));
+                    g2.draw(new Line2D.Double(d1x, d1y, d2x, d2y));
+                }
             }
         }
 
@@ -3290,20 +3581,30 @@ public class HousePlanCADApp extends JFrame {
                     Point p1 = worldToScreen(selW.x1, selW.y1);
                     Point p2 = worldToScreen(selW.x2, selW.y2);
                     float thickS = (float) (((selW.thicknessInches / 12.0) * FT_PX) * zoom);
-                    g2.setColor(new Color(56, 189, 248));
-                    g2.setStroke(new BasicStroke(2.0f));
+                    boolean isLocked = isObjectLocked(selW);
+                    if (isLocked) {
+                        g2.setColor(new Color(251, 191, 36)); // Amber for frozen
+                        g2.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, new float[]{6, 4}, 0));
+                    } else {
+                        g2.setColor(new Color(56, 189, 248)); // Bright Cyan for active
+                        g2.setStroke(new BasicStroke(2.0f));
+                    }
                     g2.draw(createWallSegmentPath(p1, p2, thickS));
-                    drawCADDimension(g2, p1.x, p1.y, p2.x, p2.y,
-                            formatImperial(selW.getLength()) + " (" + (int)selW.thicknessInches + "\")", 24);
-                    drawGrip(g2, p1.x, p1.y);
-                    drawGrip(g2, p2.x, p2.y);
-                    drawGrip(g2, (p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
+                    String label = formatImperial(selW.getLength()) + " (" + (int)selW.thicknessInches + "\")" + (isLocked ? " 🔒 FROZEN" : "");
+                    drawCADDimension(g2, p1.x, p1.y, p2.x, p2.y, label, 24);
+                    drawGrip(g2, p1.x, p1.y, isLocked);
+                    drawGrip(g2, p2.x, p2.y, isLocked);
+                    drawGrip(g2, (p1.x + p2.x) / 2, (p1.y + p2.y) / 2, isLocked);
                 }
             }
         }
 
         private void drawGrip(Graphics2D g2, int x, int y) {
-            g2.setColor(new Color(56, 189, 248));
+            drawGrip(g2, x, y, false);
+        }
+
+        private void drawGrip(Graphics2D g2, int x, int y, boolean isLocked) {
+            g2.setColor(isLocked ? new Color(245, 158, 11) : new Color(56, 189, 248));
             g2.fillRect(x - 4, y - 4, 8, 8);
             g2.setColor(Color.WHITE);
             g2.drawRect(x - 4, y - 4, 8, 8);
@@ -3535,17 +3836,18 @@ public class HousePlanCADApp extends JFrame {
 
                 // Selection highlight
                 if (isSelected(el)) {
-                    g2.setColor(new Color(56, 189, 248));
+                    boolean isLocked = isObjectLocked(el);
+                    g2.setColor(isLocked ? new Color(251, 191, 36) : new Color(56, 189, 248));
                     g2.setStroke(new BasicStroke(1.4f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, new float[]{5, 4}, 0));
                     g2.drawRect(-4, -4, sw + 8, sh + 8);
-                    drawGrip(g2, -4, -4);
-                    drawGrip(g2, sw + 4, -4);
-                    drawGrip(g2, -4, sh + 4);
-                    drawGrip(g2, sw + 4, sh + 4);
-                    drawGrip(g2, sw / 2, -4);
-                    drawGrip(g2, sw / 2, sh + 4);
-                    drawGrip(g2, -4, sh / 2);
-                    drawGrip(g2, sw + 4, sh / 2);
+                    drawGrip(g2, -4, -4, isLocked);
+                    drawGrip(g2, sw + 4, -4, isLocked);
+                    drawGrip(g2, -4, sh + 4, isLocked);
+                    drawGrip(g2, sw + 4, sh + 4, isLocked);
+                    drawGrip(g2, sw / 2, -4, isLocked);
+                    drawGrip(g2, sw / 2, sh + 4, isLocked);
+                    drawGrip(g2, -4, sh / 2, isLocked);
+                    drawGrip(g2, sw + 4, sh / 2, isLocked);
                 }
 
                 g2.setTransform(old);
