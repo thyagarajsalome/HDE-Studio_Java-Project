@@ -1763,7 +1763,7 @@ public class HousePlanCADApp extends JFrame {
 
         zoomOutBtn.addActionListener(e -> { zoom = Math.max(0.2, zoom / 1.2); viewportPanel.repaint(); });
         zoomInBtn.addActionListener(e -> { zoom = Math.min(4.0, zoom * 1.2); viewportPanel.repaint(); });
-        zoomResetBtn.addActionListener(e -> { zoom = 1.0; panX = 140; panY = 120; viewportPanel.repaint(); });
+        zoomResetBtn.addActionListener(e -> { viewportPanel.zoomToFit(); });
 
         trayGroup.add(gridBtn);
         trayGroup.add(orthoBtn);
@@ -2576,6 +2576,37 @@ public class HousePlanCADApp extends JFrame {
 
         // AutoCAD Perimeter Hatch Polyline Tool
         private final List<Point2D.Double> currentHatchPoly = new ArrayList<>();
+
+        public void zoomToFit() {
+            if (walls.isEmpty() && elements.isEmpty()) {
+                zoom = 1.0; panX = 140.0; panY = 120.0;
+                repaint();
+                return;
+            }
+            double minX = Double.MAX_VALUE, maxX = -Double.MAX_VALUE;
+            double minY = Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
+            for (Wall w : walls) {
+                minX = Math.min(minX, Math.min(w.x1, w.x2)); maxX = Math.max(maxX, Math.max(w.x1, w.x2));
+                minY = Math.min(minY, Math.min(w.y1, w.y2)); maxY = Math.max(maxY, Math.max(w.y1, w.y2));
+            }
+            for (CADElement el : elements) {
+                minX = Math.min(minX, el.x); maxX = Math.max(maxX, el.x + el.w);
+                minY = Math.min(minY, el.y); maxY = Math.max(maxY, el.y + el.h);
+            }
+            int vw = Math.max(300, getWidth() > 0 ? getWidth() : 900);
+            int vh = Math.max(200, getHeight() > 0 ? getHeight() : 600);
+            double bw = Math.max(40.0, maxX - minX);
+            double bh = Math.max(40.0, maxY - minY);
+            double margin = 80.0; // 80px screen padding
+            double fitZoom = Math.min((vw - margin * 2.0) / bw, (vh - margin * 2.0) / bh);
+            fitZoom = Math.max(0.2, Math.min(2.5, fitZoom));
+            double cx = (minX + maxX) / 2.0;
+            double cy = (minY + maxY) / 2.0;
+            zoom = fitZoom;
+            panX = (vw / 2.0) - (cx * zoom);
+            panY = (vh / 2.0) - (cy * zoom);
+            repaint();
+        }
 
         public void clearHatchPoly() {
             currentHatchPoly.clear();
@@ -9037,8 +9068,19 @@ public class HousePlanCADApp extends JFrame {
 
         autoJoinAllWalls();
         checkAllCollisions();
+
+        // Auto-select all newly generated elements so the user gets instant feedback with grips & selection outline
+        clearSelection();
+        addToSelection(topW);
+        addToSelection(rightW);
+        addToSelection(bottomW);
+        addToSelection(leftW);
+        currentTool = ToolMode.SELECT;
+        selectToolButton(ToolMode.SELECT);
+
         markProjectDirty(true);
-        viewportPanel.repaint();
+        updateProperties();
+        viewportPanel.zoomToFit();
     }
 
     /**
@@ -9131,6 +9173,13 @@ public class HousePlanCADApp extends JFrame {
         runBtn.setPreferredSize(new Dimension(170, 32));
         runBtn.addActionListener(e -> {
             try {
+                if (walls.isEmpty()) {
+                    JOptionPane.showMessageDialog(dlg,
+                            "No walls found on the canvas.\nPlease draw walls or build a room first using the Room Builder before placing structural columns.",
+                            "No Walls Found", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+
                 double maxSpan = Double.parseDouble(maxSpanFld.getText().trim());
                 if (maxSpan < 6.0) maxSpan = 6.0;
 
@@ -9298,7 +9347,7 @@ public class HousePlanCADApp extends JFrame {
 
         markProjectDirty(true);
         updateProperties();
-        viewportPanel.repaint();
+        viewportPanel.zoomToFit();
         return count;
     }
 
