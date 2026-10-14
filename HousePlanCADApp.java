@@ -925,19 +925,116 @@ public class HousePlanCADApp extends JFrame {
         addHatchPatternItem(floorPanel, "Driveway Stone Pavers", "floor-pavers");
         catalogContentCards.add(wrapInScroll(floorPanel), "FLOORING");
 
-        // ROOM SETS (Full pre-arranged furnished room layouts)
-        JPanel roomSetsPanel = createCatalogCategoryPanel();
-        addCatalogItem(roomSetsPanel, "Master Suite (16'×14')", "set-bedroom-master", 16.0, 14.0);
-        addCatalogItem(roomSetsPanel, "Double Bedroom Set (14'×12')", "set-bedroom-double", 14.0, 12.0);
-        addCatalogItem(roomSetsPanel, "Compact Guest Bed (11'×10')", "set-bedroom-compact", 11.0, 10.0);
-        addCatalogItem(roomSetsPanel, "Twin Kids Room (14'×11')", "set-bedroom-twin", 14.0, 11.0);
-        addCatalogItem(roomSetsPanel, "Master Bath Suite (10'×8')", "set-bath-master", 10.0, 8.0);
-        addCatalogItem(roomSetsPanel, "Standard 3-Fixture Bath (8'×5')", "set-bath-standard", 8.0, 5.0);
-        addCatalogItem(roomSetsPanel, "Powder Room / Half (5'×5')", "set-bath-powder", 5.0, 5.0);
-        addCatalogItem(roomSetsPanel, "Spa Luxury Bath (12'×10')", "set-bath-luxury", 12.0, 10.0);
-        addCatalogItem(roomSetsPanel, "Living Room Suite (16'×12')", "set-living-full", 16.0, 12.0);
-        addCatalogItem(roomSetsPanel, "Dining Room Set (12'×10')", "set-dining-full", 12.0, 10.0);
-        catalogContentCards.add(wrapInScroll(roomSetsPanel), "ROOM_SETS");
+        // ═════════════════════════════════════════════════════════════════════
+        // ─── ARCHITECTURAL ROOM SETS (Dedicated Categorized Room Suites) ───
+        // ═════════════════════════════════════════════════════════════════════
+        JPanel roomSetsPanel = new JPanel(new BorderLayout());
+        roomSetsPanel.setBackground(new Color(15, 23, 42));
+
+        CardLayout setsCardLayout = new CardLayout();
+        JPanel setsCards = new JPanel(setsCardLayout);
+        setsCards.setBackground(new Color(15, 23, 42));
+
+        // Subcategory Filter Tab Bar (2-column grid of 8 room categories)
+        JPanel setsSubBar = new JPanel(new GridLayout(4, 2, 2, 2));
+        setsSubBar.setBackground(new Color(15, 23, 42));
+        setsSubBar.setBorder(new EmptyBorder(4, 6, 6, 6));
+
+        ButtonGroup setsSubGroup = new ButtonGroup();
+        ModernToggle livingSetsTab = createCategoryTab("Living Sets", "SETS_LIVING", setsCardLayout, setsCards, setsSubGroup, true);
+        ModernToggle bedSetsTab    = createCategoryTab("Bedroom Sets", "SETS_BEDROOM", setsCardLayout, setsCards, setsSubGroup, false);
+        ModernToggle kitSetsTab    = createCategoryTab("Kitchen Sets", "SETS_KITCHEN", setsCardLayout, setsCards, setsSubGroup, false);
+        ModernToggle dinSetsTab    = createCategoryTab("Dining Sets", "SETS_DINING", setsCardLayout, setsCards, setsSubGroup, false);
+        ModernToggle guestSetsTab  = createCategoryTab("Guest Sets", "SETS_GUEST", setsCardLayout, setsCards, setsSubGroup, false);
+        ModernToggle kidsSetsTab   = createCategoryTab("Children Sets", "SETS_KIDS", setsCardLayout, setsCards, setsSubGroup, false);
+        ModernToggle studySetsTab  = createCategoryTab("Study Sets", "SETS_STUDY", setsCardLayout, setsCards, setsSubGroup, false);
+        ModernToggle bathSetsTab   = createCategoryTab("Bathroom Sets", "SETS_BATH", setsCardLayout, setsCards, setsSubGroup, false);
+
+        setsSubBar.add(livingSetsTab); setsSubBar.add(bedSetsTab);
+        setsSubBar.add(kitSetsTab);    setsSubBar.add(dinSetsTab);
+        setsSubBar.add(guestSetsTab);  setsSubBar.add(kidsSetsTab);
+        setsSubBar.add(studySetsTab);  setsSubBar.add(bathSetsTab);
+
+        // 1. LIVING ROOM SETS PANEL
+        JPanel pLivingSets = createCatalogCategoryPanel();
+        addCatalogHeader(pLivingSets, "Living Room Suites (Multiple Sizes & Orientations)");
+        addCatalogItem(pLivingSets, "Grand Living Suite (20'×16')", "set-living-grand", 20.0, 16.0);
+        addCatalogItem(pLivingSets, "Standard Living Suite (16'×12')", "set-living-full", 16.0, 12.0);
+        addCatalogItem(pLivingSets, "L-Sectional Lounge (14'×12')", "set-living-sectional", 14.0, 12.0);
+        addCatalogItem(pLivingSets, "Compact Living / Apt (12'×10')", "set-living-compact", 12.0, 10.0);
+        addCatalogItem(pLivingSets, "Square Living Room (14'×14')", "set-living-square", 14.0, 14.0);
+        setsCards.add(wrapInScroll(pLivingSets), "SETS_LIVING");
+
+        // 2. BEDROOM SETS PANEL
+        JPanel pBedSets = createCatalogCategoryPanel();
+        addCatalogHeader(pBedSets, "Master & Double Bedroom Sets");
+        addCatalogItem(pBedSets, "Master Suite + Dresser (16'×14')", "set-bedroom-master", 16.0, 14.0);
+        addCatalogItem(pBedSets, "Grand Master Suite (18'×16')", "set-bedroom-grand", 18.0, 16.0);
+        addCatalogItem(pBedSets, "Double Bed + Wardrobe (14'×12')", "set-bedroom-double", 14.0, 12.0);
+        addCatalogItem(pBedSets, "Standard Bedroom (12'×12')", "set-bedroom-square", 12.0, 12.0);
+        addCatalogItem(pBedSets, "Compact Double Bed (12'×10')", "set-bedroom-compact", 12.0, 10.0);
+        setsCards.add(wrapInScroll(pBedSets), "SETS_BEDROOM");
+
+        // 3. KITCHEN SETS PANEL
+        JPanel pKitSets = createCatalogCategoryPanel();
+        addCatalogHeader(pKitSets, "Modular Kitchen Suites (Full Counter Layouts)");
+        addCatalogItem(pKitSets, "Chef's Island Kitchen (14'×12')", "set-kitchen-island", 14.0, 12.0);
+        addCatalogItem(pKitSets, "U-Shape Kitchen Suite (12'×10')", "set-kitchen-u", 12.0, 10.0);
+        addCatalogItem(pKitSets, "L-Shape Modular Kitchen (10'×9')", "set-kitchen-l", 10.0, 9.0);
+        addCatalogItem(pKitSets, "Parallel Galley Kitchen (10'×8')", "set-kitchen-parallel", 10.0, 8.0);
+        addCatalogItem(pKitSets, "Linear Studio Kitchenette (10'×6')", "set-kitchen-linear", 10.0, 6.0);
+        setsCards.add(wrapInScroll(pKitSets), "SETS_KITCHEN");
+
+        // 4. DINING ROOM SETS PANEL
+        JPanel pDinSets = createCatalogCategoryPanel();
+        addCatalogHeader(pDinSets, "Formal & Casual Dining Room Suites");
+        addCatalogItem(pDinSets, "Formal 8-Seat Dining (14'×12')", "set-dining-formal", 14.0, 12.0);
+        addCatalogItem(pDinSets, "Standard 6-Seat Dining (12'×10')", "set-dining-full", 12.0, 10.0);
+        addCatalogItem(pDinSets, "Compact 4-Seat Dining (10'×8')", "set-dining-compact", 10.0, 8.0);
+        addCatalogItem(pDinSets, "Round Family Dining (10'×10')", "set-dining-round", 10.0, 10.0);
+        setsCards.add(wrapInScroll(pDinSets), "SETS_DINING");
+
+        // 5. GUEST ROOM SETS PANEL
+        JPanel pGuestSets = createCatalogCategoryPanel();
+        addCatalogHeader(pGuestSets, "Guest Bedrooms & Multi-purpose Suites");
+        addCatalogItem(pGuestSets, "Deluxe Guest Suite (14'×12')", "set-guest-deluxe", 14.0, 12.0);
+        addCatalogItem(pGuestSets, "Standard Guest Room (12'×10')", "set-bedroom-compact", 12.0, 10.0);
+        addCatalogItem(pGuestSets, "Sofa-Bed Combo Room (11'×9')", "set-guest-sofabed", 11.0, 9.0);
+        addCatalogItem(pGuestSets, "Compact Guest / Daybed (10'×8')", "set-guest-compact", 10.0, 8.0);
+        setsCards.add(wrapInScroll(pGuestSets), "SETS_GUEST");
+
+        // 6. CHILDREN ROOM SETS PANEL
+        JPanel pKidsSets = createCatalogCategoryPanel();
+        addCatalogHeader(pKidsSets, "Children & Teens Room Suites");
+        addCatalogItem(pKidsSets, "Twin Beds + Dual Desk (14'×11')", "set-bedroom-twin", 14.0, 11.0);
+        addCatalogItem(pKidsSets, "Bunk Bed + Play Area (12'×10')", "set-kids-bunk", 12.0, 10.0);
+        addCatalogItem(pKidsSets, "Single Kid Room + Desk (11'×10')", "set-kids-single", 11.0, 10.0);
+        addCatalogItem(pKidsSets, "Play & Study Nursery (12'×11')", "set-kids-nursery", 12.0, 11.0);
+        setsCards.add(wrapInScroll(pKidsSets), "SETS_KIDS");
+
+        // 7. STUDY & HOME OFFICE SETS PANEL
+        JPanel pStudySets = createCatalogCategoryPanel();
+        addCatalogHeader(pStudySets, "Home Office, Study & Library Suites");
+        addCatalogItem(pStudySets, "Executive Corner Office (14'×12')", "set-study-executive", 14.0, 12.0);
+        addCatalogItem(pStudySets, "Dual Workstation Study (12'×10')", "set-study-dual", 12.0, 10.0);
+        addCatalogItem(pStudySets, "Library / Reading Room (12'×10')", "set-study-library", 12.0, 10.0);
+        addCatalogItem(pStudySets, "Compact Home Desk Study (9'×8')", "set-study-compact", 9.0, 8.0);
+        setsCards.add(wrapInScroll(pStudySets), "SETS_STUDY");
+
+        // 8. BATHROOM SETS PANEL
+        JPanel pBathSets = createCatalogCategoryPanel();
+        addCatalogHeader(pBathSets, "Ensuite, Family & Powder Bath Suites");
+        addCatalogItem(pBathSets, "Spa Luxury Bath (12'×10')", "set-bath-luxury", 12.0, 10.0);
+        addCatalogItem(pBathSets, "Master Ensuite Bath (10'×8')", "set-bath-master", 10.0, 8.0);
+        addCatalogItem(pBathSets, "Long Linear Bath (10'×5')", "set-bath-linear", 10.0, 5.0);
+        addCatalogItem(pBathSets, "Standard 3-Fixture Bath (8'×5')", "set-bath-standard", 8.0, 5.0);
+        addCatalogItem(pBathSets, "Corner Shower Bath (7'×6')", "set-bath-corner", 7.0, 6.0);
+        addCatalogItem(pBathSets, "Powder Room / Half (5'×5')", "set-bath-powder", 5.0, 5.0);
+        setsCards.add(wrapInScroll(pBathSets), "SETS_BATH");
+
+        roomSetsPanel.add(setsSubBar, BorderLayout.NORTH);
+        roomSetsPanel.add(setsCards, BorderLayout.CENTER);
+        catalogContentCards.add(roomSetsPanel, "ROOM_SETS");
 
         // DOORS & OPENINGS
         JPanel doorsPanel = createCatalogCategoryPanel();
@@ -1118,6 +1215,14 @@ public class HousePlanCADApp extends JFrame {
         p.setBackground(new Color(15, 23, 42));
         p.setBorder(new EmptyBorder(6, 6, 8, 6));
         return p;
+    }
+
+    private void addCatalogHeader(JPanel container, String title) {
+        JLabel lbl = new JLabel("<html><b style='color:#38bdf8'>" + title + "</b></html>");
+        lbl.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+        lbl.setBorder(new EmptyBorder(4, 4, 6, 4));
+        lbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        container.add(lbl);
     }
 
     private JScrollPane wrapInScroll(JPanel p) {
@@ -6552,6 +6657,853 @@ public class HousePlanCADApp extends JFrame {
                 g2.setColor(new Color(56, 189, 248));
                 g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * zoom))));
                 g2.drawString("DINING SUITE", tblX + 8, tblY + tblH / 2 + 3);
+
+            // ─── GRAND LIVING SUITE (20'×16') ───────────────────────────
+            } else if (type.equals("set-living-grand")) {
+                g2.setColor(new Color(30, 41, 59, 100));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.setStroke(new BasicStroke(0.8f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, new float[]{5, 3}, 0));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Top: Full Entertainment Wall with Credenza & Bookshelves
+                int tvW = Math.max(50, (int)(sw * 0.7));
+                int tvH = Math.max(12, (int)(sh * 0.1));
+                int tvX = (sw - tvW) / 2;
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRoundRect(tvX, 4, tvW, tvH, 4, 4);
+                g2.setColor(new Color(203, 213, 225));
+                g2.setStroke(new BasicStroke(1.2f));
+                g2.drawRoundRect(tvX, 4, tvW, tvH, 4, 4);
+                int tvScreenW = (int)(tvW * 0.55);
+                g2.setColor(new Color(56, 189, 248, 160));
+                g2.fillRect(tvX + (tvW - tvScreenW) / 2, 2, tvScreenW, 4);
+                g2.drawRect(tvX + (tvW - tvScreenW) / 2, 2, tvScreenW, 4);
+
+                // Center: Large Area Rug
+                int rugW = Math.max(56, (int)(sw * 0.72));
+                int rugH = Math.max(44, (int)(sh * 0.54));
+                int rugX = (sw - rugW) / 2;
+                int rugY = tvH + 16;
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillRoundRect(rugX, rugY, rugW, rugH, 8, 8);
+                g2.setColor(new Color(100, 116, 139, 140));
+                g2.drawRoundRect(rugX, rugY, rugW, rugH, 8, 8);
+
+                // Center Large Coffee Table + Dual Ottomans
+                int tblW = Math.max(28, (int)(rugW * 0.45));
+                int tblH = Math.max(18, (int)(rugH * 0.35));
+                int tblX = rugX + (rugW - tblW) / 2;
+                int tblY = rugY + (rugH - tblH) / 2;
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect(tblX, tblY, tblW, tblH, 4, 4);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect(tblX, tblY, tblW, tblH, 4, 4);
+
+                // Bottom: Extended 4-Seater Sofa
+                int sofaW = Math.max(54, (int)(sw * 0.75));
+                int sofaH = Math.max(20, (int)(sh * 0.22));
+                int sofaX = (sw - sofaW) / 2;
+                int sofaY = sh - sofaH - 6;
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect(sofaX, sofaY, sofaW, sofaH, 8, 8);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect(sofaX, sofaY, sofaW, sofaH, 8, 8);
+                int cW = (sofaW - 16) / 4;
+                for (int c = 0; c < 4; c++) {
+                    g2.setColor(new Color(56, 189, 248, 120));
+                    g2.drawRoundRect(sofaX + 4 + c * cW, sofaY + 4, cW - 2, sofaH - 8, 4, 4);
+                }
+
+                // Left & Right: Dual Club Chairs
+                int chW = Math.max(18, (int)(sw * 0.16));
+                int chH = Math.max(18, (int)(sh * 0.18));
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect(6, rugY + 6, chW, chH, 6, 6);
+                g2.fillRoundRect(sw - chW - 6, rugY + 6, chW, chH, 6, 6);
+                g2.setColor(new Color(148, 163, 184));
+                g2.drawRoundRect(6, rugY + 6, chW, chH, 6, 6);
+                g2.drawRoundRect(sw - chW - 6, rugY + 6, chW, chH, 6, 6);
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * zoom))));
+                g2.drawString("GRAND LIVING (20'×16')", sofaX + 6, sofaY - 4);
+
+            // ─── L-SECTIONAL LOUNGE (14'×12') ────────────────────────────
+            } else if (type.equals("set-living-sectional")) {
+                g2.setColor(new Color(30, 41, 59, 100));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.setStroke(new BasicStroke(0.8f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, new float[]{5, 3}, 0));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Right Wall: TV Console
+                int tvW = Math.max(12, (int)(sw * 0.12));
+                int tvH = Math.max(34, (int)(sh * 0.5));
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRoundRect(sw - tvW - 6, (sh - tvH) / 2, tvW, tvH, 4, 4);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect(sw - tvW - 6, (sh - tvH) / 2, tvW, tvH, 4, 4);
+
+                // L-Shaped Sectional Sofa (Top-Left corner to Bottom)
+                int armD = Math.max(18, (int)(sw * 0.28));
+                Path2D.Double lSofa = new Path2D.Double();
+                lSofa.moveTo(6, 6);
+                lSofa.lineTo(sw - tvW - 20, 6);
+                lSofa.lineTo(sw - tvW - 20, 6 + armD);
+                lSofa.lineTo(6 + armD, 6 + armD);
+                lSofa.lineTo(6 + armD, sh - 6);
+                lSofa.lineTo(6, sh - 6);
+                lSofa.closePath();
+                g2.setColor(new Color(30, 41, 59));
+                g2.fill(lSofa);
+                g2.setColor(new Color(203, 213, 225));
+                g2.setStroke(new BasicStroke(1.2f));
+                g2.draw(lSofa);
+
+                // Coffee Table inside the L
+                int tblW = Math.max(20, (int)(sw * 0.26));
+                int tblH = Math.max(16, (int)(sh * 0.24));
+                int tblX = 6 + armD + 8;
+                int tblY = 6 + armD + 8;
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRoundRect(tblX, tblY, tblW, tblH, 4, 4);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawRoundRect(tblX, tblY, tblW, tblH, 4, 4);
+
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * zoom))));
+                g2.drawString("L-SECTIONAL (14'×12')", tblX, sh - 10);
+
+            // ─── COMPACT LIVING / APARTMENT (12'×10') ────────────────────
+            } else if (type.equals("set-living-compact")) {
+                g2.setColor(new Color(30, 41, 59, 100));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Top: TV Console
+                int tvW = Math.max(30, (int)(sw * 0.6));
+                int tvH = Math.max(8, (int)(sh * 0.12));
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRoundRect((sw - tvW) / 2, 4, tvW, tvH, 3, 3);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect((sw - tvW) / 2, 4, tvW, tvH, 3, 3);
+
+                // Center Table
+                int tblW = Math.max(20, (int)(sw * 0.35));
+                int tblH = Math.max(12, (int)(sh * 0.2));
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect((sw - tblW) / 2, (sh - tblH) / 2, tblW, tblH, 3, 3);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawRoundRect((sw - tblW) / 2, (sh - tblH) / 2, tblW, tblH, 3, 3);
+
+                // Bottom: 2-Seater Loveseat Sofa
+                int sofaW = Math.max(38, (int)(sw * 0.68));
+                int sofaH = Math.max(16, (int)(sh * 0.26));
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect((sw - sofaW) / 2, sh - sofaH - 6, sofaW, sofaH, 6, 6);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect((sw - sofaW) / 2, sh - sofaH - 6, sofaW, sofaH, 6, 6);
+
+                g2.setColor(new Color(148, 163, 184));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("COMPACT LIVING", 8, sh - 8);
+
+            // ─── SQUARE LIVING ROOM (14'×14') ───────────────────────────
+            } else if (type.equals("set-living-square")) {
+                g2.setColor(new Color(30, 41, 59, 100));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Circular Center Rug + Coffee Table
+                int rR = Math.min(sw, sh) / 3;
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillOval(sw / 2 - rR, sh / 2 - rR, rR * 2, rR * 2);
+                g2.setColor(new Color(56, 189, 248, 100));
+                g2.drawOval(sw / 2 - rR, sh / 2 - rR, rR * 2, rR * 2);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillOval(sw / 2 - rR / 2, sh / 2 - rR / 2, rR, rR);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawOval(sw / 2 - rR / 2, sh / 2 - rR / 2, rR, rR);
+
+                // Top: TV Media
+                int tvW = (int)(sw * 0.5);
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRect((sw - tvW) / 2, 4, tvW, 10);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRect((sw - tvW) / 2, 4, tvW, 10);
+
+                // Bottom Sofa
+                int sfW = (int)(sw * 0.6);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect((sw - sfW) / 2, sh - 22, sfW, 18, 6, 6);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect((sw - sfW) / 2, sh - 22, sfW, 18, 6, 6);
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("SQUARE LIVING", 8, sh - 6);
+
+            // ─── GRAND MASTER BEDROOM SUITE (18'×16') ────────────────────
+            } else if (type.equals("set-bedroom-grand")) {
+                g2.setColor(new Color(30, 41, 59, 120));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Top: Walk-in Wardrobe run
+                int wH = (int)(sh * 0.15);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRect(4, 4, sw - 8, wH);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRect(4, 4, sw - 8, wH);
+                for (int i = 1; i < 7; i++) g2.drawLine(4 + i * (sw - 8) / 7, 4, 4 + i * (sw - 8) / 7, 4 + wH);
+
+                // Center King Bed + Ottoman Bench
+                int bW = (int)(sw * 0.44);
+                int bH = (int)(sh * 0.5);
+                int bX = (sw - bW) / 2;
+                int bY = wH + 12;
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect(bX, bY, bW, bH, 8, 8);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect(bX, bY, bW, bH, 8, 8);
+
+                // Bench at bed foot
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRoundRect(bX + 4, bY + bH + 3, bW - 8, 8, 3, 3);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawRoundRect(bX + 4, bY + bH + 3, bW - 8, 8, 3, 3);
+
+                // Left Lounge Chairs + Coffee Table
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect(8, sh - 28, 22, 22, 4, 4);
+                g2.setColor(new Color(148, 163, 184));
+                g2.drawRoundRect(8, sh - 28, 22, 22, 4, 4);
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * zoom))));
+                g2.drawString("GRAND SUITE", bX + 6, bY + bH / 2);
+
+            // ─── STANDARD BEDROOM SQUARE (12'×12') ───────────────────────
+            } else if (type.equals("set-bedroom-square")) {
+                g2.setColor(new Color(30, 41, 59, 120));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Left: Wardrobe
+                int wW = (int)(sw * 0.18);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRect(4, 4, wW, sh - 8);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRect(4, 4, wW, sh - 8);
+                for (int i = 1; i < 4; i++) g2.drawLine(4, 4 + i * (sh - 8) / 4, 4 + wW, 4 + i * (sh - 8) / 4);
+
+                // Center-Right: Queen Bed
+                int bW = (int)(sw * 0.46);
+                int bH = (int)(sh * 0.54);
+                int bX = wW + 14;
+                int bY = (sh - bH) / 2;
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect(bX, bY, bW, bH, 6, 6);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect(bX, bY, bW, bH, 6, 6);
+
+                g2.setColor(new Color(148, 163, 184));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("BEDROOM (12'×12')", bX + 4, sh - 10);
+
+            // ─── CHEF'S ISLAND KITCHEN (14'×12') ─────────────────────────
+            } else if (type.equals("set-kitchen-island")) {
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 120));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Top Wall: Full Run with Sink & Cooktop
+                int cD = (int)(sh * 0.22);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRect(4, 4, sw - 8, cD);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRect(4, 4, sw - 8, cD);
+
+                // Cooktop on left
+                drawCooktop4Burner(g2, 12, 6, (int)(sw * 0.25), cD - 4);
+                // Sink on right
+                drawUndermountSink(g2, sw - (int)(sw * 0.28) - 12, 6, (int)(sw * 0.28), cD - 4);
+
+                // Center Kitchen Island with Stools
+                int isW = (int)(sw * 0.55);
+                int isH = (int)(sh * 0.28);
+                int isX = (sw - isW) / 2;
+                int isY = cD + (int)(sh * 0.16);
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRoundRect(isX, isY, isW, isH, 6, 6);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawRoundRect(isX, isY, isW, isH, 6, 6);
+
+                // 3 Breakfast Bar Stools at Island bottom
+                int stR = Math.max(4, Math.min(8, (int)(6 * zoom)));
+                for (int s = 0; s < 3; s++) {
+                    drawBarStool(g2, isX + (s + 1) * isW / 4, isY + isH + 8, stR);
+                }
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * zoom))));
+                g2.drawString("ISLAND KITCHEN", isX + 6, isY + isH / 2 + 3);
+
+            // ─── U-SHAPE KITCHEN SUITE (12'×10') ─────────────────────────
+            } else if (type.equals("set-kitchen-u")) {
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 120));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                int d = Math.max(16, (int)(sw * 0.24));
+                Path2D.Double uPath = new Path2D.Double();
+                uPath.moveTo(4, 4); uPath.lineTo(sw - 4, 4); uPath.lineTo(sw - 4, sh - 4);
+                uPath.lineTo(sw - 4 - d, sh - 4); uPath.lineTo(sw - 4 - d, 4 + d);
+                uPath.lineTo(4 + d, 4 + d); uPath.lineTo(4 + d, sh - 4);
+                uPath.lineTo(4, sh - 4); uPath.closePath();
+                g2.setColor(new Color(30, 41, 59));
+                g2.fill(uPath);
+                g2.setColor(new Color(203, 213, 225));
+                g2.setStroke(new BasicStroke(1.2f));
+                g2.draw(uPath);
+
+                // Sink top center
+                drawUndermountSink(g2, (sw - (int)(sw * 0.3)) / 2, 6, (int)(sw * 0.3), d - 4);
+                // Cooktop left
+                drawCooktop4Burner(g2, 6, d + 10, d - 4, (int)(sh * 0.35));
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * zoom))));
+                g2.drawString("U-KITCHEN", sw / 2 - 24, sh - 14);
+
+            // ─── L-SHAPE MODULAR KITCHEN (10'×9') ────────────────────────
+            } else if (type.equals("set-kitchen-l")) {
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 120));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                int d = Math.max(16, (int)(sw * 0.28));
+                Path2D.Double lPath = new Path2D.Double();
+                lPath.moveTo(4, 4); lPath.lineTo(sw - 4, 4); lPath.lineTo(sw - 4, 4 + d);
+                lPath.lineTo(4 + d, 4 + d); lPath.lineTo(4 + d, sh - 4);
+                lPath.lineTo(4, sh - 4); lPath.closePath();
+                g2.setColor(new Color(30, 41, 59));
+                g2.fill(lPath);
+                g2.setColor(new Color(203, 213, 225));
+                g2.setStroke(new BasicStroke(1.2f));
+                g2.draw(lPath);
+
+                // Sink on left leg, stove on top leg
+                drawCooktop4Burner(g2, d + 10, 6, (int)(sw * 0.35), d - 4);
+                drawUndermountSink(g2, 6, d + 10, d - 4, (int)(sh * 0.35));
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * zoom))));
+                g2.drawString("L-KITCHEN", d + 12, sh - 14);
+
+            // ─── PARALLEL GALLEY KITCHEN (10'×8') ────────────────────────
+            } else if (type.equals("set-kitchen-parallel")) {
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 120));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                int d = Math.max(16, (int)(sh * 0.28));
+                // Top Counter
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRect(4, 4, sw - 8, d);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRect(4, 4, sw - 8, d);
+                drawCooktop4Burner(g2, sw / 2 - (int)(sw * 0.15), 6, (int)(sw * 0.3), d - 4);
+
+                // Bottom Counter
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRect(4, sh - d - 4, sw - 8, d);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRect(4, sh - d - 4, sw - 8, d);
+                drawUndermountSink(g2, sw / 2 - (int)(sw * 0.15), sh - d - 2, (int)(sw * 0.3), d - 4);
+
+                g2.setColor(new Color(148, 163, 184));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("PARALLEL KITCHEN", 10, sh / 2 + 3);
+
+            // ─── LINEAR STUDIO KITCHENETTE (10'×6') ──────────────────────
+            } else if (type.equals("set-kitchen-linear")) {
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillRoundRect(0, 0, sw, sh, 4, 4);
+                g2.setColor(new Color(56, 189, 248, 120));
+                g2.drawRoundRect(0, 0, sw, sh, 4, 4);
+
+                int d = Math.max(16, (int)(sh * 0.5));
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRect(4, 4, sw - 8, d);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRect(4, 4, sw - 8, d);
+
+                // Fridge left, sink center, 2-burner stove right
+                int frW = (int)(sw * 0.22);
+                g2.drawRect(6, 6, frW, d - 4);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawString("REF", 10, d / 2 + 6);
+
+                drawUndermountSink(g2, frW + 12, 6, (int)(sw * 0.35), d - 4);
+                drawCooktop4Burner(g2, sw - (int)(sw * 0.3) - 6, 6, (int)(sw * 0.3), d - 4);
+
+                g2.setColor(new Color(148, 163, 184));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("STUDIO KITCHENETTE", 10, sh - 8);
+
+            // ─── FORMAL 8-SEAT DINING (14'×12') ──────────────────────────
+            } else if (type.equals("set-dining-formal")) {
+                g2.setColor(new Color(30, 41, 59, 100));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Top Credenza
+                int crW = (int)(sw * 0.7);
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRoundRect((sw - crW) / 2, 4, crW, 12, 3, 3);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect((sw - crW) / 2, 4, crW, 12, 3, 3);
+
+                // Center 8-Seat Table (3 on top, 3 on bottom, 2 at ends)
+                int tW = (int)(sw * 0.65);
+                int tH = (int)(sh * 0.45);
+                int tX = (sw - tW) / 2;
+                int tY = (sh - tH) / 2 + 4;
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect(tX, tY, tW, tH, 6, 6);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect(tX, tY, tW, tH, 6, 6);
+
+                // 8 Chairs
+                int cW = tW / 4;
+                for (int i = 0; i < 3; i++) {
+                    int cx = tX + 6 + i * (tW - 12) / 3;
+                    g2.drawRect(cx, tY - 8, cW - 4, 7);
+                    g2.drawRect(cx, tY + tH + 1, cW - 4, 7);
+                }
+                g2.drawRect(tX - 8, tY + tH / 2 - 8, 7, 16);
+                g2.drawRect(tX + tW + 1, tY + tH / 2 - 8, 7, 16);
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * zoom))));
+                g2.drawString("FORMAL DINING (8-SEAT)", tX + 4, tY + tH / 2 + 3);
+
+            // ─── COMPACT 4-SEAT DINING (10'×8') ──────────────────────────
+            } else if (type.equals("set-dining-compact")) {
+                g2.setColor(new Color(30, 41, 59, 100));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                int tW = (int)(sw * 0.5);
+                int tH = (int)(sh * 0.45);
+                int tX = (sw - tW) / 2, tY = (sh - tH) / 2;
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect(tX, tY, tW, tH, 4, 4);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect(tX, tY, tW, tH, 4, 4);
+
+                // 4 Chairs (2 top, 2 bottom)
+                int cW = tW / 3;
+                for (int i = 0; i < 2; i++) {
+                    int cx = tX + 4 + i * (tW / 2);
+                    g2.drawRect(cx, tY - 8, cW, 7);
+                    g2.drawRect(cx, tY + tH + 1, cW, 7);
+                }
+                g2.setColor(new Color(148, 163, 184));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("4-SEAT DINING", tX + 4, tY + tH / 2 + 3);
+
+            // ─── ROUND FAMILY DINING (10'×10') ───────────────────────────
+            } else if (type.equals("set-dining-round")) {
+                g2.setColor(new Color(30, 41, 59, 100));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                int r = Math.min(sw, sh) / 3;
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillOval(sw / 2 - r, sh / 2 - r, r * 2, r * 2);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawOval(sw / 2 - r, sh / 2 - r, r * 2, r * 2);
+
+                // 5 Chairs around perimeter
+                for (int i = 0; i < 5; i++) {
+                    double ang = i * 2.0 * Math.PI / 5.0;
+                    int cx = (int)(sw / 2 + (r + 8) * Math.cos(ang));
+                    int cy = (int)(sh / 2 + (r + 8) * Math.sin(ang));
+                    drawBarStool(g2, cx, cy, Math.max(4, Math.min(8, (int)(6 * zoom))));
+                }
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("ROUND DINING", sw / 2 - 28, sh / 2 + 3);
+
+            // ─── DELUXE GUEST SUITE (14'×12') ────────────────────────────
+            } else if (type.equals("set-guest-deluxe")) {
+                g2.setColor(new Color(30, 41, 59, 120));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Wardrobe left
+                int wW = (int)(sw * 0.18);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRect(4, 4, wW, sh - 8);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRect(4, 4, wW, sh - 8);
+
+                // Queen Bed Center
+                int bW = (int)(sw * 0.44);
+                int bH = (int)(sh * 0.54);
+                int bX = wW + 14;
+                int bY = 10;
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect(bX, bY, bW, bH, 6, 6);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect(bX, bY, bW, bH, 6, 6);
+
+                // Luggage bench & armchair bottom
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRoundRect(sw - 36, sh - 28, 30, 22, 4, 4);
+                g2.setColor(new Color(148, 163, 184));
+                g2.drawRoundRect(sw - 36, sh - 28, 30, 22, 4, 4);
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("GUEST DELUXE", bX + 4, sh - 10);
+
+            // ─── SOFA-BED COMBO ROOM (11'×9') ────────────────────────────
+            } else if (type.equals("set-guest-sofabed")) {
+                g2.setColor(new Color(30, 41, 59, 120));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Convertible Sofa-Bed at top
+                int sbW = (int)(sw * 0.65);
+                int sbH = (int)(sh * 0.42);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect((sw - sbW) / 2, 6, sbW, sbH, 6, 6);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect((sw - sbW) / 2, 6, sbW, sbH, 6, 6);
+                g2.drawLine((sw - sbW) / 2, 6 + sbH / 2, (sw + sbW) / 2, 6 + sbH / 2);
+
+                // Desk at bottom
+                int dW = (int)(sw * 0.45);
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRoundRect(8, sh - 22, dW, 16, 3, 3);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawRoundRect(8, sh - 22, dW, 16, 3, 3);
+
+                g2.setColor(new Color(148, 163, 184));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("SOFA-BED GUEST", sw - 75, sh - 10);
+
+            // ─── COMPACT GUEST / DAYBED (10'×8') ─────────────────────────
+            } else if (type.equals("set-guest-compact")) {
+                g2.setColor(new Color(30, 41, 59, 120));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Daybed along top wall
+                int dbW = (int)(sw * 0.7);
+                int dbH = (int)(sh * 0.38);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect(6, 6, dbW, dbH, 4, 4);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect(6, 6, dbW, dbH, 4, 4);
+                g2.drawRect(8, 8, dbW - 4, 6);
+
+                // Small wardrobe on right
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRect(sw - 26, 6, 20, (int)(sh * 0.6));
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRect(sw - 26, 6, 20, (int)(sh * 0.6));
+
+                g2.setColor(new Color(148, 163, 184));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("DAYBED ROOM", 10, sh - 8);
+
+            // ─── BUNK BED + PLAY AREA (12'×10') ──────────────────────────
+            } else if (type.equals("set-kids-bunk")) {
+                g2.setColor(new Color(30, 41, 59, 120));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Bunk Bed Left
+                int bW = (int)(sw * 0.35);
+                int bH = (int)(sh * 0.65);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect(6, 6, bW, bH, 6, 6);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect(6, 6, bW, bH, 6, 6);
+                // Ladder rungs on bunk side
+                for (int l = 1; l < 5; l++) g2.drawLine(bW, 6 + l * bH / 5, bW + 6, 6 + l * bH / 5);
+
+                // Play Area Mat Center
+                int matR = Math.min(sw, sh) / 4;
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillOval(sw - matR * 2 - 12, (sh - matR * 2) / 2, matR * 2, matR * 2);
+                g2.setColor(new Color(245, 158, 11));
+                g2.drawOval(sw - matR * 2 - 12, (sh - matR * 2) / 2, matR * 2, matR * 2);
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("BUNK + PLAY", 8, sh - 8);
+
+            // ─── SINGLE KID ROOM + DESK (11'×10') ────────────────────────
+            } else if (type.equals("set-kids-single")) {
+                g2.setColor(new Color(30, 41, 59, 120));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Single Bed on left
+                int bW = (int)(sw * 0.35);
+                int bH = (int)(sh * 0.6);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect(6, 6, bW, bH, 6, 6);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect(6, 6, bW, bH, 6, 6);
+
+                // Study Desk on right
+                int dW = (int)(sw * 0.38);
+                int dH = (int)(sh * 0.25);
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRoundRect(sw - dW - 6, 6, dW, dH, 4, 4);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawRoundRect(sw - dW - 6, 6, dW, dH, 4, 4);
+                drawBarStool(g2, sw - dW / 2 - 6, 6 + dH + 8, Math.max(4, Math.min(8, (int)(6 * zoom))));
+
+                g2.setColor(new Color(148, 163, 184));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("KIDS ROOM", 10, sh - 8);
+
+            // ─── PLAY & STUDY NURSERY (12'×11') ──────────────────────────
+            } else if (type.equals("set-kids-nursery")) {
+                g2.setColor(new Color(30, 41, 59, 120));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Baby Crib / Toddler bed
+                int crW = (int)(sw * 0.36);
+                int crH = (int)(sh * 0.48);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect(6, 6, crW, crH, 6, 6);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect(6, 6, crW, crH, 6, 6);
+                // Slats
+                for (int s = 1; s < 5; s++) g2.drawLine(6 + s * crW / 5, 6, 6 + s * crW / 5, 6 + crH);
+
+                // Changing Table / Dresser right
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRoundRect(sw - 34, 6, 28, (int)(sh * 0.35), 4, 4);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawRoundRect(sw - 34, 6, 28, (int)(sh * 0.35), 4, 4);
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("NURSERY", 10, sh - 8);
+
+            // ─── EXECUTIVE CORNER OFFICE (14'×12') ───────────────────────
+            } else if (type.equals("set-study-executive")) {
+                g2.setColor(new Color(30, 41, 59, 120));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Executive L-Shaped Desk
+                int dW = (int)(sw * 0.58);
+                int dH = (int)(sh * 0.45);
+                Path2D.Double deskPath = new Path2D.Double();
+                deskPath.moveTo(6, 6);
+                deskPath.lineTo(6 + dW, 6);
+                deskPath.lineTo(6 + dW, 6 + 18);
+                deskPath.lineTo(6 + 22, 6 + 18);
+                deskPath.lineTo(6 + 22, 6 + dH);
+                deskPath.lineTo(6, 6 + dH);
+                deskPath.closePath();
+                g2.setColor(new Color(24, 33, 53));
+                g2.fill(deskPath);
+                g2.setColor(new Color(203, 213, 225));
+                g2.draw(deskPath);
+
+                // Executive Ergonomic Chair
+                drawBarStool(g2, 6 + 32, 6 + 30, Math.max(5, Math.min(9, (int)(7 * zoom))));
+
+                // Bookshelf Wall opposite
+                int bW = (int)(sw * 0.16);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRect(sw - bW - 6, 6, bW, sh - 12);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawRect(sw - bW - 6, 6, bW, sh - 12);
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * zoom))));
+                g2.drawString("EXECUTIVE OFFICE", 8, sh - 10);
+
+            // ─── DUAL WORKSTATION STUDY (12'×10') ────────────────────────
+            } else if (type.equals("set-study-dual")) {
+                g2.setColor(new Color(30, 41, 59, 120));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Long Dual Desk along top wall
+                int dH = (int)(sh * 0.28);
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRoundRect(6, 6, sw - 12, dH, 4, 4);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect(6, 6, sw - 12, dH, 4, 4);
+                g2.drawLine(sw / 2, 6, sw / 2, 6 + dH);
+
+                // Dual Monitors & Chairs
+                drawBarStool(g2, sw / 4, 6 + dH + 10, Math.max(5, (int)(6 * zoom)));
+                drawBarStool(g2, 3 * sw / 4, 6 + dH + 10, Math.max(5, (int)(6 * zoom)));
+
+                // Bookcase bottom wall
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRect((sw - (int)(sw * 0.6)) / 2, sh - 16, (int)(sw * 0.6), 12);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawRect((sw - (int)(sw * 0.6)) / 2, sh - 16, (int)(sw * 0.6), 12);
+
+                g2.setColor(new Color(148, 163, 184));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("DUAL STUDY ROOM", 8, sh - 6);
+
+            // ─── LIBRARY / READING ROOM (12'×10') ────────────────────────
+            } else if (type.equals("set-study-library")) {
+                g2.setColor(new Color(30, 41, 59, 120));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Surrounding Bookcases (Top, Left, Right)
+                int bD = (int)(sw * 0.14);
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRect(6, 6, sw - 12, bD);
+                g2.fillRect(6, 6, bD, sh - 12);
+                g2.fillRect(sw - bD - 6, 6, bD, sh - 12);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRect(6, 6, sw - 12, bD);
+                g2.drawRect(6, 6, bD, sh - 12);
+                g2.drawRect(sw - bD - 6, 6, bD, sh - 12);
+
+                // Center Reading Armchair + Small Round Table
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect((sw - 30) / 2, (sh - 26) / 2, 30, 26, 6, 6);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawRoundRect((sw - 30) / 2, (sh - 26) / 2, 30, 26, 6, 6);
+
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("LIBRARY ROOM", sw / 2 - 28, sh - 8);
+
+            // ─── COMPACT HOME DESK STUDY (9'×8') ─────────────────────────
+            } else if (type.equals("set-study-compact")) {
+                g2.setColor(new Color(30, 41, 59, 120));
+                g2.fillRoundRect(0, 0, sw, sh, 4, 4);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.drawRoundRect(0, 0, sw, sh, 4, 4);
+
+                int dW = (int)(sw * 0.65);
+                int dH = (int)(sh * 0.35);
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRoundRect((sw - dW) / 2, 6, dW, dH, 4, 4);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect((sw - dW) / 2, 6, dW, dH, 4, 4);
+                drawBarStool(g2, sw / 2, 6 + dH + 10, Math.max(4, Math.min(8, (int)(6 * zoom))));
+
+                g2.setColor(new Color(148, 163, 184));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("HOME OFFICE", 8, sh - 8);
+
+            // ─── LONG LINEAR BATH (10'×5') ───────────────────────────────
+            } else if (type.equals("set-bath-linear")) {
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillRoundRect(0, 0, sw, sh, 4, 4);
+                g2.setColor(new Color(56, 189, 248, 120));
+                g2.drawRoundRect(0, 0, sw, sh, 4, 4);
+
+                // Left: Shower stall (5'x3')
+                int shW = (int)(sw * 0.3);
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRect(4, 4, shW, sh - 8);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawRect(4, 4, shW, sh - 8);
+                g2.drawOval(4 + shW / 2 - 4, sh / 2 - 4, 8, 8);
+
+                // Center: Toilet WC
+                int wcW = (int)(sw * 0.22);
+                int wcX = shW + (int)(sw * 0.08);
+                g2.setColor(new Color(226, 232, 240));
+                g2.fillRoundRect(wcX, 4, wcW, (int)(sh * 0.3), 3, 3);
+                g2.fillOval(wcX, 4 + (int)(sh * 0.2), wcW, (int)(sh * 0.5));
+                g2.setColor(new Color(100, 116, 139));
+                g2.drawRoundRect(wcX, 4, wcW, (int)(sh * 0.3), 3, 3);
+                g2.drawOval(wcX, 4 + (int)(sh * 0.2), wcW, (int)(sh * 0.5));
+
+                // Right: Vanity basin
+                int vW = (int)(sw * 0.3);
+                int vX = sw - vW - 4;
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect(vX, 4, vW, (int)(sh * 0.6), 4, 4);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect(vX, 4, vW, (int)(sh * 0.6), 4, 4);
+                g2.setColor(new Color(241, 245, 249));
+                g2.fillOval(vX + 4, 8, vW - 8, (int)(sh * 0.45));
+
+                g2.setColor(new Color(148, 163, 184));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(7, (int)(8 * zoom))));
+                g2.drawString("LINEAR BATH (10'×5')", 8, sh - 4);
+
+            // ─── CORNER SHOWER BATH (7'×6') ──────────────────────────────
+            } else if (type.equals("set-bath-corner")) {
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillRoundRect(0, 0, sw, sh, 4, 4);
+                g2.setColor(new Color(56, 189, 248, 120));
+                g2.drawRoundRect(0, 0, sw, sh, 4, 4);
+
+                // Top-Left: Neo-angle Corner Shower
+                int csR = (int)(sw * 0.45);
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRect(4, 4, csR, csR);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawRect(4, 4, csR, csR);
+                g2.drawArc(4, 4, csR * 2, csR * 2, 180, 90);
+
+                // Top-Right: Toilet WC
+                int wcW = (int)(sw * 0.35);
+                int wcX = sw - wcW - 6;
+                g2.setColor(new Color(226, 232, 240));
+                g2.fillRoundRect(wcX, 4, wcW, (int)(sh * 0.25), 3, 3);
+                g2.fillOval(wcX, 4 + (int)(sh * 0.2), wcW, (int)(sh * 0.45));
+                g2.setColor(new Color(100, 116, 139));
+                g2.drawOval(wcX, 4 + (int)(sh * 0.2), wcW, (int)(sh * 0.45));
+
+                // Bottom: Vanity Sink
+                int vW = (int)(sw * 0.5);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect((sw - vW) / 2, sh - (int)(sh * 0.35) - 4, vW, (int)(sh * 0.35), 4, 4);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect((sw - vW) / 2, sh - (int)(sh * 0.35) - 4, vW, (int)(sh * 0.35), 4, 4);
+
+                g2.setColor(new Color(148, 163, 184));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(7, (int)(8 * zoom))));
+                g2.drawString("CORNER BATH", 6, sh - 4);
             }
         }
 
@@ -12382,7 +13334,8 @@ public class HousePlanCADApp extends JFrame {
 
         // ─── FULL ROOM SETS (AutoCAD 2D Architectural Layouts) ───
         } else if (type.equals("set-bedroom-master") || type.equals("set-bedroom-double")
-                || type.equals("set-bedroom-compact") || type.equals("set-bedroom-twin")) {
+                || type.equals("set-bedroom-compact") || type.equals("set-bedroom-twin")
+                || type.equals("set-bedroom-grand") || type.equals("set-bedroom-square")) {
             g2.setColor(primaryCol);
             g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
             g2.drawRoundRect(0, 0, sw, sh, 6, 6);
@@ -12390,7 +13343,7 @@ public class HousePlanCADApp extends JFrame {
             int wardH = Math.max(14, (int)(sh * 0.18));
             g2.setColor(Color.WHITE); g2.fillRect(4, 4, sw - 8, wardH);
             g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(4, 4, sw - 8, wardH);
-            int doors = type.equals("set-bedroom-master") ? 6 : 4;
+            int doors = type.equals("set-bedroom-master") || type.equals("set-bedroom-grand") ? 6 : 4;
             g2.setStroke(new BasicStroke(sHair));
             for (int d = 1; d < doors; d++) g2.drawLine(4 + d * (sw - 8) / doors, 4, 4 + d * (sw - 8) / doors, 4 + wardH);
             g2.drawLine(4, 4, sw - 4, 4 + wardH);
@@ -12423,7 +13376,7 @@ public class HousePlanCADApp extends JFrame {
             g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * scale))));
             g2.drawString(el.name.toUpperCase(), bedX + 4, sh - 8);
 
-        } else if (type.equals("set-bath-master")) {
+        } else if (type.equals("set-bath-master") || type.equals("set-bath-linear") || type.equals("set-bath-corner")) {
             g2.setColor(primaryCol);
             g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
             g2.drawRoundRect(0, 0, sw, sh, 6, 6);
@@ -12450,6 +13403,21 @@ public class HousePlanCADApp extends JFrame {
             g2.setColor(Color.WHITE); g2.fillRect(tx, ty, toiletW, toiletH / 3);
             g2.setColor(sanCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(tx, ty, toiletW, toiletH / 3);
             g2.drawOval(tx + 2, ty + toiletH / 3, toiletW - 4, 2 * toiletH / 3);
+
+        } else if (type.startsWith("set-")) {
+            g2.setColor(furnCol);
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
+            g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+            g2.setColor(new Color(primaryCol.getRed(), primaryCol.getGreen(), primaryCol.getBlue(), 20));
+            g2.fillRoundRect(1, 1, sw - 2, sh - 2, 6, 6);
+            g2.setColor(primaryCol);
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(9, (int)(9 * scale))));
+            FontMetrics fm = g2.getFontMetrics();
+            g2.drawString(el.name, Math.max(6, (sw - fm.stringWidth(el.name)) / 2), Math.max(14, sh / 2));
+            String dimStr = String.format("%.1f' x %.1f'", el.w / 12.0, el.h / 12.0);
+            FontMetrics dfm = g2.getFontMetrics();
+            g2.setFont(new Font("Consolas", Font.PLAIN, Math.max(7, (int)(8 * scale))));
+            g2.drawString(dimStr, Math.max(6, (sw - dfm.stringWidth(dimStr)) / 2), Math.max(14, sh / 2) + 14);
 
         // ─── GENERIC FALLBACK ───
         } else {
