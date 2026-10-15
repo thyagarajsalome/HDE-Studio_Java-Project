@@ -1,0 +1,119 @@
+name: Build Multi-Platform Installers (Windows, macOS, Linux)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ${{ matrix.os-name }} Installer
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            os-name: Windows
+            ext: exe
+          - os: macos-latest
+            os-name: macOS
+            ext: dmg
+          - os: ubuntu-latest
+            os-name: Linux
+            ext: deb
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Compile Java Application
+        run: |
+          javac -encoding UTF-8 -d bin HousePlanCADApp.java
+          cp -r assets bin/ || true
+          jar cvfe dist/HDE-Studio.jar HousePlanCADApp -C bin .
+        shell: bash
+
+      # --- WINDOWS PACKAGING ---
+      - name: Build Windows Installer (jpackage)
+        if: matrix.os == 'windows-latest'
+        run: |
+          jpackage --type exe \
+            --name "HDE-Studio" \
+            --app-version "2.1.0" \
+            --vendor "HDE Studio CAD Technologies" \
+            --description "HDE Studio Architectural CAD Software" \
+            --icon "hde_studio.ico" \
+            --input dist/ \
+            --main-jar HDE-Studio.jar \
+            --main-class HousePlanCADApp \
+            --win-shortcut \
+            --win-menu \
+            --win-dir-chooser \
+            --dest output/
+        shell: bash
+
+      # --- MACOS PACKAGING ---
+      - name: Build macOS DMG Installer (jpackage)
+        if: matrix.os == 'macos-latest'
+        run: |
+          # Convert icon if icns exists or package standard dmg
+          jpackage --type dmg \
+            --name "HDE-Studio" \
+            --app-version "2.1.0" \
+            --vendor "HDE Studio CAD Technologies" \
+            --description "HDE Studio Architectural CAD Software" \
+            --input dist/ \
+            --main-jar HDE-Studio.jar \
+            --main-class HousePlanCADApp \
+            --mac-package-name "HDE Studio" \
+            --dest output/
+        shell: bash
+
+      # --- LINUX PACKAGING ---
+      - name: Build Linux DEB & Tarball (jpackage)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update && sudo apt-get install -y fakeroot
+          jpackage --type deb \
+            --name "hde-studio" \
+            --app-version "2.1.0" \
+            --vendor "HDE Studio CAD Technologies" \
+            --description "HDE Studio Architectural CAD Software" \
+            --icon "hde_studio.png" \
+            --input dist/ \
+            --main-jar HDE-Studio.jar \
+            --main-class HousePlanCADApp \
+            --linux-shortcut \
+            --linux-menu-group "Graphics;Engineering;" \
+            --dest output/
+          
+          # Also package portable tar.gz
+          mkdir -p output/hde-studio-linux-portable
+          cp dist/HDE-Studio.jar output/hde-studio-linux-portable/
+          cp -r assets output/hde-studio-linux-portable/ || true
+          echo -e '#!/usr/bin/env bash\nDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\njava -jar "$DIR/HDE-Studio.jar" "$@"' > output/hde-studio-linux-portable/hde-studio.sh
+          chmod +x output/hde-studio-linux-portable/hde-studio.sh
+          tar -czvf output/HDE-Studio-v2.1-Linux-Portable.tar.gz -C output hde-studio-linux-portable
+        shell: bash
+
+      - name: Upload Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HDE-Studio-${{ matrix.os-name }}-Installer
+          path: output/*.*
+
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: output/*.*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
