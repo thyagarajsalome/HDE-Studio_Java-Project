@@ -11,3 +11,11 @@ cadstudio/
 *.log
 Thumbs.db
 Desktop.ini
+
+# Build and Distribution Artifacts (kept locally)
+dist/
+Output/
+jpackage_input/
+installer_build/
+*.zip
+*.vbs
