@@ -37,14 +37,14 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
 
 [Files]
-; Standalone Windows launcher bat converted to exe / jar payload
-Source: "D:\java-project\installer_build\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Standalone Windows application with embedded private runtime
+Source: "D:\java-project\dist\HDE-Studio\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "D:\java-project\assets\branding\hde_studio.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "javaw.exe"; Parameters: "-Xms256m -Xmx2048m -jar ""{app}\HDE-Studio.jar"""; WorkingDir: "{app}"; IconFilename: "{app}\hde_studio.ico"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\hde_studio.ico"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "javaw.exe"; Parameters: "-Xms256m -Xmx2048m -jar ""{app}\HDE-Studio.jar"""; WorkingDir: "{app}"; IconFilename: "{app}\hde_studio.ico"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\hde_studio.ico"; Tasks: desktopicon
 
 [Run]
-Filename: "javaw.exe"; Parameters: "-Xms256m -Xmx2048m -jar ""{app}\HDE-Studio.jar"""; WorkingDir: "{app}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent

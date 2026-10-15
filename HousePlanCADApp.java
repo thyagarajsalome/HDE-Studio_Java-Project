@@ -271,15 +271,15 @@ public class HousePlanCADApp extends JFrame {
     // --- Application State ---
     public enum ToolMode { SELECT, DRAW_WALL, ROOM_BOX, FLOOR_ZONE, HATCH_POLYGON, MEASURE, SECTION_LINE, PAN }
 
-    // --- 8-Stage Architectural Workflow ---
+    // --- 7-Stage Architectural Workflow ---
     public enum ProjectStage {
-        STAGE_1_WALLS("1. Walls & Structure", "Ext/Int Walls, Columns, Openings", "DOORS"),
+        STAGE_1_WALLS("1. Walls", "Ext/Int Walls, Columns, Openings", "DOORS"),
         STAGE_2_FURNITURE("2. Furniture", "Beds, Sofas, Dining, Living", "LIVING"),
-        STAGE_3_ELECTRICAL("3. Electrical / Lighting", "Fans, Lights, Switches, AC", "ELEC"),
-        STAGE_4_PLUMBING("4. Plumbing / Bath", "WC, Basins, Showers, Kitchen", "BATH"),
-        STAGE_5_FLOORING("5. Flooring / Tiles", "Tile Patterns & Hatch Zones", "FLOORING"),
-        STAGE_6_EXTERIOR("6. Exterior & Landscape", "Roads, Trees, Vehicles, Garden", "SITE_EXT"),
-        STAGE_7_DIMENSIONS("7. Dimensions & Tags", "Dimensions, Room Tags, North", "TAGS_DIMS");
+        STAGE_3_ELECTRICAL("3. Electrical", "Fans, Lights, Switches, AC", "ELEC"),
+        STAGE_4_PLUMBING("4. Plumbing", "WC, Basins, Showers, Kitchen", "BATH"),
+        STAGE_5_FLOORING("5. Flooring", "Tile Patterns & Hatch Zones", "FLOORING"),
+        STAGE_6_EXTERIOR("6. Exterior", "Roads, Trees, Vehicles, Garden", "SITE_EXT"),
+        STAGE_7_DIMENSIONS("7. Dimensions", "Dimensions, Room Tags, North", "TAGS_DIMS");
 
         public final String title;
         public final String desc;
@@ -303,7 +303,7 @@ public class HousePlanCADApp extends JFrame {
 
     public enum RegionProfile {
         INDIA("India", "India", "Vastu & Brickwork (9\" / 4.5\" Walls)"),
-        USA_INTERNATIONAL("USA & International", "USA & Int'l", "US IRC & Wood Framing (2x6 / 2x4 Walls)");
+        USA_INTERNATIONAL("USA & International", "USA", "US IRC & Wood Framing (2x6 / 2x4 Walls)");
 
         private final String displayName;
         private final String shortBadge;
@@ -556,9 +556,25 @@ public class HousePlanCADApp extends JFrame {
                 java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(HousePlanCADApp.class);
                 prefs.put(PREF_LICENSE_EMAIL, email.trim());
                 prefs.put(PREF_LICENSE_KEY, cleanKey);
-                String plan = cleanKey.contains("USA") ? "USA & International Edition" :
-                              (cleanKey.contains("IND") ? "India Standard Edition" : "Enterprise Commercial License");
+                String plan;
+                if (cleanKey.contains("GLOBAL") || cleanKey.contains("PRO") || cleanKey.contains("ENT") || cleanKey.contains("ALL")) {
+                    plan = "All-Access Global Pro Edition (India + USA)";
+                } else if (cleanKey.contains("USA")) {
+                    plan = "USA & International Edition";
+                } else if (cleanKey.contains("IND")) {
+                    plan = "India Standard Edition";
+                } else {
+                    plan = "HDE Studio Commercial License";
+                }
                 prefs.put(PREF_LICENSE_PLAN, plan);
+
+                // Auto-configure initial region based on license plan
+                if (cleanKey.contains("USA") && !cleanKey.contains("IND")) {
+                    prefs.put("hde_region_profile", RegionProfile.USA_INTERNATIONAL.name());
+                } else if (cleanKey.contains("IND") && !cleanKey.contains("USA")) {
+                    prefs.put("hde_region_profile", RegionProfile.INDIA.name());
+                }
+
                 // Compute local security token combining key and machine fingerprint
                 String tokenRaw = cleanKey + "#" + getMachineFingerprint();
                 java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
@@ -625,13 +641,16 @@ public class HousePlanCADApp extends JFrame {
         }
         enableDarkWindowTitle();
         checkAutoSaveRecoveryOnStartup();
+        if (!LicenseManager.isActivated()) {
+            boolean ok = showStartupActivationDialog();
+            if (!ok || !LicenseManager.isActivated()) {
+                System.exit(0);
+                return;
+            }
+        }
         if (isFirstRun()) {
             SwingUtilities.invokeLater(() -> {
-                if (!LicenseManager.isActivated()) {
-                    showActivationDialog(true);
-                } else {
-                    showRegionSelectorDialog(true);
-                }
+                showRegionSelectorDialog(true);
             });
         }
     }
@@ -711,9 +730,9 @@ public class HousePlanCADApp extends JFrame {
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(new Color(15, 23, 42));
         header.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(30, 41, 59)));
-        header.setPreferredSize(new Dimension(1000, 44));
+        header.setPreferredSize(new Dimension(1000, 42));
 
-        JPanel brandPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6));
+        JPanel brandPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
         brandPanel.setOpaque(false);
 
         // Official HDE Studio Standard Logo Icon Badge
@@ -726,7 +745,7 @@ public class HousePlanCADApp extends JFrame {
             if (f.exists()) {
                 BufferedImage b = ImageIO.read(f);
                 if (b != null) {
-                    Image scaled = b.getScaledInstance(26, 26, Image.SCALE_SMOOTH);
+                    Image scaled = b.getScaledInstance(24, 24, Image.SCALE_SMOOTH);
                     logoIconLbl.setIcon(new ImageIcon(scaled));
                     logoIconLbl.setBorder(new EmptyBorder(0, 2, 0, 2));
                 }
@@ -737,68 +756,89 @@ public class HousePlanCADApp extends JFrame {
         JLabel titleLbl = new JLabel("HDE Studio");
         titleLbl.setFont(new Font("Segoe UI", Font.BOLD, 15));
         titleLbl.setForeground(Color.WHITE);
-        JLabel tagLbl = new JLabel(" ARCHITECTURAL CAD ");
+        JLabel tagLbl = new JLabel(" CAD ");
         tagLbl.setFont(new Font("Consolas", Font.BOLD, 10));
         tagLbl.setForeground(new Color(56, 189, 248));
         tagLbl.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new Color(56, 189, 248, 140), 1, true),
-                BorderFactory.createEmptyBorder(2, 6, 2, 6)));
+                BorderFactory.createEmptyBorder(1, 5, 1, 5)));
         brandPanel.add(titleLbl); brandPanel.add(tagLbl);
 
         // Active Project Info & Dirty Indicator in Header
         headerProjectTitleLbl = new JLabel(activeProjectName);
-        headerProjectTitleLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        headerProjectTitleLbl.setFont(new Font("Segoe UI", Font.BOLD, 11));
         headerProjectTitleLbl.setForeground(new Color(226, 232, 240));
         headerProjectTitleLbl.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true),
-                BorderFactory.createEmptyBorder(2, 8, 2, 8)));
+                BorderFactory.createEmptyBorder(2, 6, 2, 6)));
         headerDirtyIndicator = new JLabel("●");
         headerDirtyIndicator.setFont(new Font("Segoe UI", Font.BOLD, 10));
         headerDirtyIndicator.setForeground(new Color(100, 116, 139));
         headerDirtyIndicator.setToolTipText("Project Saved");
-        brandPanel.add(Box.createHorizontalStrut(6));
+        brandPanel.add(Box.createHorizontalStrut(4));
         brandPanel.add(headerProjectTitleLbl);
         brandPanel.add(headerDirtyIndicator);
-
-        brandPanel.add(Box.createHorizontalStrut(8));
-        regionSwitcherBtn = new ModernButton(currentRegion.getShortBadge(), new Color(24, 33, 53), new Color(56, 189, 248), new Color(14, 116, 144));
-        regionSwitcherBtn.setFont(new Font("Segoe UI", Font.BOLD, 11));
-        regionSwitcherBtn.setIcon(currentRegion.getFlagIcon(18, 12));
-        regionSwitcherBtn.setToolTipText("Active Building Standard: " + currentRegion.getDisplayName() + " (Click to switch standards)");
-        regionSwitcherBtn.setPreferredSize(new Dimension(125, 26));
-        regionSwitcherBtn.addActionListener(e -> showRegionSelectorDialog(false));
-        brandPanel.add(regionSwitcherBtn);
         header.add(brandPanel, BorderLayout.WEST);
 
-        JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 7));
+        JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 6));
         actionPanel.setOpaque(false);
+
+        regionSwitcherBtn = new ModernButton(currentRegion.getShortBadge(), new Color(24, 33, 53), new Color(56, 189, 248), new Color(14, 116, 144));
+        regionSwitcherBtn.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        regionSwitcherBtn.setIcon(currentRegion.getFlagIcon(16, 11));
+        regionSwitcherBtn.setToolTipText("Active Building Standard: " + currentRegion.getDisplayName() + " (Click to switch standards)");
+        regionSwitcherBtn.setPreferredSize(new Dimension(82, 26));
+        regionSwitcherBtn.addActionListener(e -> showRegionSelectorDialog(false));
+        actionPanel.add(regionSwitcherBtn);
+
+        actionPanel.add(new JSeparator(JSeparator.VERTICAL));
 
         // File Actions: New, Open, Save, Save As
         ModernButton newProjBtn = new ModernButton("+ New", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
+        newProjBtn.setFont(new Font("Segoe UI", Font.BOLD, 11));
         newProjBtn.setToolTipText("New Drawing (Ctrl+N)");
         newProjBtn.addActionListener(e -> newDrawingWithPrompt());
 
-        ModernButton openFileBtn = new ModernButton("📂 Open", new Color(30, 41, 59), new Color(56, 189, 248), new Color(56, 189, 248, 160));
+        ModernButton openFileBtn = new ModernButton("Open", new Color(30, 41, 59), new Color(56, 189, 248), new Color(56, 189, 248, 160));
+        openFileBtn.setFont(new Font("Segoe UI", Font.BOLD, 11));
         openFileBtn.setToolTipText("Open Drawing File (.hde) (Ctrl+O)");
         openFileBtn.addActionListener(e -> showOpenFileDialog());
 
         ModernButton saveBtn = new ModernButton("💾 Save", new Color(14, 116, 144), Color.WHITE, new Color(56, 189, 248));
+        saveBtn.setFont(new Font("Segoe UI", Font.BOLD, 11));
         saveBtn.setToolTipText("Quick Save Drawing (Ctrl+S)");
         saveBtn.addActionListener(e -> saveCurrentFile(false));
 
-        ModernButton saveAsBtn = new ModernButton("Save As...", new Color(24, 33, 53), new Color(203, 213, 225), new Color(51, 65, 85));
+        ModernButton saveAsBtn = new ModernButton("Save As", new Color(24, 33, 53), new Color(203, 213, 225), new Color(51, 65, 85));
+        saveAsBtn.setFont(new Font("Segoe UI", Font.BOLD, 11));
         saveAsBtn.setToolTipText("Save Drawing to a new file or folder (Ctrl+Shift+S)");
         saveAsBtn.addActionListener(e -> saveCurrentFile(true));
 
+        actionPanel.add(newProjBtn);
+        actionPanel.add(openFileBtn);
+        actionPanel.add(saveBtn);
+        actionPanel.add(saveAsBtn);
+        actionPanel.add(new JSeparator(JSeparator.VERTICAL));
+
         // Undo/Redo buttons
-        undoBtn = new ModernButton("↶ Undo", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
+        undoBtn = new ModernButton("↶", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
+        undoBtn.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        undoBtn.setPreferredSize(new Dimension(28, 26));
         undoBtn.setToolTipText("Undo (Ctrl+Z)");
         undoBtn.addActionListener(e -> undo());
-        redoBtn = new ModernButton("↷ Redo", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
+
+        redoBtn = new ModernButton("↷", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
+        redoBtn.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        redoBtn.setPreferredSize(new Dimension(28, 26));
         redoBtn.setToolTipText("Redo (Ctrl+Y)");
         redoBtn.addActionListener(e -> redo());
 
+        actionPanel.add(undoBtn);
+        actionPanel.add(redoBtn);
+        actionPanel.add(new JSeparator(JSeparator.VERTICAL));
+
         presetsCombo = new JComboBox<>();
+        presetsCombo.setPreferredSize(new Dimension(120, 26));
         updatePresetsComboItems();
         styleComboBox(presetsCombo);
         presetsCombo.addActionListener(e -> {
@@ -813,31 +853,33 @@ public class HousePlanCADApp extends JFrame {
                 else if (idx == 3) loadPresetUSACottage();
             }
         });
+        actionPanel.add(presetsCombo);
 
-        ModernButton learnBtn = new ModernButton("📖 Learn", new Color(30, 41, 59), new Color(147, 197, 253), new Color(59, 130, 246));
-        learnBtn.setToolTipText("Learn HDE Studio: Step-by-Step Interactive Tutorials & Shortcuts (F1)");
-        learnBtn.addActionListener(e -> showLearnStudioDialog());
-
-        ModernButton exportBtn = new ModernButton("Export PDF...", new Color(2, 132, 199), Color.WHITE, new Color(56, 189, 248));
+        ModernButton exportBtn = new ModernButton("PDF", new Color(2, 132, 199), Color.WHITE, new Color(56, 189, 248));
+        exportBtn.setFont(new Font("Segoe UI", Font.BOLD, 11));
         exportBtn.setToolTipText("Export architectural drawing as A4 or A3 PDF");
         exportBtn.addActionListener(e -> showExportDialog());
-        ModernButton clearBtn = new ModernButton("Clear All", new Color(127, 29, 29), new Color(254, 205, 211), new Color(244, 63, 94));
+
         ModernButton licenseBtn = new ModernButton("🔑 License", new Color(24, 33, 53), new Color(52, 211, 153), new Color(16, 185, 129));
+        licenseBtn.setFont(new Font("Segoe UI", Font.BOLD, 11));
         licenseBtn.setToolTipText("HDE Studio Commercial License Status & Device Activation");
         licenseBtn.addActionListener(e -> showActivationDialog(false));
 
-        actionPanel.add(newProjBtn);
-        actionPanel.add(openFileBtn);
-        actionPanel.add(saveBtn);
-        actionPanel.add(saveAsBtn);
-        actionPanel.add(new JSeparator(JSeparator.VERTICAL));
-        actionPanel.add(undoBtn); actionPanel.add(redoBtn);
-        actionPanel.add(new JSeparator(JSeparator.VERTICAL));
-        actionPanel.add(presetsCombo);
+        ModernButton learnBtn = new ModernButton("Learn", new Color(30, 41, 59), new Color(147, 197, 253), new Color(59, 130, 246));
+        learnBtn.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        learnBtn.setToolTipText("Learn HDE Studio: Step-by-Step Interactive Tutorials & Shortcuts (F1)");
+        learnBtn.addActionListener(e -> showLearnStudioDialog());
+
+        ModernButton clearBtn = new ModernButton("Clear", new Color(127, 29, 29), new Color(254, 205, 211), new Color(244, 63, 94));
+        clearBtn.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        clearBtn.setToolTipText("Clear all drawings with prompt");
+        clearBtn.addActionListener(e -> newDrawingWithPrompt());
+
+        actionPanel.add(exportBtn);
         actionPanel.add(licenseBtn);
         actionPanel.add(learnBtn);
-        actionPanel.add(exportBtn);
         actionPanel.add(clearBtn);
+
         header.add(actionPanel, BorderLayout.EAST);
         return header;
     }
@@ -846,25 +888,26 @@ public class HousePlanCADApp extends JFrame {
         JPanel toolbar = new JPanel(new BorderLayout());
         toolbar.setBackground(new Color(17, 24, 39));
         toolbar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(31, 41, 55)));
-        toolbar.setPreferredSize(new Dimension(1000, 38));
+        toolbar.setPreferredSize(new Dimension(1000, 36));
 
-        JPanel toolsGroup = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 4));
+        JPanel toolsGroup = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 3));
         toolsGroup.setOpaque(false);
 
         toolButtonGroup = new ButtonGroup();
         ModernToggle selectBtn = createToolToggle("Select [S]", ToolMode.SELECT, toolButtonGroup, true);
-        ModernToggle wallBtn = createToolToggle("Draw Wall [W]", ToolMode.DRAW_WALL, toolButtonGroup, false);
-        ModernToggle roomBtn = createToolToggle("Room Box", ToolMode.ROOM_BOX, toolButtonGroup, false);
-        ModernToggle floorBtn = createToolToggle("Floor / Tiles [T]", ToolMode.FLOOR_ZONE, toolButtonGroup, false);
+        ModernToggle wallBtn = createToolToggle("Wall [W]", ToolMode.DRAW_WALL, toolButtonGroup, false);
+        ModernToggle roomBtn = createToolToggle("Room", ToolMode.ROOM_BOX, toolButtonGroup, false);
+        ModernToggle floorBtn = createToolToggle("Floor [T]", ToolMode.FLOOR_ZONE, toolButtonGroup, false);
         floorBtn.setToolTipText("Drag rectangle across any room to apply floor finishes or tile hatching");
-        ModernToggle hatchBtn = createToolToggle("Hatch Perimeter [P]", ToolMode.HATCH_POLYGON, toolButtonGroup, false);
+        ModernToggle hatchBtn = createToolToggle("Hatch [P]", ToolMode.HATCH_POLYGON, toolButtonGroup, false);
         hatchBtn.setToolTipText("HDE Studio Hatches: Click perimeter corners around any room to fill with active hatch/tile pattern");
-        ModernToggle dimBtn = createToolToggle("Dimension", ToolMode.MEASURE, toolButtonGroup, false);
+        ModernToggle dimBtn = createToolToggle("Dim", ToolMode.MEASURE, toolButtonGroup, false);
         dimBtn.setToolTipText("Point-to-Point Linear Dimension: Click Point 1, Click Point 2, drag mouse for offset");
 
         ModernToggle panBtn = createToolToggle("Pan [H]", ToolMode.PAN, toolButtonGroup, false);
 
         wallThickCombo = new JComboBox<>();
+        wallThickCombo.setPreferredSize(new Dimension(95, 26));
         updateWallThickComboItems();
         styleComboBox(wallThickCombo);
         wallThickCombo.addActionListener(e -> {
@@ -878,7 +921,8 @@ public class HousePlanCADApp extends JFrame {
             }
         });
 
-        JComboBox<String> wallHatchCombo = new JComboBox<>(new String[]{"45° Brick Hatch", "Solid Black Poché", "Hollow Wall"});
+        JComboBox<String> wallHatchCombo = new JComboBox<>(new String[]{"Brick", "Poché", "Hollow"});
+        wallHatchCombo.setPreferredSize(new Dimension(82, 26));
         styleComboBox(wallHatchCombo);
         wallHatchCombo.setToolTipText("Select architectural wall hatch pattern (ANSI31 masonry vs solid poché)");
         wallHatchCombo.addActionListener(e -> {
@@ -887,15 +931,15 @@ public class HousePlanCADApp extends JFrame {
             viewportPanel.repaint();
         });
 
-        ModernButton autoJoinBtn = new ModernButton("Auto-Join", new Color(24, 33, 53), new Color(56, 189, 248), new Color(14, 116, 144));
+        ModernButton autoJoinBtn = new ModernButton("Join", new Color(24, 33, 53), new Color(56, 189, 248), new Color(14, 116, 144));
         autoJoinBtn.setToolTipText("Automatically weld all wall corners and T-junctions");
         autoJoinBtn.addActionListener(e -> { saveUndoState(); autoJoinAllWalls(); });
 
-        ModernButton roomBuilderBtn = new ModernButton("⊞ Room Builder", new Color(30, 41, 59), new Color(52, 211, 153), new Color(16, 185, 129));
+        ModernButton roomBuilderBtn = new ModernButton("⊞ Builder", new Color(30, 41, 59), new Color(52, 211, 153), new Color(16, 185, 129));
         roomBuilderBtn.setToolTipText("Parametric Room Generator: Generate room walls, openings, tags, and dimensions (Ctrl+Shift+R)");
         roomBuilderBtn.addActionListener(e -> showParametricRoomDialog());
 
-        ModernButton columnGridBtn = new ModernButton("▦ Column Grid", new Color(30, 41, 59), new Color(251, 191, 36), new Color(245, 158, 11));
+        ModernButton columnGridBtn = new ModernButton("▦ Columns", new Color(30, 41, 59), new Color(251, 191, 36), new Color(245, 158, 11));
         columnGridBtn.setToolTipText("Structural Column Grid Generator: Auto-place RCC columns at wall corners and spans (Ctrl+Shift+G)");
         columnGridBtn.addActionListener(e -> showStructuralGridDialog());
 
@@ -991,25 +1035,25 @@ public class HousePlanCADApp extends JFrame {
         });
     }
 
-    // --- 8-Stage Step-by-Step Architectural Workflow Stepper Bar ---
+    // --- 7-Stage Step-by-Step Architectural Workflow Stepper Bar ---
 
     private JPanel createWorkflowStepperBar() {
         JPanel bar = new JPanel(new BorderLayout());
         bar.setBackground(new Color(11, 17, 32));
         bar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(30, 41, 59)));
-        bar.setPreferredSize(new Dimension(1000, 36));
+        bar.setPreferredSize(new Dimension(1000, 34));
 
         // Left Label
-        JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+        JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
         leftPanel.setOpaque(false);
-        JLabel wfBadge = new JLabel("WORKFLOW STAGE:");
+        JLabel wfBadge = new JLabel("STAGE:");
         wfBadge.setFont(new Font("Consolas", Font.BOLD, 10));
         wfBadge.setForeground(new Color(148, 163, 184));
         leftPanel.add(wfBadge);
         bar.add(leftPanel, BorderLayout.WEST);
 
-        // Center 8 Stage Buttons
-        JPanel stagesPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 3, 3));
+        // Center 7 Stage Buttons
+        JPanel stagesPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 3, 2));
         stagesPanel.setOpaque(false);
 
         for (ProjectStage s : ProjectStage.values()) {
@@ -1027,10 +1071,10 @@ public class HousePlanCADApp extends JFrame {
         bar.add(stagesPanel, BorderLayout.CENTER);
 
         // Right Controls: Freeze/Lock Toggle, Prev/Next Navigation
-        JPanel rightControls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 3));
+        JPanel rightControls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 2));
         rightControls.setOpaque(false);
 
-        stageFreezeBtn = new ModernButton("🔓 Unlock Layer", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
+        stageFreezeBtn = new ModernButton("🔓 Lock", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
         stageFreezeBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
         stageFreezeBtn.setToolTipText("Freeze / Lock all objects created in this stage to prevent accidental movement");
         stageFreezeBtn.addActionListener(e -> {
@@ -1040,16 +1084,17 @@ public class HousePlanCADApp extends JFrame {
             viewportPanel.repaint();
         });
 
-        ModernButton prevBtn = new ModernButton("◀ Prev", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
+        ModernButton prevBtn = new ModernButton("◀", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
         prevBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        prevBtn.setToolTipText("Previous Stage");
         prevBtn.addActionListener(e -> navigateStage(-1));
 
-        ModernButton nextBtn = new ModernButton("Next Stage ▶", new Color(13, 148, 136), Color.WHITE, new Color(45, 212, 191));
+        ModernButton nextBtn = new ModernButton("Next ▶", new Color(13, 148, 136), Color.WHITE, new Color(45, 212, 191));
         nextBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        nextBtn.setToolTipText("Next Stage");
         nextBtn.addActionListener(e -> navigateStage(1));
 
         rightControls.add(stageFreezeBtn);
-        rightControls.add(new JSeparator(JSeparator.VERTICAL));
         rightControls.add(prevBtn);
         rightControls.add(nextBtn);
         bar.add(rightControls, BorderLayout.EAST);
@@ -1122,17 +1167,17 @@ public class HousePlanCADApp extends JFrame {
         if (stageFreezeBtn != null) {
             boolean curLocked = Boolean.TRUE.equals(stageLocked.get(currentStage));
             if (curLocked) {
-                stageFreezeBtn.setText("🔒 Stage Locked (Frozen)");
+                stageFreezeBtn.setText("🔒 Locked");
                 stageFreezeBtn.bg = new Color(120, 53, 15);
                 stageFreezeBtn.fg = new Color(254, 240, 138);
                 stageFreezeBtn.border = new Color(245, 158, 11);
-                stageFreezeBtn.setToolTipText("Click to UNFREEZE objects in this stage so they can be edited");
+                stageFreezeBtn.setToolTipText("Stage objects are locked. Click to unlock objects in this stage");
             } else {
-                stageFreezeBtn.setText("❄ Freeze Stage Layer");
+                stageFreezeBtn.setText("❄ Freeze");
                 stageFreezeBtn.bg = new Color(24, 33, 53);
                 stageFreezeBtn.fg = new Color(148, 163, 184);
                 stageFreezeBtn.border = new Color(51, 65, 85);
-                stageFreezeBtn.setToolTipText("Click to FREEZE / LOCK all elements of this stage from accidental movement");
+                stageFreezeBtn.setToolTipText("Click to freeze / lock all elements of this stage from accidental movement");
             }
             stageFreezeBtn.repaint();
         }
@@ -1465,12 +1510,12 @@ public class HousePlanCADApp extends JFrame {
         DefaultComboBoxModel<String> model;
         if (currentRegion == RegionProfile.INDIA) {
             model = new DefaultComboBoxModel<>(new String[]{
-                    "Sample Plans...", "30' × 40' Wall Plan",
-                    "25' × 40' Wall Plan", "20' × 30' Wall Plan"});
+                    "Presets ▼", "30' × 40' Plan",
+                    "25' × 40' Plan", "20' × 30' Plan"});
         } else {
             model = new DefaultComboBoxModel<>(new String[]{
-                    "Sample Plans...", "36' × 48' Ranch Home (USA)",
-                    "30' × 42' Modern Craftsman", "24' × 36' Suburban Cottage"});
+                    "Presets ▼", "36' × 48' Ranch",
+                    "30' × 42' Craftsman", "24' × 36' Cottage"});
         }
         presetsCombo.setModel(model);
         presetsCombo.setSelectedIndex(0);
@@ -1483,7 +1528,7 @@ public class HousePlanCADApp extends JFrame {
 
         if (regionSwitcherBtn != null) {
             regionSwitcherBtn.setText(profile.getShortBadge());
-            regionSwitcherBtn.setIcon(profile.getFlagIcon(18, 12));
+            regionSwitcherBtn.setIcon(profile.getFlagIcon(16, 11));
             regionSwitcherBtn.setToolTipText("Active Building Standard: " + profile.getDisplayName() + " (Click to switch standards)");
         }
 
@@ -1883,6 +1928,227 @@ public class HousePlanCADApp extends JFrame {
         dlg.setVisible(true);
     }
 
+    public static boolean showStartupActivationDialog() {
+        final boolean[] activated = new boolean[]{false};
+        JDialog dlg = new JDialog((Frame) null, "HDE Studio — Commercial License Activation", true);
+        dlg.setUndecorated(true);
+
+        JPanel root = new JPanel(new BorderLayout(0, 16));
+        root.setBackground(new Color(15, 23, 42)); // Slate #0f172a
+        root.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(56, 189, 248), 1, true),
+                new EmptyBorder(22, 26, 22, 26)));
+
+        // Header Panel
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        headerPanel.setOpaque(false);
+
+        JPanel titleBlock = new JPanel();
+        titleBlock.setLayout(new BoxLayout(titleBlock, BoxLayout.Y_AXIS));
+        titleBlock.setOpaque(false);
+
+        JLabel badge = new JLabel("COMMERCIAL LICENSE & DEVICE ACTIVATION");
+        badge.setFont(new Font("Consolas", Font.BOLD, 10));
+        badge.setForeground(new Color(56, 189, 248));
+
+        JLabel heading = new JLabel("Activate HDE Studio Desktop");
+        heading.setFont(new Font("Segoe UI", Font.BOLD, 19));
+        heading.setForeground(Color.WHITE);
+
+        JLabel sub = new JLabel("<html><span style='color:#94a3b8'>Please enter your HDE Web App account email and commercial license key to unlock and start HDE Studio.</span></html>");
+        sub.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+
+        titleBlock.add(badge);
+        titleBlock.add(Box.createVerticalStrut(4));
+        titleBlock.add(heading);
+        titleBlock.add(Box.createVerticalStrut(4));
+        titleBlock.add(sub);
+        headerPanel.add(titleBlock, BorderLayout.WEST);
+
+        JLabel closeLbl = new JLabel(" ✕ ");
+        closeLbl.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        closeLbl.setForeground(new Color(148, 163, 184));
+        closeLbl.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        closeLbl.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) {
+                dlg.dispose();
+                if (!LicenseManager.isActivated()) {
+                    System.exit(0);
+                }
+            }
+        });
+        headerPanel.add(closeLbl, BorderLayout.EAST);
+        root.add(headerPanel, BorderLayout.NORTH);
+
+        // Body Panel: License Status & Input Fields
+        JPanel bodyPanel = new JPanel();
+        bodyPanel.setLayout(new BoxLayout(bodyPanel, BoxLayout.Y_AXIS));
+        bodyPanel.setOpaque(false);
+
+        // Status Card
+        JPanel statusCard = new JPanel(new BorderLayout(10, 0));
+        statusCard.setBackground(new Color(30, 41, 59));
+        statusCard.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true),
+                new EmptyBorder(12, 14, 12, 14)));
+        statusCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, 65));
+        statusCard.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel statusIcon = new JLabel("🔒 ");
+        statusIcon.setFont(new Font("Segoe UI", Font.BOLD, 22));
+        statusIcon.setForeground(new Color(245, 158, 11));
+        statusCard.add(statusIcon, BorderLayout.WEST);
+
+        JPanel statusText = new JPanel();
+        statusText.setLayout(new BoxLayout(statusText, BoxLayout.Y_AXIS));
+        statusText.setOpaque(false);
+        JLabel statusTitle = new JLabel("Status: ACTIVATION REQUIRED");
+        statusTitle.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        statusTitle.setForeground(new Color(245, 158, 11));
+        JLabel statusSub = new JLabel("Commercial license required to open. Enter your key purchased from HDE Web App.");
+        statusSub.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        statusSub.setForeground(new Color(203, 213, 225));
+        statusText.add(statusTitle);
+        statusText.add(Box.createVerticalStrut(2));
+        statusText.add(statusSub);
+        statusCard.add(statusText, BorderLayout.CENTER);
+        bodyPanel.add(statusCard);
+        bodyPanel.add(Box.createVerticalStrut(14));
+
+        // Form Fields
+        JLabel emailLbl = new JLabel("HDE Web Account Email:");
+        emailLbl.setFont(new Font("Consolas", Font.BOLD, 11));
+        emailLbl.setForeground(new Color(148, 163, 184));
+        emailLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        bodyPanel.add(emailLbl);
+        bodyPanel.add(Box.createVerticalStrut(4));
+
+        JTextField emailField = new JTextField();
+        try {
+            java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(HousePlanCADApp.class);
+            emailField.setText(prefs.get(LicenseManager.PREF_LICENSE_EMAIL, ""));
+        } catch (Exception ignored) {}
+        emailField.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        emailField.setBackground(new Color(24, 33, 53));
+        emailField.setForeground(Color.WHITE);
+        emailField.setCaretColor(new Color(56, 189, 248));
+        emailField.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true),
+                new EmptyBorder(6, 10, 6, 10)));
+        emailField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
+        emailField.setAlignmentX(Component.LEFT_ALIGNMENT);
+        bodyPanel.add(emailField);
+        bodyPanel.add(Box.createVerticalStrut(10));
+
+        JLabel keyLbl = new JLabel("License Key (e.g. HDE-IND-XXXX-XXXX / HDE-USA-XXXX-XXXX / HDE-GLOBAL-XXXX):");
+        keyLbl.setFont(new Font("Consolas", Font.BOLD, 11));
+        keyLbl.setForeground(new Color(148, 163, 184));
+        keyLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        bodyPanel.add(keyLbl);
+        bodyPanel.add(Box.createVerticalStrut(4));
+
+        JTextField keyField = new JTextField();
+        try {
+            java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(HousePlanCADApp.class);
+            keyField.setText(prefs.get(LicenseManager.PREF_LICENSE_KEY, ""));
+        } catch (Exception ignored) {}
+        keyField.setFont(new Font("Consolas", Font.BOLD, 13));
+        keyField.setBackground(new Color(24, 33, 53));
+        keyField.setForeground(new Color(56, 189, 248));
+        keyField.setCaretColor(new Color(56, 189, 248));
+        keyField.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true),
+                new EmptyBorder(6, 10, 6, 10)));
+        keyField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
+        keyField.setAlignmentX(Component.LEFT_ALIGNMENT);
+        bodyPanel.add(keyField);
+        bodyPanel.add(Box.createVerticalStrut(10));
+
+        // Hardware Device Fingerprint Info
+        JLabel hwLbl = new JLabel("Device Hardware ID: " + LicenseManager.getMachineFingerprint() + " (Bound to your workstation seat)");
+        hwLbl.setFont(new Font("Consolas", Font.PLAIN, 10));
+        hwLbl.setForeground(new Color(100, 116, 139));
+        hwLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        bodyPanel.add(hwLbl);
+
+        root.add(bodyPanel, BorderLayout.CENTER);
+
+        // Footer Actions
+        JPanel footerPanel = new JPanel(new BorderLayout());
+        footerPanel.setOpaque(false);
+
+        JLabel buyLink = new JLabel("<html><a href='#' style='color:#38bdf8; text-decoration:none;'>🌐 Need a license? Purchase on HDE Web App</a></html>");
+        buyLink.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        buyLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        buyLink.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) {
+                try {
+                    Desktop.getDesktop().browse(new java.net.URI("https://hdeweb.com/pricing"));
+                } catch (Exception ex) {
+                    showModernDialog(dlg, "HDE Web App", "Visit HDE Web App", "Open https://hdeweb.com in your web browser to purchase or manage seats.");
+                }
+            }
+        });
+        footerPanel.add(buyLink, BorderLayout.WEST);
+
+        JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        btnRow.setOpaque(false);
+
+        ModernButton exitBtn = new ModernButton("Exit", new Color(30, 41, 59), new Color(148, 163, 184), new Color(51, 65, 85));
+        exitBtn.setPreferredSize(new Dimension(80, 32));
+        exitBtn.addActionListener(e -> {
+            dlg.dispose();
+            System.exit(0);
+        });
+        btnRow.add(exitBtn);
+
+        ModernButton activateBtn = new ModernButton("Unlock & Start",
+                new Color(14, 116, 144), Color.WHITE, new Color(56, 189, 248));
+        activateBtn.setPreferredSize(new Dimension(140, 32));
+        Runnable doActivate = () -> {
+            String email = emailField.getText().trim();
+            String key = keyField.getText().trim();
+            if (email.isEmpty() || !email.contains("@")) {
+                showModernDialog(dlg, "License Error", "Invalid Email", "Please enter the valid email address associated with your HDE Web account purchase.");
+                return;
+            }
+            if (key.isEmpty() || key.length() < 12) {
+                showModernDialog(dlg, "License Error", "Invalid Key", "Please enter a valid HDE Studio license key format (e.g. HDE-IND-XXXX-XXXX, HDE-USA-XXXX-XXXX, or HDE-GLOBAL-XXXX).");
+                return;
+            }
+
+            boolean ok = LicenseManager.verifyAndActivate(email, key);
+            if (ok) {
+                activated[0] = true;
+                showModernDialog(dlg, "Success", "Workstation Activated!", "HDE Studio Commercial License verified successfully for " + email + ".\nPlan: " + LicenseManager.getLicensePlan());
+                dlg.dispose();
+            } else {
+                showModernDialog(dlg, "Activation Failed", "Unable to Verify Key", "Could not activate with the provided details. Please verify your purchase on HDE Web App or contact support.");
+            }
+        };
+        activateBtn.addActionListener(e -> doActivate.run());
+        keyField.addActionListener(e -> doActivate.run());
+        emailField.addActionListener(e -> doActivate.run());
+
+        btnRow.add(activateBtn);
+        footerPanel.add(btnRow, BorderLayout.EAST);
+        root.add(footerPanel, BorderLayout.SOUTH);
+
+        dlg.setContentPane(root);
+        dlg.pack();
+        dlg.setSize(680, 390);
+        dlg.setLocationRelativeTo(null);
+        dlg.addWindowListener(new WindowAdapter() {
+            @Override public void windowClosed(WindowEvent e) {
+                if (!LicenseManager.isActivated()) {
+                    System.exit(0);
+                }
+            }
+        });
+        dlg.setVisible(true);
+        return activated[0];
+    }
+
     public void showActivationDialog(boolean isFirstRun) {
         JDialog dlg = new JDialog(this, "HDE Studio — Commercial License Activation", true);
         dlg.setUndecorated(true);
@@ -1924,7 +2190,12 @@ public class HousePlanCADApp extends JFrame {
         closeLbl.setForeground(new Color(148, 163, 184));
         closeLbl.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         closeLbl.addMouseListener(new MouseAdapter() {
-            @Override public void mouseClicked(MouseEvent e) { dlg.dispose(); }
+            @Override public void mouseClicked(MouseEvent e) {
+                dlg.dispose();
+                if (!LicenseManager.isActivated()) {
+                    System.exit(0);
+                }
+            }
         });
         headerPanel.add(closeLbl, BorderLayout.EAST);
         root.add(headerPanel, BorderLayout.NORTH);
@@ -1988,7 +2259,7 @@ public class HousePlanCADApp extends JFrame {
         bodyPanel.add(emailField);
         bodyPanel.add(Box.createVerticalStrut(10));
 
-        JLabel keyLbl = new JLabel("License Key (e.g. HDE-IND-XXXX-XXXX / HDE-USA-XXXX-XXXX):");
+        JLabel keyLbl = new JLabel("License Key (e.g. HDE-IND-XXXX-XXXX / HDE-USA-XXXX-XXXX / HDE-GLOBAL-XXXX):");
         keyLbl.setFont(new Font("Consolas", Font.BOLD, 11));
         keyLbl.setForeground(new Color(148, 163, 184));
         keyLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -2049,6 +2320,10 @@ public class HousePlanCADApp extends JFrame {
                 LicenseManager.deactivate();
                 showModernDialog(dlg, "Deactivated", "License Removed", "This workstation has been deactivated. You can now transfer your license seat to another computer.");
                 dlg.dispose();
+                boolean reactivated = showStartupActivationDialog();
+                if (!reactivated) {
+                    System.exit(0);
+                }
             });
             btnRow.add(deactBtn);
         }
@@ -2064,7 +2339,7 @@ public class HousePlanCADApp extends JFrame {
                 return;
             }
             if (key.isEmpty() || key.length() < 12) {
-                showModernDialog(dlg, "License Error", "Invalid Key", "Please enter a valid HDE Studio license key format (e.g. HDE-IND-XXXX-XXXX or HDE-USA-XXXX-XXXX).");
+                showModernDialog(dlg, "License Error", "Invalid Key", "Please enter a valid HDE Studio license key format (e.g. HDE-IND-XXXX-XXXX, HDE-USA-XXXX-XXXX, or HDE-GLOBAL-XXXX).");
                 return;
             }
 
@@ -2087,6 +2362,13 @@ public class HousePlanCADApp extends JFrame {
         dlg.pack();
         dlg.setSize(680, 390);
         dlg.setLocationRelativeTo(this);
+        dlg.addWindowListener(new WindowAdapter() {
+            @Override public void windowClosed(WindowEvent e) {
+                if (!LicenseManager.isActivated()) {
+                    System.exit(0);
+                }
+            }
+        });
         dlg.setVisible(true);
     }
 
@@ -14973,6 +15255,13 @@ public class HousePlanCADApp extends JFrame {
         SwingUtilities.invokeLater(() -> {
             try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); }
             catch (Exception ignored) {}
+            if (!LicenseManager.isActivated()) {
+                boolean ok = showStartupActivationDialog();
+                if (!ok || !LicenseManager.isActivated()) {
+                    System.exit(0);
+                    return;
+                }
+            }
             new HousePlanCADApp().setVisible(true);
         });
     }
