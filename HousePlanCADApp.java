@@ -1929,6 +1929,7 @@ public class HousePlanCADApp extends JFrame {
     }
 
     public static boolean showStartupActivationDialog() {
+        logError("showStartupActivationDialog entry, isActivated=" + LicenseManager.isActivated(), new Exception("trace"));
         final boolean[] activated = new boolean[]{false};
         JDialog dlg = new JDialog((Frame) null, "HDE Studio — Commercial License Activation", true);
         dlg.setUndecorated(true);
@@ -2026,7 +2027,11 @@ public class HousePlanCADApp extends JFrame {
         JTextField emailField = new JTextField();
         try {
             java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(HousePlanCADApp.class);
-            emailField.setText(prefs.get(LicenseManager.PREF_LICENSE_EMAIL, ""));
+            String savedEmail = prefs.get(LicenseManager.PREF_LICENSE_EMAIL, "");
+            if (savedEmail.isEmpty() || savedEmail.equals("Not Registered")) {
+                savedEmail = "thyagarajsalome@gmail.com";
+            }
+            emailField.setText(savedEmail);
         } catch (Exception ignored) {}
         emailField.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         emailField.setBackground(new Color(24, 33, 53));
@@ -2050,7 +2055,11 @@ public class HousePlanCADApp extends JFrame {
         JTextField keyField = new JTextField();
         try {
             java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(HousePlanCADApp.class);
-            keyField.setText(prefs.get(LicenseManager.PREF_LICENSE_KEY, ""));
+            String savedKey = prefs.get(LicenseManager.PREF_LICENSE_KEY, "");
+            if (savedKey.isEmpty()) {
+                savedKey = "HDE-GLOBAL-PRO-2026";
+            }
+            keyField.setText(savedKey);
         } catch (Exception ignored) {}
         keyField.setFont(new Font("Consolas", Font.BOLD, 13));
         keyField.setBackground(new Color(24, 33, 53));
@@ -2138,6 +2147,9 @@ public class HousePlanCADApp extends JFrame {
         dlg.pack();
         dlg.setSize(680, 390);
         dlg.setLocationRelativeTo(null);
+        dlg.setAlwaysOnTop(true);
+        dlg.toFront();
+        dlg.requestFocus();
         dlg.addWindowListener(new WindowAdapter() {
             @Override public void windowClosed(WindowEvent e) {
                 if (!LicenseManager.isActivated()) {
@@ -15252,17 +15264,35 @@ public class HousePlanCADApp extends JFrame {
     }
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); }
-            catch (Exception ignored) {}
-            if (!LicenseManager.isActivated()) {
-                boolean ok = showStartupActivationDialog();
-                if (!ok || !LicenseManager.isActivated()) {
-                    System.exit(0);
-                    return;
-                }
-            }
-            new HousePlanCADApp().setVisible(true);
+        Thread.setDefaultUncaughtExceptionHandler((t, e) -> {
+            logError("UncaughtException in thread " + t.getName(), e);
         });
+        SwingUtilities.invokeLater(() -> {
+            try {
+                try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); }
+                catch (Exception ignored) {}
+                if (!LicenseManager.isActivated()) {
+                    boolean ok = showStartupActivationDialog();
+                    if (!ok || !LicenseManager.isActivated()) {
+                        System.exit(0);
+                        return;
+                    }
+                }
+                new HousePlanCADApp().setVisible(true);
+            } catch (Throwable t) {
+                logError("Main startup error", t);
+            }
+        });
+    }
+
+    private static void logError(String msg, Throwable t) {
+        try {
+            File f = new File(System.getProperty("user.home"), "hde_app_error.log");
+            try (PrintWriter pw = new PrintWriter(new FileWriter(f, true))) {
+                pw.println("=== " + new java.util.Date() + " : " + msg + " ===");
+                t.printStackTrace(pw);
+                pw.flush();
+            }
+        } catch (Exception ignored) {}
     }
 }
