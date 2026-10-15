@@ -6,6 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build ${{ matrix.os-name }} Installer
@@ -46,7 +49,7 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: |
           jpackage --type exe \
-            --name "HDE-Studio" \
+            --name "HDE-Studio-Setup-v2.1" \
             --app-version "2.1.0" \
             --vendor "HDE Studio CAD Technologies" \
             --description "HDE Studio Architectural CAD Software" \
@@ -58,6 +61,16 @@ jobs:
             --win-menu \
             --win-dir-chooser \
             --dest output/
+          
+          # Ensure exact name matches /download URL
+          cp output/*.exe output/HDE-Studio-Setup-v2.1.exe || true
+          
+          # Also package portable zip for Windows
+          mkdir -p output/HDE-Studio-v2.1-Windows-Portable
+          cp dist/HDE-Studio.jar output/HDE-Studio-v2.1-Windows-Portable/
+          cp -r assets output/HDE-Studio-v2.1-Windows-Portable/ || true
+          cp hde_studio.ico output/HDE-Studio-v2.1-Windows-Portable/ || true
+          powershell -Command "Compress-Archive -Path output/HDE-Studio-v2.1-Windows-Portable -DestinationPath output/HDE-Studio-v2.1-Windows-Portable.zip -Force"
         shell: bash
 
       # --- MACOS PACKAGING ---
@@ -75,13 +88,14 @@ jobs:
             --main-class HousePlanCADApp \
             --mac-package-name "HDE Studio" \
             --dest output/
+          cp output/*.dmg output/HDE-Studio.dmg || true
         shell: bash
 
       # --- LINUX PACKAGING ---
       - name: Build Linux DEB & Tarball (jpackage)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          sudo apt-get update && sudo apt-get install -y fakeroot
+          sudo apt-get update && sudo apt-get install -y fakeroot zip
           jpackage --type deb \
             --name "hde-studio" \
             --app-version "2.1.0" \
@@ -95,13 +109,14 @@ jobs:
             --linux-menu-group "Graphics;Engineering;" \
             --dest output/
           
-          # Also package portable tar.gz
+          # Also package portable tar.gz and zip
           mkdir -p output/hde-studio-linux-portable
           cp dist/HDE-Studio.jar output/hde-studio-linux-portable/
           cp -r assets output/hde-studio-linux-portable/ || true
           echo -e '#!/usr/bin/env bash\nDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\njava -jar "$DIR/HDE-Studio.jar" "$@"' > output/hde-studio-linux-portable/hde-studio.sh
           chmod +x output/hde-studio-linux-portable/hde-studio.sh
           tar -czvf output/HDE-Studio-v2.1-Linux-Portable.tar.gz -C output hde-studio-linux-portable
+          cd output && zip -r HDE-Studio-v2.1-Linux-Portable.zip hde-studio-linux-portable
         shell: bash
 
       - name: Upload Installer Artifact
