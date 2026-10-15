@@ -392,6 +392,11 @@ public class HousePlanCADApp extends JFrame {
     private JLabel propLockLabel;
     private ModernButton propUnfreezeBtn;
     private boolean isUpdatingInspector = false;
+    private JPanel inspectorContainerPanel;
+    private JPanel inspectorMainPanel;
+    private ModernButton inspectorToggleBtn;
+    private boolean isInspectorExpanded = false;
+    private File lastSavedDirectory = new File(System.getProperty("user.home"), "Documents");
 
     // --- Local Project Database & Auto-Save State ---
     private String activeProjectId = UUID.randomUUID().toString();
@@ -411,6 +416,7 @@ public class HousePlanCADApp extends JFrame {
         initUI();
         initAutoSaveEngine();
         loadPreset30x40();
+        enableDarkWindowTitle();
         checkAutoSaveRecoveryOnStartup();
     }
 
@@ -421,6 +427,13 @@ public class HousePlanCADApp extends JFrame {
         setLocationRelativeTo(null);
         initAppIcons();
         getContentPane().setLayout(new BorderLayout());
+
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowOpened(WindowEvent e) { enableDarkWindowTitle(); }
+            @Override
+            public void windowActivated(WindowEvent e) { enableDarkWindowTitle(); }
+        });
 
         JPanel topContainer = new JPanel();
         topContainer.setLayout(new BoxLayout(topContainer, BoxLayout.Y_AXIS));
@@ -437,6 +450,18 @@ public class HousePlanCADApp extends JFrame {
         getContentPane().add(createStatusBar(), BorderLayout.SOUTH);
 
         setupKeyboardShortcuts();
+    }
+
+    private void enableDarkWindowTitle() {
+        SwingUtilities.invokeLater(() -> {
+            try {
+                File exe = new File("assets\\darkmode.exe");
+                if (!exe.exists()) exe = new File("D:\\java-project\\assets\\darkmode.exe");
+                if (exe.exists()) {
+                    new ProcessBuilder(exe.getAbsolutePath(), "HDE Studio").start();
+                }
+            } catch (Exception ignored) {}
+        });
     }
 
     private void initAppIcons() {
@@ -518,18 +543,22 @@ public class HousePlanCADApp extends JFrame {
         JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 7));
         actionPanel.setOpaque(false);
 
-        // Project Database & File Buttons
+        // File Actions: New, Open, Save, Save As
         ModernButton newProjBtn = new ModernButton("+ New", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
-        newProjBtn.setToolTipText("New Project Wizard (Ctrl+N)");
-        newProjBtn.addActionListener(e -> showNewProjectDialog());
+        newProjBtn.setToolTipText("New Drawing (Ctrl+N)");
+        newProjBtn.addActionListener(e -> newDrawingWithPrompt());
 
-        ModernButton projectsHubBtn = new ModernButton("📁 Projects", new Color(30, 41, 59), new Color(56, 189, 248), new Color(56, 189, 248, 160));
-        projectsHubBtn.setToolTipText("Project Manager & Revision Hub (Ctrl+O)");
-        projectsHubBtn.addActionListener(e -> showProjectManagerDialog());
+        ModernButton openFileBtn = new ModernButton("📂 Open", new Color(30, 41, 59), new Color(56, 189, 248), new Color(56, 189, 248, 160));
+        openFileBtn.setToolTipText("Open Drawing File (.hde) (Ctrl+O)");
+        openFileBtn.addActionListener(e -> showOpenFileDialog());
 
         ModernButton saveBtn = new ModernButton("💾 Save", new Color(14, 116, 144), Color.WHITE, new Color(56, 189, 248));
-        saveBtn.setToolTipText("Quick Save (Ctrl+S) / Save As (Ctrl+Shift+S)");
-        saveBtn.addActionListener(e -> saveCurrentProject(false));
+        saveBtn.setToolTipText("Quick Save Drawing (Ctrl+S)");
+        saveBtn.addActionListener(e -> saveCurrentFile(false));
+
+        ModernButton saveAsBtn = new ModernButton("Save As...", new Color(24, 33, 53), new Color(203, 213, 225), new Color(51, 65, 85));
+        saveAsBtn.setToolTipText("Save Drawing to a new file or folder (Ctrl+Shift+S)");
+        saveAsBtn.addActionListener(e -> saveCurrentFile(true));
 
         // Undo/Redo buttons
         undoBtn = new ModernButton("↶ Undo", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
@@ -561,8 +590,9 @@ public class HousePlanCADApp extends JFrame {
         clearBtn.addActionListener(e -> clearCanvas());
 
         actionPanel.add(newProjBtn);
-        actionPanel.add(projectsHubBtn);
+        actionPanel.add(openFileBtn);
         actionPanel.add(saveBtn);
+        actionPanel.add(saveAsBtn);
         actionPanel.add(new JSeparator(JSeparator.VERTICAL));
         actionPanel.add(undoBtn); actionPanel.add(redoBtn);
         actionPanel.add(new JSeparator(JSeparator.VERTICAL));
@@ -1392,10 +1422,32 @@ public class HousePlanCADApp extends JFrame {
     // --- Inspector Sidebar ---
 
     private JPanel createInspectorSidebar() {
-        JPanel inspector = new JPanel(new BorderLayout());
-        inspector.setPreferredSize(new Dimension(270, 600));
-        inspector.setBackground(new Color(15, 23, 42));
-        inspector.setBorder(BorderFactory.createMatteBorder(0, 1, 0, 0, new Color(30, 41, 59)));
+        inspectorContainerPanel = new JPanel(new BorderLayout());
+        inspectorContainerPanel.setOpaque(false);
+
+        // Thin vertical strip on the left edge with toggle arrow
+        JPanel toggleStrip = new JPanel(new GridBagLayout());
+        toggleStrip.setBackground(new Color(15, 23, 42));
+        toggleStrip.setBorder(BorderFactory.createMatteBorder(0, 1, 0, 0, new Color(30, 41, 59)));
+        toggleStrip.setPreferredSize(new Dimension(22, 600));
+
+        inspectorToggleBtn = new ModernButton("◀", new Color(24, 33, 53), new Color(56, 189, 248), new Color(51, 65, 85));
+        inspectorToggleBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        inspectorToggleBtn.setToolTipText("Toggle Inspector (Auto-opens on object selection)");
+        inspectorToggleBtn.setPreferredSize(new Dimension(18, 56));
+        inspectorToggleBtn.setBorder(new EmptyBorder(0, 0, 0, 0));
+        inspectorToggleBtn.addActionListener(e -> setInspectorExpanded(!isInspectorExpanded));
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridx = 0; gbc.gridy = 0;
+        gbc.anchor = GridBagConstraints.CENTER;
+        toggleStrip.add(inspectorToggleBtn, gbc);
+        inspectorContainerPanel.add(toggleStrip, BorderLayout.WEST);
+
+        inspectorMainPanel = new JPanel(new BorderLayout());
+        inspectorMainPanel.setPreferredSize(new Dimension(270, 600));
+        inspectorMainPanel.setBackground(new Color(15, 23, 42));
+        inspectorMainPanel.setBorder(BorderFactory.createMatteBorder(0, 1, 0, 0, new Color(30, 41, 59)));
 
         JPanel header = new JPanel(new BorderLayout());
         header.setOpaque(false);
@@ -1411,7 +1463,7 @@ public class HousePlanCADApp extends JFrame {
                 BorderFactory.createEmptyBorder(2, 6, 2, 6)));
         header.add(title, BorderLayout.WEST);
         header.add(propTypeBadge, BorderLayout.EAST);
-        inspector.add(header, BorderLayout.NORTH);
+        inspectorMainPanel.add(header, BorderLayout.NORTH);
 
         JPanel body = new JPanel(new CardLayout());
         body.setOpaque(false);
@@ -1585,10 +1637,27 @@ public class HousePlanCADApp extends JFrame {
         body.add(propMultiPanel, "MULTI");
         body.add(propContentPanel, "CONTENT");
         body.add(createAgentInspectorPanel(), "AGENT");
-        inspector.add(body, BorderLayout.CENTER);
+        inspectorMainPanel.add(body, BorderLayout.CENTER);
 
         setupInspectorListeners();
-        return inspector;
+        inspectorContainerPanel.add(inspectorMainPanel, BorderLayout.CENTER);
+        setInspectorExpanded(false); // Collapsed by default until an object is selected!
+        return inspectorContainerPanel;
+    }
+
+    public void setInspectorExpanded(boolean expanded) {
+        this.isInspectorExpanded = expanded;
+        if (inspectorMainPanel != null) {
+            inspectorMainPanel.setVisible(expanded);
+        }
+        if (inspectorToggleBtn != null) {
+            inspectorToggleBtn.setText(expanded ? "▶" : "◀");
+            inspectorToggleBtn.setToolTipText(expanded ? "Collapse Inspector Sidebar" : "Expand Inspector Sidebar");
+        }
+        if (inspectorContainerPanel != null) {
+            inspectorContainerPanel.revalidate();
+            inspectorContainerPanel.repaint();
+        }
     }
 
     private JPanel createAgentInspectorPanel() {
@@ -1766,7 +1835,13 @@ public class HousePlanCADApp extends JFrame {
             if (selectedObjects.isEmpty()) {
                 cl.show(propContentPanel.getParent(), "EMPTY");
                 propTypeBadge.setText("NONE");
+                if (isInspectorExpanded) {
+                    setInspectorExpanded(false);
+                }
                 return;
+            }
+            if (!isInspectorExpanded) {
+                setInspectorExpanded(true);
             }
             if (selectedObjects.size() > 1) {
                 cl.show(propContentPanel.getParent(), "MULTI");
@@ -2032,10 +2107,10 @@ public class HousePlanCADApp extends JFrame {
                 if (e.getKeyCode() == KeyEvent.VK_F1) { showLearnStudioDialog(); return true; }
 
                 // Project and File Shortcuts
-                if (e.isControlDown() && e.isShiftDown() && e.getKeyCode() == KeyEvent.VK_S) { saveCurrentProject(true); return true; }
-                if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_S) { saveCurrentProject(false); return true; }
-                if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_O) { showProjectManagerDialog(); return true; }
-                if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_N) { showNewProjectDialog(); return true; }
+                if (e.isControlDown() && e.isShiftDown() && e.getKeyCode() == KeyEvent.VK_S) { saveCurrentFile(true); return true; }
+                if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_S) { saveCurrentFile(false); return true; }
+                if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_O) { showOpenFileDialog(); return true; }
+                if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_N) { newDrawingWithPrompt(); return true; }
                 if (e.isControlDown() && e.isShiftDown() && e.getKeyCode() == KeyEvent.VK_R) { showParametricRoomDialog(); return true; }
                 if (e.isControlDown() && e.isShiftDown() && e.getKeyCode() == KeyEvent.VK_G) { showStructuralGridDialog(); return true; }
 
@@ -3708,6 +3783,40 @@ public class HousePlanCADApp extends JFrame {
             if (isSnipMode) {
                 drawSnipOverlay(g2);
             }
+            drawToastNotification(g2);
+        }
+
+        private String toastMessage = null;
+        private long toastExpireTime = 0;
+
+        public void showToastNotification(String msg) {
+            this.toastMessage = msg;
+            this.toastExpireTime = System.currentTimeMillis() + 3500;
+            repaint();
+            javax.swing.Timer t = new javax.swing.Timer(3600, e -> repaint());
+            t.setRepeats(false);
+            t.start();
+        }
+
+        private void drawToastNotification(Graphics2D g2) {
+            if (toastMessage == null || System.currentTimeMillis() >= toastExpireTime) return;
+            Graphics2D gToast = (Graphics2D) g2.create();
+            gToast.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            gToast.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            gToast.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            FontMetrics fm = gToast.getFontMetrics();
+            int tw = fm.stringWidth(toastMessage) + 36;
+            int th = 36;
+            int tx = (getWidth() - tw) / 2;
+            int ty = getHeight() - 56;
+            gToast.setColor(new Color(15, 23, 42, 240));
+            gToast.fillRoundRect(tx, ty, tw, th, 18, 18);
+            gToast.setColor(new Color(56, 189, 248));
+            gToast.setStroke(new BasicStroke(1.4f));
+            gToast.drawRoundRect(tx, ty, tw, th, 18, 18);
+            gToast.setColor(Color.WHITE);
+            gToast.drawString(toastMessage, tx + 18, ty + 23);
+            gToast.dispose();
         }
 
         private void drawHoverHighlight(Graphics2D g2) {
@@ -9212,22 +9321,75 @@ public class HousePlanCADApp extends JFrame {
         autoSaveTimer.start();
     }
 
+    public int showModernConfirmDialog(Component parent, String title, String heading, String message, String yesText, String noText) {
+        JDialog dlg = new JDialog(this, title, true);
+        dlg.setLayout(new BorderLayout());
+        dlg.getContentPane().setBackground(new Color(15, 23, 42));
+        dlg.setSize(490, 220);
+        dlg.setLocationRelativeTo(parent != null ? parent : this);
+
+        JPanel p = new JPanel(new BorderLayout(14, 14));
+        p.setOpaque(false);
+        p.setBorder(new EmptyBorder(18, 22, 18, 22));
+
+        // Top Header with clean cyan badge
+        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        top.setOpaque(false);
+        JLabel iconLbl = new JLabel("ⓘ");
+        iconLbl.setFont(new Font("Segoe UI", Font.BOLD, 18));
+        iconLbl.setForeground(new Color(56, 189, 248));
+        JLabel headLbl = new JLabel(heading);
+        headLbl.setFont(new Font("Segoe UI", Font.BOLD, 15));
+        headLbl.setForeground(Color.WHITE);
+        top.add(iconLbl);
+        top.add(headLbl);
+        p.add(top, BorderLayout.NORTH);
+
+        // Message body
+        JLabel msgLbl = new JLabel("<html><body style='width: 380px; color: #cbd5e1; font-family: Segoe UI; font-size: 11px; line-height: 1.5;'>"
+                + message + "</body></html>");
+        p.add(msgLbl, BorderLayout.CENTER);
+
+        // Buttons
+        JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        btnRow.setOpaque(false);
+
+        final int[] result = {0}; // 0 = no/cancel, 1 = yes
+
+        ModernButton noBtn = new ModernButton(noText, new Color(30, 41, 59), new Color(203, 213, 225), new Color(71, 85, 105));
+        noBtn.addActionListener(e -> { result[0] = 0; dlg.dispose(); });
+
+        ModernButton yesBtn = new ModernButton(yesText, new Color(2, 132, 199), Color.WHITE, new Color(56, 189, 248));
+        yesBtn.addActionListener(e -> { result[0] = 1; dlg.dispose(); });
+
+        btnRow.add(noBtn);
+        btnRow.add(yesBtn);
+        p.add(btnRow, BorderLayout.SOUTH);
+
+        dlg.add(p);
+        dlg.setVisible(true);
+        return result[0];
+    }
+
     private void checkAutoSaveRecoveryOnStartup() {
         File recovery = getAutoSaveFile();
         if (recovery.exists() && recovery.length() > 200) {
             long ageSec = (System.currentTimeMillis() - recovery.lastModified()) / 1000;
             if (ageSec < 86400 * 7) { // within last 7 days
                 SwingUtilities.invokeLater(() -> {
-                    int ans = JOptionPane.showConfirmDialog(this,
-                            "An unsaved project recovery file was found from your previous session.\n" +
-                            "Auto-saved: " + new Date(recovery.lastModified()) + "\n\n" +
-                            "Would you like to recover your unsaved drawing?",
-                            "HDE Studio — Crash Recovery Available",
-                            JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
-                    if (ans == JOptionPane.YES_OPTION) {
+                    String timeStr = new java.text.SimpleDateFormat("MMM dd, yyyy HH:mm").format(new Date(recovery.lastModified()));
+                    int ans = showModernConfirmDialog(this, "Crash Recovery Available", "Recover Unsaved Drawing?",
+                            "An unsaved project recovery file was found from your previous session.<br>"
+                            + "Auto-saved: <b>" + timeStr + "</b><br><br>"
+                            + "Would you like to recover your unsaved drawing?",
+                            "Recover Drawing", "Start Fresh");
+                    if (ans == 1) {
                         loadProjectFromFile(recovery);
-                        this.activeProjectFile = null; // Don't overwrite the recovery file on normal save
+                        this.activeProjectFile = null;
                         markProjectDirty(true);
+                        if (viewportPanel != null) viewportPanel.showToastNotification("✓ Unsaved drawing session recovered!");
+                    } else {
+                        recovery.delete();
                     }
                 });
             }
@@ -9248,40 +9410,78 @@ public class HousePlanCADApp extends JFrame {
     }
 
     public void saveCurrentProject(boolean forceSaveAs) {
+        saveCurrentFile(forceSaveAs);
+    }
+
+    public void saveCurrentFile(boolean forceSaveAs) {
         if (activeProjectFile == null || forceSaveAs) {
-            // Prompt for Project Details & File Location
-            JPanel p = new JPanel(new GridLayout(4, 2, 8, 8));
-            p.setOpaque(false);
-            JTextField nameField = new JTextField(activeProjectName);
-            JTextField clientField = new JTextField(activeProjectClient);
-            JComboBox<String> facingCombo = new JComboBox<>(new String[]{"North Facing", "East Facing", "West Facing", "South Facing"});
-            facingCombo.setSelectedItem(activeProjectFacing);
-            styleComboBox(facingCombo);
+            JFileChooser chooser = new JFileChooser();
+            chooser.setDialogTitle(forceSaveAs ? "Save Drawing As..." : "Save Architectural Drawing");
+            chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("HDE Studio Drawing (*.hde)", "hde"));
+            chooser.setAcceptAllFileFilterUsed(false);
 
-            JLabel l1 = new JLabel("Project Title:"); l1.setForeground(Color.WHITE);
-            JLabel l2 = new JLabel("Client / Owner:"); l2.setForeground(Color.WHITE);
-            JLabel l3 = new JLabel("Site Facing:"); l3.setForeground(Color.WHITE);
+            String defName = activeProjectName != null ? activeProjectName.trim() : "My_House_Plan";
+            if (!defName.toLowerCase().endsWith(".hde")) defName += ".hde";
+            chooser.setSelectedFile(new File(defName));
 
-            p.add(l1); p.add(nameField);
-            p.add(l2); p.add(clientField);
-            p.add(l3); p.add(facingCombo);
+            File defDir = lastSavedDirectory != null && lastSavedDirectory.exists() ? lastSavedDirectory :
+                    new File(System.getProperty("user.home"), "Documents");
+            if (defDir.exists()) chooser.setCurrentDirectory(defDir);
 
-            int opt = JOptionPane.showConfirmDialog(this, p, forceSaveAs ? "Save Project As" : "Save Project", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-            if (opt != JOptionPane.OK_OPTION) return;
-
-            String projName = nameField.getText().trim();
-            if (projName.isEmpty()) projName = "Untitled Project";
-            String client = clientField.getText().trim();
-            String facing = (String) facingCombo.getSelectedItem();
-
-            String safeName = projName.replaceAll("[^a-zA-Z0-9_\\-\\s]", "").trim().replace(' ', '_');
-            File dest = new File(getProjectsDirectory(), safeName + ".hde");
-
-            saveProjectToSpecificFile(dest, projName, client, facing, activePlotWidthFt, activePlotDepthFt, true);
+            int res = chooser.showSaveDialog(this);
+            if (res == JFileChooser.APPROVE_OPTION) {
+                File sel = chooser.getSelectedFile();
+                if (!sel.getName().toLowerCase().endsWith(".hde")) {
+                    sel = new File(sel.getParentFile(), sel.getName() + ".hde");
+                }
+                lastSavedDirectory = sel.getParentFile();
+                String baseName = sel.getName().substring(0, sel.getName().lastIndexOf('.'));
+                saveProjectToSpecificFile(sel, baseName, activeProjectClient, activeProjectFacing, activePlotWidthFt, activePlotDepthFt, true);
+                if (viewportPanel != null) viewportPanel.showToastNotification("✓ Drawing Saved: " + sel.getName());
+            }
         } else {
             saveProjectToSpecificFile(activeProjectFile, activeProjectName, activeProjectClient, activeProjectFacing,
                     activePlotWidthFt, activePlotDepthFt, true);
+            if (viewportPanel != null) viewportPanel.showToastNotification("✓ Drawing Saved: " + activeProjectFile.getName());
         }
+    }
+
+    public void showOpenFileDialog() {
+        if (isProjectDirty) {
+            int ans = showModernConfirmDialog(this, "Unsaved Changes", "Save Current Drawing?",
+                    "You have unsaved changes in your active plan.<br>Would you like to save before opening another drawing?",
+                    "Save & Continue", "Discard & Open");
+            if (ans == 1) {
+                saveCurrentFile(false);
+            }
+        }
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Open Architectural Drawing (.hde)");
+        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("HDE Studio Drawing (*.hde)", "hde"));
+        chooser.setAcceptAllFileFilterUsed(false);
+        File defDir = lastSavedDirectory != null && lastSavedDirectory.exists() ? lastSavedDirectory :
+                new File(System.getProperty("user.home"), "Documents");
+        if (defDir.exists()) chooser.setCurrentDirectory(defDir);
+
+        int res = chooser.showOpenDialog(this);
+        if (res == JFileChooser.APPROVE_OPTION) {
+            File sel = chooser.getSelectedFile();
+            lastSavedDirectory = sel.getParentFile();
+            loadProjectFromFile(sel);
+            if (viewportPanel != null) viewportPanel.showToastNotification("✓ Drawing Loaded: " + sel.getName());
+        }
+    }
+
+    public void newDrawingWithPrompt() {
+        if (isProjectDirty) {
+            int ans = showModernConfirmDialog(this, "New Drawing", "Save Current Drawing?",
+                    "Save changes to <b>" + activeProjectName + "</b> before starting a new drawing?",
+                    "Save First", "Discard & Start");
+            if (ans == 1) {
+                saveCurrentFile(false);
+            }
+        }
+        showNewProjectDialog();
     }
 
     public void saveProjectToSpecificFile(File file, String name, String client, String facing,
