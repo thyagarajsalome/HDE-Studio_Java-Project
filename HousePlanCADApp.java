@@ -419,6 +419,7 @@ public class HousePlanCADApp extends JFrame {
         setSize(1480, 920);
         setMinimumSize(new Dimension(1024, 600));
         setLocationRelativeTo(null);
+        initAppIcons();
         getContentPane().setLayout(new BorderLayout());
 
         JPanel topContainer = new JPanel();
@@ -438,14 +439,55 @@ public class HousePlanCADApp extends JFrame {
         setupKeyboardShortcuts();
     }
 
+    private void initAppIcons() {
+        try {
+            List<Image> icons = new ArrayList<>();
+            int[] sizes = {16, 24, 32, 48, 64, 128, 256};
+            for (int s : sizes) {
+                File f = new File("D:\\java-project\\assets\\branding\\icon_" + s + "x" + s + ".png");
+                if (f.exists()) {
+                    BufferedImage b = ImageIO.read(f);
+                    if (b != null) icons.add(b);
+                }
+            }
+            if (icons.isEmpty()) {
+                File mainPng = new File("D:\\java-project\\hde_studio.png");
+                if (mainPng.exists()) {
+                    BufferedImage b = ImageIO.read(mainPng);
+                    if (b != null) icons.add(b);
+                }
+            }
+            if (!icons.isEmpty()) {
+                setIconImages(icons);
+            }
+        } catch (Exception ignored) {}
+    }
+
     private JPanel createPrimaryHeader() {
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(new Color(15, 23, 42));
         header.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(30, 41, 59)));
         header.setPreferredSize(new Dimension(1000, 44));
 
-        JPanel brandPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 7));
+        JPanel brandPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6));
         brandPanel.setOpaque(false);
+
+        // Official HDE Studio Logo Icon Badge
+        JLabel logoIconLbl = new JLabel();
+        try {
+            File f = new File("D:\\java-project\\assets\\branding\\icon_32x32.png");
+            if (!f.exists()) f = new File("D:\\java-project\\hde_studio.png");
+            if (f.exists()) {
+                BufferedImage b = ImageIO.read(f);
+                if (b != null) {
+                    Image scaled = b.getScaledInstance(26, 26, Image.SCALE_SMOOTH);
+                    logoIconLbl.setIcon(new ImageIcon(scaled));
+                    logoIconLbl.setBorder(new EmptyBorder(0, 2, 0, 2));
+                }
+            }
+        } catch (Exception ignored) {}
+        brandPanel.add(logoIconLbl);
+
         JLabel titleLbl = new JLabel("HDE Studio");
         titleLbl.setFont(new Font("Segoe UI", Font.BOLD, 15));
         titleLbl.setForeground(Color.WHITE);
@@ -11224,6 +11266,7 @@ public class HousePlanCADApp extends JFrame {
         dlg.getContentPane().setBackground(new Color(15, 23, 42));
         dlg.setSize(1080, 750);
         dlg.setLocationRelativeTo(this);
+        try { dlg.setIconImages(getIconImages()); } catch (Exception ignored) {}
 
         // Header Banner
         JPanel headerPanel = new JPanel(new BorderLayout());
@@ -11232,6 +11275,18 @@ public class HousePlanCADApp extends JFrame {
 
         JPanel titleGrp = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         titleGrp.setOpaque(false);
+
+        JLabel dlgLogoLbl = new JLabel();
+        try {
+            File f = new File("D:\\java-project\\assets\\branding\\icon_32x32.png");
+            if (!f.exists()) f = new File("D:\\java-project\\hde_studio.png");
+            if (f.exists()) {
+                BufferedImage b = ImageIO.read(f);
+                if (b != null) dlgLogoLbl.setIcon(new ImageIcon(b.getScaledInstance(26, 26, Image.SCALE_SMOOTH)));
+            }
+        } catch (Exception ignored) {}
+        titleGrp.add(dlgLogoLbl);
+
         JLabel titleLbl = new JLabel("LEARN HDE STUDIO");
         titleLbl.setFont(new Font("Segoe UI", Font.BOLD, 17));
         titleLbl.setForeground(Color.WHITE);
