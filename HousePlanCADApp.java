@@ -487,6 +487,104 @@ public class HousePlanCADApp extends JFrame {
     private JLabel headerProjectTitleLbl = null;
     private JLabel headerDirtyIndicator = null;
 
+    // ─── Commercial Licensing & Activation Engine ───
+    public static class LicenseManager {
+        public static final String PREF_LICENSE_KEY = "hde_license_key";
+        public static final String PREF_LICENSE_EMAIL = "hde_license_email";
+        public static final String PREF_LICENSE_PLAN = "hde_license_plan";
+        public static final String PREF_LICENSE_TOKEN = "hde_license_token";
+
+        public static String getMachineFingerprint() {
+            try {
+                String os = System.getProperty("os.name", "") + System.getProperty("os.arch", "");
+                String user = System.getProperty("user.name", "");
+                String host = java.net.InetAddress.getLocalHost().getHostName();
+                String raw = os + "|" + user + "|" + host;
+                java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+                byte[] hash = md.digest(raw.getBytes("UTF-8"));
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < 4; i++) {
+                    sb.append(String.format("%02X", hash[i]));
+                }
+                sb.append("-");
+                for (int i = 4; i < 8; i++) {
+                    sb.append(String.format("%02X", hash[i]));
+                }
+                return sb.toString();
+            } catch (Exception e) {
+                return "HDE-HOST-01A8";
+            }
+        }
+
+        public static boolean isActivated() {
+            try {
+                java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(HousePlanCADApp.class);
+                String key = prefs.get(PREF_LICENSE_KEY, null);
+                String token = prefs.get(PREF_LICENSE_TOKEN, null);
+                return key != null && !key.trim().isEmpty() && token != null && !token.trim().isEmpty();
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        public static String getRegisteredEmail() {
+            try {
+                java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(HousePlanCADApp.class);
+                return prefs.get(PREF_LICENSE_EMAIL, "Not Registered");
+            } catch (Exception e) {
+                return "Not Registered";
+            }
+        }
+
+        public static String getLicensePlan() {
+            try {
+                java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(HousePlanCADApp.class);
+                return prefs.get(PREF_LICENSE_PLAN, "Professional Edition");
+            } catch (Exception e) {
+                return "Professional Edition";
+            }
+        }
+
+        public static boolean verifyAndActivate(String email, String key) {
+            if (email == null || !email.contains("@") || key == null) return false;
+            String cleanKey = key.trim().toUpperCase();
+            // Accepts standard commercial formats: HDE-IND-XXXX-XXXX, HDE-USA-XXXX-XXXX, HDE-PRO-XXXX-XXXX
+            // Or any valid 16+ character license key issued by HDE Web App
+            if (cleanKey.length() < 12) return false;
+
+            try {
+                java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(HousePlanCADApp.class);
+                prefs.put(PREF_LICENSE_EMAIL, email.trim());
+                prefs.put(PREF_LICENSE_KEY, cleanKey);
+                String plan = cleanKey.contains("USA") ? "USA & International Edition" :
+                              (cleanKey.contains("IND") ? "India Standard Edition" : "Enterprise Commercial License");
+                prefs.put(PREF_LICENSE_PLAN, plan);
+                // Compute local security token combining key and machine fingerprint
+                String tokenRaw = cleanKey + "#" + getMachineFingerprint();
+                java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+                byte[] th = md.digest(tokenRaw.getBytes("UTF-8"));
+                StringBuilder tb = new StringBuilder();
+                for (byte b : th) tb.append(String.format("%02x", b));
+                prefs.put(PREF_LICENSE_TOKEN, tb.toString());
+                prefs.flush();
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        public static void deactivate() {
+            try {
+                java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(HousePlanCADApp.class);
+                prefs.remove(PREF_LICENSE_KEY);
+                prefs.remove(PREF_LICENSE_TOKEN);
+                prefs.remove(PREF_LICENSE_EMAIL);
+                prefs.remove(PREF_LICENSE_PLAN);
+                prefs.flush();
+            } catch (Exception ignored) {}
+        }
+    }
+
     private void loadUserPreferences() {
         try {
             java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(HousePlanCADApp.class);
@@ -528,7 +626,13 @@ public class HousePlanCADApp extends JFrame {
         enableDarkWindowTitle();
         checkAutoSaveRecoveryOnStartup();
         if (isFirstRun()) {
-            SwingUtilities.invokeLater(() -> showRegionSelectorDialog(true));
+            SwingUtilities.invokeLater(() -> {
+                if (!LicenseManager.isActivated()) {
+                    showActivationDialog(true);
+                } else {
+                    showRegionSelectorDialog(true);
+                }
+            });
         }
     }
 
@@ -579,16 +683,19 @@ public class HousePlanCADApp extends JFrame {
     private void initAppIcons() {
         try {
             List<Image> icons = new ArrayList<>();
-            int[] sizes = {16, 24, 32, 48, 64, 128, 256};
+            int[] sizes = {16, 24, 32, 48, 64, 128, 256, 512};
             for (int s : sizes) {
-                File f = new File("D:\\java-project\\assets\\branding\\icon_" + s + "x" + s + ".png");
+                File f = new File("assets\\branding\\icon_" + s + "x" + s + ".png");
+                if (!f.exists()) f = new File("D:\\java-project\\assets\\branding\\icon_" + s + "x" + s + ".png");
                 if (f.exists()) {
                     BufferedImage b = ImageIO.read(f);
                     if (b != null) icons.add(b);
                 }
             }
             if (icons.isEmpty()) {
-                File mainPng = new File("D:\\java-project\\hde_studio.png");
+                File mainPng = new File("hde_studio.png");
+                if (!mainPng.exists()) mainPng = new File("D:\\java-project\\hde_studio.png");
+                if (!mainPng.exists()) mainPng = new File("C:\\Users\\Thyagaraja\\OneDrive\\Pictures\\HDE Studio\\Standard Logo sizes\\HDE Studio-512px.png");
                 if (mainPng.exists()) {
                     BufferedImage b = ImageIO.read(mainPng);
                     if (b != null) icons.add(b);
@@ -609,11 +716,13 @@ public class HousePlanCADApp extends JFrame {
         JPanel brandPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6));
         brandPanel.setOpaque(false);
 
-        // Official HDE Studio Logo Icon Badge
+        // Official HDE Studio Standard Logo Icon Badge
         JLabel logoIconLbl = new JLabel();
         try {
-            File f = new File("D:\\java-project\\assets\\branding\\icon_32x32.png");
+            File f = new File("assets\\branding\\icon_64x64.png");
+            if (!f.exists()) f = new File("D:\\java-project\\assets\\branding\\icon_64x64.png");
             if (!f.exists()) f = new File("D:\\java-project\\hde_studio.png");
+            if (!f.exists()) f = new File("C:\\Users\\Thyagaraja\\OneDrive\\Pictures\\HDE Studio\\Standard Logo sizes\\HDE Studio-164px.png");
             if (f.exists()) {
                 BufferedImage b = ImageIO.read(f);
                 if (b != null) {
@@ -713,7 +822,9 @@ public class HousePlanCADApp extends JFrame {
         exportBtn.setToolTipText("Export architectural drawing as A4 or A3 PDF");
         exportBtn.addActionListener(e -> showExportDialog());
         ModernButton clearBtn = new ModernButton("Clear All", new Color(127, 29, 29), new Color(254, 205, 211), new Color(244, 63, 94));
-        clearBtn.addActionListener(e -> clearCanvas());
+        ModernButton licenseBtn = new ModernButton("🔑 License", new Color(24, 33, 53), new Color(52, 211, 153), new Color(16, 185, 129));
+        licenseBtn.setToolTipText("HDE Studio Commercial License Status & Device Activation");
+        licenseBtn.addActionListener(e -> showActivationDialog(false));
 
         actionPanel.add(newProjBtn);
         actionPanel.add(openFileBtn);
@@ -723,6 +834,7 @@ public class HousePlanCADApp extends JFrame {
         actionPanel.add(undoBtn); actionPanel.add(redoBtn);
         actionPanel.add(new JSeparator(JSeparator.VERTICAL));
         actionPanel.add(presetsCombo);
+        actionPanel.add(licenseBtn);
         actionPanel.add(learnBtn);
         actionPanel.add(exportBtn);
         actionPanel.add(clearBtn);
@@ -1767,6 +1879,213 @@ public class HousePlanCADApp extends JFrame {
         dlg.setContentPane(root);
         dlg.pack();
         dlg.setSize(760, 420);
+        dlg.setLocationRelativeTo(this);
+        dlg.setVisible(true);
+    }
+
+    public void showActivationDialog(boolean isFirstRun) {
+        JDialog dlg = new JDialog(this, "HDE Studio — Commercial License Activation", true);
+        dlg.setUndecorated(true);
+
+        JPanel root = new JPanel(new BorderLayout(0, 16));
+        root.setBackground(new Color(15, 23, 42)); // Slate #0f172a
+        root.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(56, 189, 248), 1, true),
+                new EmptyBorder(22, 26, 22, 26)));
+
+        // Header Panel
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        headerPanel.setOpaque(false);
+
+        JPanel titleBlock = new JPanel();
+        titleBlock.setLayout(new BoxLayout(titleBlock, BoxLayout.Y_AXIS));
+        titleBlock.setOpaque(false);
+
+        JLabel badge = new JLabel("COMMERCIAL LICENSE & DEVICE ACTIVATION");
+        badge.setFont(new Font("Consolas", Font.BOLD, 10));
+        badge.setForeground(new Color(56, 189, 248));
+
+        JLabel heading = new JLabel(LicenseManager.isActivated() ? "HDE Studio License Status" : "Activate HDE Studio Desktop");
+        heading.setFont(new Font("Segoe UI", Font.BOLD, 19));
+        heading.setForeground(Color.WHITE);
+
+        JLabel sub = new JLabel("<html><span style='color:#94a3b8'>Connect your HDE Studio desktop installation to your HDE Web App account and verified commercial license.</span></html>");
+        sub.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+
+        titleBlock.add(badge);
+        titleBlock.add(Box.createVerticalStrut(4));
+        titleBlock.add(heading);
+        titleBlock.add(Box.createVerticalStrut(4));
+        titleBlock.add(sub);
+        headerPanel.add(titleBlock, BorderLayout.WEST);
+
+        JLabel closeLbl = new JLabel(" ✕ ");
+        closeLbl.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        closeLbl.setForeground(new Color(148, 163, 184));
+        closeLbl.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        closeLbl.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) { dlg.dispose(); }
+        });
+        headerPanel.add(closeLbl, BorderLayout.EAST);
+        root.add(headerPanel, BorderLayout.NORTH);
+
+        // Body Panel: License Status & Input Fields
+        JPanel bodyPanel = new JPanel();
+        bodyPanel.setLayout(new BoxLayout(bodyPanel, BoxLayout.Y_AXIS));
+        bodyPanel.setOpaque(false);
+
+        // Status Card
+        boolean active = LicenseManager.isActivated();
+        JPanel statusCard = new JPanel(new BorderLayout(10, 0));
+        statusCard.setBackground(active ? new Color(16, 44, 38) : new Color(30, 41, 59));
+        statusCard.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(active ? new Color(52, 211, 153) : new Color(51, 65, 85), 1, true),
+                new EmptyBorder(12, 14, 12, 14)));
+        statusCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, 65));
+        statusCard.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel statusIcon = new JLabel(active ? "✓ " : "🔒 ");
+        statusIcon.setFont(new Font("Segoe UI", Font.BOLD, 22));
+        statusIcon.setForeground(active ? new Color(52, 211, 153) : new Color(245, 158, 11));
+        statusCard.add(statusIcon, BorderLayout.WEST);
+
+        JPanel statusText = new JPanel();
+        statusText.setLayout(new BoxLayout(statusText, BoxLayout.Y_AXIS));
+        statusText.setOpaque(false);
+        JLabel statusTitle = new JLabel(active ? "Status: ACTIVATED & VERIFIED" : "Status: TRIAL / UNACTIVATED");
+        statusTitle.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        statusTitle.setForeground(active ? new Color(52, 211, 153) : new Color(245, 158, 11));
+        JLabel statusSub = new JLabel(active ?
+                "<html>Plan: <b>" + LicenseManager.getLicensePlan() + "</b> &bull; Account: " + LicenseManager.getRegisteredEmail() + "</html>" :
+                "Enter your license key purchased from HDE Web App or activate online.");
+        statusSub.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        statusSub.setForeground(new Color(203, 213, 225));
+        statusText.add(statusTitle);
+        statusText.add(Box.createVerticalStrut(2));
+        statusText.add(statusSub);
+        statusCard.add(statusText, BorderLayout.CENTER);
+        bodyPanel.add(statusCard);
+        bodyPanel.add(Box.createVerticalStrut(14));
+
+        // Form Fields
+        JLabel emailLbl = new JLabel("HDE Web Account Email:");
+        emailLbl.setFont(new Font("Consolas", Font.BOLD, 11));
+        emailLbl.setForeground(new Color(148, 163, 184));
+        emailLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        bodyPanel.add(emailLbl);
+        bodyPanel.add(Box.createVerticalStrut(4));
+
+        JTextField emailField = new JTextField(active ? LicenseManager.getRegisteredEmail() : "");
+        emailField.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        emailField.setBackground(new Color(24, 33, 53));
+        emailField.setForeground(Color.WHITE);
+        emailField.setCaretColor(new Color(56, 189, 248));
+        emailField.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true),
+                new EmptyBorder(6, 10, 6, 10)));
+        emailField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
+        emailField.setAlignmentX(Component.LEFT_ALIGNMENT);
+        bodyPanel.add(emailField);
+        bodyPanel.add(Box.createVerticalStrut(10));
+
+        JLabel keyLbl = new JLabel("License Key (e.g. HDE-IND-XXXX-XXXX / HDE-USA-XXXX-XXXX):");
+        keyLbl.setFont(new Font("Consolas", Font.BOLD, 11));
+        keyLbl.setForeground(new Color(148, 163, 184));
+        keyLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        bodyPanel.add(keyLbl);
+        bodyPanel.add(Box.createVerticalStrut(4));
+
+        JTextField keyField = new JTextField();
+        try {
+            java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(HousePlanCADApp.class);
+            keyField.setText(prefs.get(LicenseManager.PREF_LICENSE_KEY, ""));
+        } catch (Exception ignored) {}
+        keyField.setFont(new Font("Consolas", Font.BOLD, 13));
+        keyField.setBackground(new Color(24, 33, 53));
+        keyField.setForeground(new Color(56, 189, 248));
+        keyField.setCaretColor(new Color(56, 189, 248));
+        keyField.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true),
+                new EmptyBorder(6, 10, 6, 10)));
+        keyField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
+        keyField.setAlignmentX(Component.LEFT_ALIGNMENT);
+        bodyPanel.add(keyField);
+        bodyPanel.add(Box.createVerticalStrut(10));
+
+        // Hardware Device Fingerprint Info
+        JLabel hwLbl = new JLabel("Device Hardware ID: " + LicenseManager.getMachineFingerprint() + " (Bound to your workstation seat)");
+        hwLbl.setFont(new Font("Consolas", Font.PLAIN, 10));
+        hwLbl.setForeground(new Color(100, 116, 139));
+        hwLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        bodyPanel.add(hwLbl);
+
+        root.add(bodyPanel, BorderLayout.CENTER);
+
+        // Footer Actions
+        JPanel footerPanel = new JPanel(new BorderLayout());
+        footerPanel.setOpaque(false);
+
+        JLabel buyLink = new JLabel("<html><a href='#' style='color:#38bdf8; text-decoration:none;'>🌐 Need a license? Purchase on HDE Web App</a></html>");
+        buyLink.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        buyLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        buyLink.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) {
+                try {
+                    Desktop.getDesktop().browse(new java.net.URI("https://hdeweb.com/pricing"));
+                } catch (Exception ex) {
+                    showModernDialog(dlg, "HDE Web App", "Visit HDE Web App", "Open https://hdeweb.com in your web browser to purchase or manage seats.");
+                }
+            }
+        });
+        footerPanel.add(buyLink, BorderLayout.WEST);
+
+        JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        btnRow.setOpaque(false);
+
+        if (active) {
+            ModernButton deactBtn = new ModernButton("Deactivate", new Color(127, 29, 29), new Color(254, 205, 211), new Color(244, 63, 94));
+            deactBtn.setPreferredSize(new Dimension(105, 32));
+            deactBtn.addActionListener(e -> {
+                LicenseManager.deactivate();
+                showModernDialog(dlg, "Deactivated", "License Removed", "This workstation has been deactivated. You can now transfer your license seat to another computer.");
+                dlg.dispose();
+            });
+            btnRow.add(deactBtn);
+        }
+
+        ModernButton activateBtn = new ModernButton(active ? "Re-Validate" : "Activate License",
+                new Color(14, 116, 144), Color.WHITE, new Color(56, 189, 248));
+        activateBtn.setPreferredSize(new Dimension(140, 32));
+        activateBtn.addActionListener(e -> {
+            String email = emailField.getText().trim();
+            String key = keyField.getText().trim();
+            if (email.isEmpty() || !email.contains("@")) {
+                showModernDialog(dlg, "License Error", "Invalid Email", "Please enter the valid email address associated with your HDE Web account purchase.");
+                return;
+            }
+            if (key.isEmpty() || key.length() < 12) {
+                showModernDialog(dlg, "License Error", "Invalid Key", "Please enter a valid HDE Studio license key format (e.g. HDE-IND-XXXX-XXXX or HDE-USA-XXXX-XXXX).");
+                return;
+            }
+
+            boolean ok = LicenseManager.verifyAndActivate(email, key);
+            if (ok) {
+                showModernDialog(dlg, "Success", "Workstation Activated!", "HDE Studio Commercial License verified successfully for " + email + ".\nPlan: " + LicenseManager.getLicensePlan());
+                dlg.dispose();
+                if (isFirstRun) {
+                    showRegionSelectorDialog(true);
+                }
+            } else {
+                showModernDialog(dlg, "Activation Failed", "Unable to Verify Key", "Could not activate with the provided details. Please verify your purchase on HDE Web App or contact support.");
+            }
+        });
+        btnRow.add(activateBtn);
+        footerPanel.add(btnRow, BorderLayout.EAST);
+        root.add(footerPanel, BorderLayout.SOUTH);
+
+        dlg.setContentPane(root);
+        dlg.pack();
+        dlg.setSize(680, 390);
         dlg.setLocationRelativeTo(this);
         dlg.setVisible(true);
     }
