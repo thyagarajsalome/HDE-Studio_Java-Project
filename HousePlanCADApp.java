@@ -417,9 +417,9 @@ public class HousePlanCADApp extends JFrame {
     private JComboBox<String> presetsCombo;
     private JPanel roomSetsContainer;
 
-    private final List<Wall> walls = new ArrayList<>();
-    private final List<CADElement> elements = new ArrayList<>();
-    private final List<CADDimension> dimensions = new ArrayList<>();
+    final List<Wall> walls = new ArrayList<>();
+    final List<CADElement> elements = new ArrayList<>();
+    final List<CADDimension> dimensions = new ArrayList<>();
 
     private ToolMode currentTool = ToolMode.SELECT;
     private String wallHatchStyle = "DIAGONAL_45"; // "DIAGONAL_45", "SOLID_BLACK", "HOLLOW"
@@ -13100,6 +13100,44 @@ public class HousePlanCADApp extends JFrame {
         gbc.gridx = 1;
         form.add(hatchCombo, gbc);
 
+        // 6. Custom Sheet / Project Title
+        gbc.gridx = 0; gbc.gridy = 6;
+        JLabel customTitleLbl = new JLabel("Sheet Title:");
+        customTitleLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        customTitleLbl.setForeground(new Color(203, 213, 225));
+        form.add(customTitleLbl, gbc);
+
+        String initialTitle = (activeProjectName != null && !activeProjectName.isEmpty() && !activeProjectName.equals("Untitled Plan"))
+                ? activeProjectName : "ARCHITECTURAL FLOOR PLAN";
+        JTextField customTitleFld = new JTextField(initialTitle);
+        customTitleFld.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        customTitleFld.setBackground(new Color(24, 33, 53));
+        customTitleFld.setForeground(Color.WHITE);
+        customTitleFld.setCaretColor(new Color(56, 189, 248));
+        customTitleFld.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true),
+                BorderFactory.createEmptyBorder(4, 8, 4, 8)));
+        gbc.gridx = 1;
+        form.add(customTitleFld, gbc);
+
+        // 7. Custom Notes / Architect / Client
+        gbc.gridx = 0; gbc.gridy = 7;
+        JLabel customNotesLbl = new JLabel("Architect / Notes:");
+        customNotesLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        customNotesLbl.setForeground(new Color(203, 213, 225));
+        form.add(customNotesLbl, gbc);
+
+        JTextField customNotesFld = new JTextField("");
+        customNotesFld.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        customNotesFld.setBackground(new Color(24, 33, 53));
+        customNotesFld.setForeground(Color.WHITE);
+        customNotesFld.setCaretColor(new Color(56, 189, 248));
+        customNotesFld.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true),
+                BorderFactory.createEmptyBorder(4, 8, 4, 8)));
+        gbc.gridx = 1;
+        form.add(customNotesFld, gbc);
+
         // ─── RIGHT: LIVE PREVIEW ───
         JPanel previewContainer = new JPanel(new BorderLayout(0, 8));
         previewContainer.setOpaque(false);
@@ -13168,7 +13206,9 @@ public class HousePlanCADApp extends JFrame {
             if (aspect >= 1.0) { prevW = 640; prevH = (int)(640 / aspect); }
             else               { prevH = 640; prevW = (int)(640 * aspect); }
 
-            cachedThumb[0] = renderArchitecturalDrawing(prevW, prevH, isMono, false, hStyle);
+            String cTitle = customTitleFld.getText().trim();
+            String cNotes = customNotesFld.getText().trim();
+            cachedThumb[0] = renderArchitecturalDrawing(prevW, prevH, isMono, false, hStyle, null, cTitle, cNotes);
             String paperName = isA3 ? "A3" : "A4";
             String orientName = isLandscape ? "Landscape" : "Portrait";
             previewFooter.setText(paperName + " " + orientName + " | " + targetW + " \u00d7 " + targetH + " px @ 300 DPI | Fit to Paper");
@@ -13179,6 +13219,14 @@ public class HousePlanCADApp extends JFrame {
         orientCombo.addActionListener(e -> updatePreview.run());
         styleCombo.addActionListener(e -> updatePreview.run());
         hatchCombo.addActionListener(e -> updatePreview.run());
+
+        javax.swing.event.DocumentListener docL = new javax.swing.event.DocumentListener() {
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { updatePreview.run(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { updatePreview.run(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { updatePreview.run(); }
+        };
+        customTitleFld.getDocument().addDocumentListener(docL);
+        customNotesFld.getDocument().addDocumentListener(docL);
 
         updatePreview.run();
 
@@ -13212,7 +13260,11 @@ public class HousePlanCADApp extends JFrame {
             String paperName = isA3 ? "A3" : "A4";
             String orientName = isLandscape ? "Landscape" : "Portrait";
             String styleTag = isMono ? "Mono" : "Color";
-            String defName = "HDE_Plan_" + paperName + "_" + orientName + "_" + styleTag + ".pdf";
+            String cTitle = customTitleFld.getText().trim();
+            String cNotes = customNotesFld.getText().trim();
+            String safeTitle = cTitle.replaceAll("[^a-zA-Z0-9_\\-]", "_");
+            if (safeTitle.isEmpty()) safeTitle = "Plan";
+            String defName = safeTitle + "_" + paperName + "_" + orientName + "_" + styleTag + ".pdf";
 
             dlg.dispose();
 
@@ -13224,7 +13276,7 @@ public class HousePlanCADApp extends JFrame {
                     dest = new File(dest.getParentFile(), dest.getName() + ".pdf");
                 }
                 try {
-                    BufferedImage img = renderArchitecturalDrawing(targetW, targetH, isMono, false, hatch);
+                    BufferedImage img = renderArchitecturalDrawing(targetW, targetH, isMono, false, hatch, null, cTitle, cNotes);
                     writeImageToPdf(img, dest);
                     JOptionPane.showMessageDialog(this,
                             "PDF exported successfully:\n" + dest.getAbsolutePath() +
@@ -13680,10 +13732,14 @@ public class HousePlanCADApp extends JFrame {
      * 4) Floor / Tile Patterns: Real architectural flooring hatches rendered below wall cut lines.
      */
     public BufferedImage renderArchitecturalDrawing(int targetW, int targetH, boolean isMonochrome, boolean isSocialClean, String hatchStyle) {
-        return renderArchitecturalDrawing(targetW, targetH, isMonochrome, isSocialClean, hatchStyle, null);
+        return renderArchitecturalDrawing(targetW, targetH, isMonochrome, isSocialClean, hatchStyle, null, null, null);
     }
 
     public BufferedImage renderArchitecturalDrawing(int targetW, int targetH, boolean isMonochrome, boolean isSocialClean, String hatchStyle, Rectangle2D.Double customCrop) {
+        return renderArchitecturalDrawing(targetW, targetH, isMonochrome, isSocialClean, hatchStyle, customCrop, null, null);
+    }
+
+    public BufferedImage renderArchitecturalDrawing(int targetW, int targetH, boolean isMonochrome, boolean isSocialClean, String hatchStyle, Rectangle2D.Double customCrop, String customTitle, String customNotes) {
         BufferedImage img = new BufferedImage(targetW, targetH, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2 = img.createGraphics();
 
@@ -14195,8 +14251,7 @@ public class HousePlanCADApp extends JFrame {
 
         // 4. Branding & Title Treatment
         if (isSocialClean) {
-            // Sleek architectural brand watermark in bottom-right corner (leaves maximum space for plan)
-            String brandTitle = "HDE STUDIO";
+            String brandTitle = (customTitle != null && !customTitle.trim().isEmpty()) ? customTitle.trim().toUpperCase() : "FLOOR PLAN";
             String brandSub = "PLAN: " + planSizeText + "  |  " + totalAreaText;
             int brandFontSize = Math.max(14, (int) (baseDim * 0.013));
             int subFontSize   = Math.max(10, (int) (baseDim * 0.0085));
@@ -14223,7 +14278,7 @@ public class HousePlanCADApp extends JFrame {
             g2.drawString(brandSub, bx, by + fmB.getHeight() + 2);
 
         } else {
-            // Sleek AutoCAD Title Block & Legal Information Bar (Clearly legible, proportional fonts)
+            // Sleek AutoCAD Title Block & Project Information Bar
             double tbX = padInner;
             double tbW = targetW - 2.0 * padInner;
             g2.setColor(Color.WHITE);
@@ -14240,19 +14295,22 @@ public class HousePlanCADApp extends JFrame {
             // Fonts: Clearly legible across both previews and high-res A4/A3 prints
             int brandFontSize = Math.max(16, (int) (baseDim * 0.018));
             int infoFontSize  = Math.max(13, (int) (baseDim * 0.013));
-            int discFontSize  = Math.max(12, (int) (baseDim * 0.011));
+            int notesFontSize = Math.max(12, (int) (baseDim * 0.011));
 
             Font brandFont = new Font("Segoe UI", Font.BOLD, brandFontSize);
             Font infoFont  = new Font("Segoe UI", Font.BOLD, infoFontSize);
-            Font discFont  = new Font("Segoe UI", Font.BOLD, discFontSize);
+            Font notesFont = new Font("Segoe UI", Font.PLAIN, notesFontSize);
 
-            // Row 1 (Top Section): Firm Brand (Left) + Plan Size, Area, Scale, Sheet (Right)
+            // Row 1 (Top Section): Custom Project Title (Left) + Plan Size, Area, Scale, Sheet (Right)
             g2.setFont(brandFont);
             FontMetrics fmBrand = g2.getFontMetrics();
             float r1Baseline = (float) (titleBlockY + (titleBlockHeight * 0.50 + fmBrand.getAscent() - fmBrand.getDescent()) / 2.0);
 
-            g2.setColor(isMonochrome ? Color.BLACK : new Color(2, 132, 199));
-            g2.drawString("HDE STUDIO", (float) (tbX + 16), r1Baseline);
+            String displayTitle = (customTitle != null && !customTitle.trim().isEmpty()) ? customTitle.trim().toUpperCase() : "";
+            if (!displayTitle.isEmpty()) {
+                g2.setColor(isMonochrome ? Color.BLACK : new Color(2, 132, 199));
+                g2.drawString(displayTitle, (float) (tbX + 16), r1Baseline);
+            }
 
             // Row 1 Right: Plan Size | Total Area | Scale | Sheet
             g2.setFont(infoFont);
@@ -14273,7 +14331,7 @@ public class HousePlanCADApp extends JFrame {
                              "   |   SCALE: FIT TO PAPER   |   SHEET: " + sheetTag;
             float specW = fmInfo.stringWidth(specStr);
             float specX = (float) (tbX + tbW - specW - 16);
-            float brandEnd = (float) (tbX + 16 + fmBrand.stringWidth("HDE STUDIO") + 24);
+            float brandEnd = (float) (tbX + 16 + (displayTitle.isEmpty() ? 0 : (fmBrand.stringWidth(displayTitle) + 24)));
 
             g2.setColor(isMonochrome ? Color.BLACK : new Color(51, 65, 85));
             if (specX > brandEnd) {
@@ -14285,25 +14343,28 @@ public class HousePlanCADApp extends JFrame {
                 g2.drawString(compactSpec, Math.max(brandEnd, cX), r1Baseline);
             }
 
-            // Row 2 (Bottom Section): Disclaimer Notice
-            g2.setFont(discFont);
-            FontMetrics fmDisc = g2.getFontMetrics();
-            float r2Baseline = (float) (midY + (titleBlockHeight * 0.50 + fmDisc.getAscent() - fmDisc.getDescent()) / 2.0);
-
-            String disclaimer = "DISCLAIMER: This plan is for conceptual design purposes only and is not intended for direct construction. Obtain professional architectural and structural review and all necessary approvals before use.";
-
-            g2.setColor(isMonochrome ? Color.BLACK : new Color(30, 41, 59));
-            float discW = fmDisc.stringWidth(disclaimer);
-            if (discW + 32 <= tbW) {
-                g2.drawString(disclaimer, (float) (tbX + 16), r2Baseline);
-            } else {
-                String p1 = "DISCLAIMER: This plan is for conceptual design purposes only and is not intended for direct construction.";
-                String p2 = "Obtain professional architectural and structural review and all necessary approvals before use.";
-                float row2H = (float) (titleBlockHeight * 0.50);
-                float line1Y = (float) (midY + row2H * 0.35 + fmDisc.getAscent() / 2.0);
-                float line2Y = (float) (midY + row2H * 0.78 + fmDisc.getAscent() / 2.0);
-                g2.drawString(p1, (float) (tbX + 16), line1Y);
-                g2.drawString(p2, (float) (tbX + 16), line2Y);
+            // Row 2 (Bottom Section): Custom Notes / Architect / Client (Disclaimer Removed)
+            String notesText = (customNotes != null) ? customNotes.trim() : "";
+            if (!notesText.isEmpty()) {
+                g2.setFont(notesFont);
+                FontMetrics fmNotes = g2.getFontMetrics();
+                float r2Baseline = (float) (midY + (titleBlockHeight * 0.50 + fmNotes.getAscent() - fmNotes.getDescent()) / 2.0);
+                g2.setColor(isMonochrome ? Color.BLACK : new Color(51, 65, 85));
+                float nW = fmNotes.stringWidth(notesText);
+                if (nW + 32 <= tbW) {
+                    g2.drawString(notesText, (float) (tbX + 16), r2Baseline);
+                } else {
+                    int midChar = notesText.length() / 2;
+                    int splitIdx = notesText.indexOf(" ", midChar);
+                    if (splitIdx == -1) splitIdx = midChar;
+                    String p1 = notesText.substring(0, splitIdx).trim();
+                    String p2 = notesText.substring(splitIdx).trim();
+                    float row2H = (float) (titleBlockHeight * 0.50);
+                    float line1Y = (float) (midY + row2H * 0.35 + fmNotes.getAscent() / 2.0);
+                    float line2Y = (float) (midY + row2H * 0.78 + fmNotes.getAscent() / 2.0);
+                    g2.drawString(p1, (float) (tbX + 16), line1Y);
+                    g2.drawString(p2, (float) (tbX + 16), line2Y);
+                }
             }
         }
 
@@ -15115,83 +15176,634 @@ public class HousePlanCADApp extends JFrame {
             g2.drawOval(sw - (int)(sw * 0.15) - 2, midY - 2, (int)(sw * 0.15), 4);
 
         // ─── FULL ROOM SETS (AutoCAD 2D Architectural Layouts) ───
-        } else if (type.equals("set-bedroom-master") || type.equals("set-bedroom-double")
-                || type.equals("set-bedroom-compact") || type.equals("set-bedroom-twin")
-                || type.equals("set-bedroom-grand") || type.equals("set-bedroom-square")) {
+        // 1. Kitchens & Pantries
+        } else if (type.equals("set-kitchen-island") || type.equals("set-usa-kitchen-island")) {
             g2.setColor(primaryCol);
             g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
             g2.drawRoundRect(0, 0, sw, sh, 6, 6);
 
-            int wardH = Math.max(14, (int)(sh * 0.18));
-            g2.setColor(Color.WHITE); g2.fillRect(4, 4, sw - 8, wardH);
-            g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(4, 4, sw - 8, wardH);
-            int doors = type.equals("set-bedroom-master") || type.equals("set-bedroom-grand") ? 6 : 4;
+            // Perimeter Top Wall Counter Run
+            int cD = Math.max(14, (int)(sh * 0.22));
+            int cW = sw - 8;
+            g2.setColor(Color.WHITE); g2.fillRect(4, 4, cW, cD);
+            g2.setColor(kitCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(4, 4, cW, cD);
             g2.setStroke(new BasicStroke(sHair));
-            for (int d = 1; d < doors; d++) g2.drawLine(4 + d * (sw - 8) / doors, 4, 4 + d * (sw - 8) / doors, 4 + wardH);
-            g2.drawLine(4, 4, sw - 4, 4 + wardH);
+            g2.drawLine(4, 4 + cD - 2, sw - 4, 4 + cD - 2);
 
-            int bedW = Math.max(34, (int)(sw * 0.44));
-            int bedH = Math.max(40, (int)(sh * 0.52));
-            int bedX = (sw - bedW) / 2;
-            int bedY = wardH + 12;
+            // Left: 4-burner cooktop
+            int ctopW = Math.max(20, (int)(sw * 0.25));
+            int ctopH = Math.max(12, cD - 6);
+            drawAutoCADCooktop(g2, 10, 7, ctopW, ctopH, sMed, sHair, kitCol);
 
-            g2.setColor(Color.WHITE); g2.fillRect(bedX, bedY, bedW, bedH);
-            g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(bedX, bedY, bedW, bedH);
-            int hb = Math.max(6, bedH / 8);
-            g2.drawRect(bedX, bedY, bedW, hb);
+            // Right: Double bowl sink
+            int sinkW = Math.max(22, (int)(sw * 0.28));
+            int sinkH = Math.max(12, cD - 6);
+            drawAutoCADSink(g2, sw - sinkW - 12, 7, sinkW, sinkH, sMed, sHair, kitCol);
 
-            int pw = (bedW - 12) / 2, ph = Math.max(8, (int)(bedH * 0.18));
+            // Left counter wing if USA Chef Island
+            if (type.equals("set-usa-kitchen-island")) {
+                int leftW = Math.max(14, (int)(sw * 0.18));
+                g2.setColor(Color.WHITE); g2.fillRect(4, 4 + cD, leftW, sh - cD - 8);
+                g2.setColor(kitCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(4, 4 + cD, leftW, sh - cD - 8);
+            }
+
+            // Massive Center Island with Stools
+            int isW = (int)(sw * 0.54);
+            int isH = Math.max(18, (int)(sh * 0.28));
+            int isX = (sw - isW) / 2 + (type.equals("set-usa-kitchen-island") ? (int)(sw * 0.06) : 0);
+            int isY = cD + Math.max(12, (int)(sh * 0.15));
+
+            g2.setColor(Color.WHITE); g2.fillRect(isX, isY, isW, isH);
+            g2.setColor(kitCol); g2.setStroke(new BasicStroke(sHeavy)); g2.drawRect(isX, isY, isW, isH);
             g2.setStroke(new BasicStroke(sHair));
-            g2.drawRoundRect(bedX + 3, bedY + hb + 3, pw, ph, 4, 4);
-            g2.drawRoundRect(bedX + bedW - pw - 3, bedY + hb + 3, pw, ph, 4, 4);
+            g2.drawRect(isX + 2, isY + 2, isW - 4, isH - 4);
 
-            int standW = Math.max(12, (int)(sw * 0.12));
+            // Prep sink on island
+            int isSinkW = Math.max(14, isW / 4);
+            int isSinkH = Math.max(10, (int)(isH * 0.65));
+            drawAutoCADSink(g2, isX + 8, isY + (isH - isSinkH) / 2, isSinkW, isSinkH, sMed, sHair, kitCol);
+
+            // Stools along bottom of island
+            int numStools = type.equals("set-usa-kitchen-island") ? 4 : 3;
+            int stR = Math.max(4, Math.min(8, (int)(6.0 * scale)));
+            for (int s = 0; s < numStools; s++) {
+                int stX = isX + (s + 1) * isW / (numStools + 1);
+                drawAutoCADStool(g2, stX, isY + isH + stR + 2, stR, sMed, sHair, kitCol);
+            }
+
+            g2.setColor(kitCol);
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * scale))));
+            String lbl = type.equals("set-usa-kitchen-island") ? "CHEF ISLAND KITCHEN" : "ISLAND KITCHEN";
+            g2.drawString(lbl, isX + (isW - g2.getFontMetrics().stringWidth(lbl)) / 2, isY + isH / 2 + 3);
+
+        } else if (type.equals("set-kitchen-u")) {
+            g2.setColor(primaryCol);
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
+            g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+            int d = Math.max(14, (int)(sw * 0.24));
+            Path2D.Double uPath = new Path2D.Double();
+            uPath.moveTo(4, 4); uPath.lineTo(sw - 4, 4); uPath.lineTo(sw - 4, sh - 4);
+            uPath.lineTo(sw - 4 - d, sh - 4); uPath.lineTo(sw - 4 - d, 4 + d);
+            uPath.lineTo(4 + d, 4 + d); uPath.lineTo(4 + d, sh - 4);
+            uPath.lineTo(4, sh - 4); uPath.closePath();
+
+            g2.setColor(Color.WHITE); g2.fill(uPath);
+            g2.setColor(kitCol); g2.setStroke(new BasicStroke(sHeavy)); g2.draw(uPath);
+
+            int sinkW = Math.max(22, (int)(sw * 0.3));
+            drawAutoCADSink(g2, (sw - sinkW) / 2, 6, sinkW, d - 4, sMed, sHair, kitCol);
+            int stoveH = Math.max(18, (int)(sh * 0.35));
+            drawAutoCADCooktop(g2, 6, d + 10, d - 4, stoveH, sMed, sHair, kitCol);
+
+            g2.setColor(kitCol);
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * scale))));
+            g2.drawString("U-KITCHEN SUITE", sw / 2 - 36, sh - 12);
+
+        } else if (type.equals("set-kitchen-l")) {
+            g2.setColor(primaryCol);
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
+            g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+            int d = Math.max(14, (int)(sw * 0.26));
+            Path2D.Double lPath = new Path2D.Double();
+            lPath.moveTo(4, 4); lPath.lineTo(sw - 4, 4); lPath.lineTo(sw - 4, 4 + d);
+            lPath.lineTo(4 + d, 4 + d); lPath.lineTo(4 + d, sh - 4);
+            lPath.lineTo(4, sh - 4); lPath.closePath();
+
+            g2.setColor(Color.WHITE); g2.fill(lPath);
+            g2.setColor(kitCol); g2.setStroke(new BasicStroke(sHeavy)); g2.draw(lPath);
+
+            int stoveW = Math.max(18, (int)(sw * 0.32));
+            drawAutoCADCooktop(g2, d + 8, 6, stoveW, d - 4, sMed, sHair, kitCol);
+            int sinkH = Math.max(18, (int)(sh * 0.32));
+            drawAutoCADSink(g2, 6, d + 8, d - 4, sinkH, sMed, sHair, kitCol);
+
+            g2.setColor(kitCol);
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * scale))));
+            g2.drawString("L-KITCHEN", d + 10, sh - 12);
+
+        } else if (type.equals("set-kitchen-parallel")) {
+            g2.setColor(primaryCol);
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
+            g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+            int d = Math.max(14, (int)(sh * 0.26));
             g2.setColor(Color.WHITE);
-            g2.fillRect(bedX - standW - 4, bedY, standW, standW);
-            g2.fillRect(bedX + bedW + 4, bedY, standW, standW);
-            g2.setColor(furnCol); g2.setStroke(new BasicStroke(sHair));
-            g2.drawRect(bedX - standW - 4, bedY, standW, standW);
-            g2.drawRect(bedX + bedW + 4, bedY, standW, standW);
-            g2.drawOval(bedX - standW / 2 - 4 - 3, bedY + standW / 2 - 3, 6, 6);
-            g2.drawOval(bedX + bedW + standW / 2 + 4 - 3, bedY + standW / 2 - 3, 6, 6);
+            g2.fillRect(4, 4, sw - 8, d);
+            g2.fillRect(4, sh - d - 4, sw - 8, d);
+            g2.setColor(kitCol); g2.setStroke(new BasicStroke(sHeavy));
+            g2.drawRect(4, 4, sw - 8, d);
+            g2.drawRect(4, sh - d - 4, sw - 8, d);
+
+            drawAutoCADCooktop(g2, sw / 2 - (int)(sw * 0.15), 6, (int)(sw * 0.3), d - 4, sMed, sHair, kitCol);
+            drawAutoCADSink(g2, sw / 2 - (int)(sw * 0.15), sh - d - 2, (int)(sw * 0.3), d - 4, sMed, sHair, kitCol);
+
+            g2.setColor(kitCol);
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * scale))));
+            g2.drawString("PARALLEL KITCHEN", 10, sh / 2 + 3);
+
+        } else if (type.equals("set-kitchen-linear")) {
+            g2.setColor(primaryCol);
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
+            g2.drawRoundRect(0, 0, sw, sh, 4, 4);
+
+            int d = Math.max(14, (int)(sh * 0.5));
+            g2.setColor(Color.WHITE); g2.fillRect(4, 4, sw - 8, d);
+            g2.setColor(kitCol); g2.setStroke(new BasicStroke(sHeavy)); g2.drawRect(4, 4, sw - 8, d);
+
+            int frW = (int)(sw * 0.22);
+            g2.drawRect(6, 6, frW, d - 4);
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(7, (int)(7 * scale))));
+            g2.drawString("REF", 10, d / 2 + 4);
+
+            drawAutoCADSink(g2, frW + 10, 6, (int)(sw * 0.32), d - 4, sMed, sHair, kitCol);
+            drawAutoCADCooktop(g2, sw - (int)(sw * 0.3) - 8, 6, (int)(sw * 0.3), d - 4, sMed, sHair, kitCol);
+            g2.drawString("STUDIO KITCHENETTE", 10, sh - 6);
+
+        } else if (type.equals("set-usa-pantry")) {
+            g2.setColor(primaryCol);
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
+            g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+            int sD = (int)(sw * 0.25);
+            g2.setColor(Color.WHITE);
+            g2.fillRect(4, 4, sw - 8, sD);
+            g2.fillRect(4, 4, sD, sh - 8);
+            g2.fillRect(sw - sD - 4, 4, sD, sh - 8);
+            g2.setColor(kitCol); g2.setStroke(new BasicStroke(sMed));
+            g2.drawRect(4, 4, sw - 8, sD);
+            g2.drawRect(4, 4, sD, sh - 8);
+            g2.drawRect(sw - sD - 4, 4, sD, sh - 8);
+
+            g2.setStroke(new BasicStroke(sHair));
+            for (int i = 1; i <= 3; i++) g2.drawLine(4, 4 + i * sD / 4, sw - 8, 4 + i * sD / 4);
+            g2.drawString("WALK-IN PANTRY", sw / 2 - 34, sh - 8);
+
+        // 2. Living & Great Rooms
+        } else if (type.equals("set-living-grand") || type.equals("set-usa-greatroom")) {
+            g2.setColor(primaryCol);
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
+            g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+            // TV / Media Wall along top
+            int tvW = Math.max(48, (int)(sw * 0.65));
+            int tvH = Math.max(10, (int)(sh * 0.1));
+            int tvX = (sw - tvW) / 2;
+            g2.setColor(Color.WHITE); g2.fillRect(tvX, 4, tvW, tvH);
+            g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(tvX, 4, tvW, tvH);
+            int scrW = (int)(tvW * 0.6);
+            g2.drawRect(tvX + (tvW - scrW) / 2, 2, scrW, 3);
+
+            // Large Area Rug
+            int rugW = (int)(sw * 0.75);
+            int rugH = (int)(sh * 0.55);
+            int rugX = (sw - rugW) / 2;
+            int rugY = tvH + 14;
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, new float[]{4, 3}, 0));
+            g2.drawRoundRect(rugX, rugY, rugW, rugH, 8, 8);
+
+            // Center Coffee Table
+            int ctW = (int)(rugW * 0.38);
+            int ctH = (int)(rugH * 0.3);
+            int ctX = rugX + (rugW - ctW) / 2;
+            int ctY = rugY + (rugH - ctH) / 2;
+            g2.setColor(Color.WHITE); g2.fillRect(ctX, ctY, ctW, ctH);
+            g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(ctX, ctY, ctW, ctH);
+
+            if (type.equals("set-usa-greatroom")) {
+                // L-Sectional Sofa wrapping corner
+                int sofaX = rugX + 6, sofaY = rugY + 6;
+                int sofaW = (int)(rugW * 0.65), sofaH = (int)(rugH * 0.7);
+                Path2D.Double secPath = new Path2D.Double();
+                secPath.moveTo(sofaX, sofaY + sofaH); secPath.lineTo(sofaX, sofaY);
+                secPath.lineTo(sofaX + sofaW, sofaY); secPath.lineTo(sofaX + sofaW, sofaY + 20);
+                secPath.lineTo(sofaX + 20, sofaY + 20); secPath.lineTo(sofaX + 20, sofaY + sofaH); secPath.closePath();
+                g2.setColor(Color.WHITE); g2.fill(secPath);
+                g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.draw(secPath);
+            } else {
+                // 4-Seater Sofa bottom
+                int sofaW = Math.max(50, (int)(sw * 0.72));
+                int sofaH = Math.max(18, (int)(sh * 0.22));
+                int sofaX = (sw - sofaW) / 2, sofaY = sh - sofaH - 6;
+                g2.setColor(Color.WHITE); g2.fillRect(sofaX, sofaY, sofaW, sofaH);
+                g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(sofaX, sofaY, sofaW, sofaH);
+                int cW = (sofaW - 12) / 4;
+                g2.setStroke(new BasicStroke(sHair));
+                for (int c = 1; c < 4; c++) g2.drawLine(sofaX + c * cW, sofaY, sofaX + c * cW, sofaY + sofaH);
+
+                // Flanking Armchairs
+                int armW = Math.max(16, (int)(sw * 0.15)), armH = Math.max(16, (int)(sh * 0.18));
+                g2.setColor(Color.WHITE); g2.fillRect(6, rugY + 6, armW, armH); g2.fillRect(sw - armW - 6, rugY + 6, armW, armH);
+                g2.setColor(furnCol); g2.setStroke(new BasicStroke(sHair));
+                g2.drawRect(6, rugY + 6, armW, armH); g2.drawRect(sw - armW - 6, rugY + 6, armW, armH);
+            }
 
             g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * scale))));
-            g2.drawString(el.name.toUpperCase(), bedX + 4, sh - 8);
+            String lbl = type.equals("set-usa-greatroom") ? "OPEN GREAT ROOM" : "GRAND LIVING SUITE";
+            g2.drawString(lbl, 12, sh - 8);
 
-        } else if (type.equals("set-bath-master") || type.equals("set-bath-linear") || type.equals("set-bath-corner")) {
+        } else if (type.equals("set-usa-hearth")) {
             g2.setColor(primaryCol);
             g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
             g2.drawRoundRect(0, 0, sw, sh, 6, 6);
 
-            int showerW = Math.max(26, (int)(sw * 0.38));
-            int showerH = Math.max(26, (int)(sh * 0.5));
-            g2.setColor(Color.WHITE); g2.fillRect(4, 4, showerW, showerH);
-            g2.setColor(sanCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(4, 4, showerW, showerH);
-            g2.setStroke(new BasicStroke(sHair));
-            g2.drawOval(4 + showerW / 2 - 4, 4 + showerH / 2 - 4, 8, 8);
-            g2.drawArc(4, 4 + showerH - 16, 20, 20, 0, 90);
+            // Fireplace Hearth
+            int fpW = (int)(sw * 0.45);
+            int fpX = (sw - fpW) / 2;
+            g2.setColor(Color.WHITE); g2.fillRect(fpX, 2, fpW, (int)(sh * 0.16));
+            g2.setColor(elecCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(fpX, 2, fpW, (int)(sh * 0.16));
+            g2.drawRect(fpX + fpW / 4, 4, fpW / 2, (int)(sh * 0.1));
 
-            int tubW = showerW;
-            int tubH = sh - showerH - 12;
-            int tubY = showerH + 8;
-            g2.setColor(Color.WHITE); g2.fillRect(4, tubY, tubW, tubH);
-            g2.setColor(sanCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(4, tubY, tubW, tubH);
-            g2.setStroke(new BasicStroke(sHair));
-            g2.drawRoundRect(8, tubY + 4, tubW - 8, tubH - 8, 12, 12);
+            // Wingback chairs
+            int chW = (int)(sw * 0.22), chH = (int)(sh * 0.26);
+            g2.setColor(Color.WHITE); g2.fillRect(14, (int)(sh * 0.35), chW, chH); g2.fillRect(sw - chW - 14, (int)(sh * 0.35), chW, chH);
+            g2.setColor(furnCol); g2.setStroke(new BasicStroke(sHair));
+            g2.drawRect(14, (int)(sh * 0.35), chW, chH); g2.drawRect(sw - chW - 14, (int)(sh * 0.35), chW, chH);
 
-            int toiletW = Math.max(16, (int)(sw * 0.25));
-            int toiletH = Math.max(22, (int)(sh * 0.35));
-            int tx = sw - toiletW - 8, ty = 6;
-            g2.setColor(Color.WHITE); g2.fillRect(tx, ty, toiletW, toiletH / 3);
-            g2.setColor(sanCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(tx, ty, toiletW, toiletH / 3);
-            g2.drawOval(tx + 2, ty + toiletH / 3, toiletW - 4, 2 * toiletH / 3);
+            // Round table
+            int rDia = (int)(sw * 0.24);
+            g2.setColor(Color.WHITE); g2.fillOval((sw - rDia) / 2, (int)(sh * 0.44), rDia, rDia);
+            g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.drawOval((sw - rDia) / 2, (int)(sh * 0.44), rDia, rDia);
+
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * scale))));
+            g2.drawString("HEARTH & FIREPLACE", 12, sh - 8);
+
+        } else if (type.equals("set-living-full") || type.equals("set-living-compact") || type.equals("set-living-square") || type.equals("set-living-sectional")) {
+            g2.setColor(primaryCol);
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
+            g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+            if (type.equals("set-living-sectional")) {
+                int tvW = Math.max(12, (int)(sw * 0.12)), tvH = Math.max(34, (int)(sh * 0.5));
+                g2.setColor(Color.WHITE); g2.fillRect(sw - tvW - 6, (sh - tvH) / 2, tvW, tvH);
+                g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(sw - tvW - 6, (sh - tvH) / 2, tvW, tvH);
+
+                int armD = Math.max(18, (int)(sw * 0.28));
+                Path2D.Double lSofa = new Path2D.Double();
+                lSofa.moveTo(6, 6); lSofa.lineTo(sw - tvW - 20, 6); lSofa.lineTo(sw - tvW - 20, 6 + armD);
+                lSofa.lineTo(6 + armD, 6 + armD); lSofa.lineTo(6 + armD, sh - 6); lSofa.lineTo(6, sh - 6); lSofa.closePath();
+                g2.setColor(Color.WHITE); g2.fill(lSofa);
+                g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.draw(lSofa);
+
+                int tblW = Math.max(20, (int)(sw * 0.26)), tblH = Math.max(16, (int)(sh * 0.24));
+                g2.setColor(Color.WHITE); g2.fillRect(6 + armD + 8, 6 + armD + 8, tblW, tblH);
+                g2.setColor(furnCol); g2.drawRect(6 + armD + 8, 6 + armD + 8, tblW, tblH);
+            } else {
+                int tvW = Math.max(36, (int)(sw * 0.55)), tvH = Math.max(10, (int)(sh * 0.12));
+                g2.setColor(Color.WHITE); g2.fillRect((sw - tvW) / 2, 4, tvW, tvH);
+                g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect((sw - tvW) / 2, 4, tvW, tvH);
+
+                int sofaW = Math.max(40, (int)(sw * 0.65)), sofaH = Math.max(16, (int)(sh * 0.24));
+                int sofaX = (sw - sofaW) / 2, sofaY = sh - sofaH - 6;
+                g2.setColor(Color.WHITE); g2.fillRect(sofaX, sofaY, sofaW, sofaH);
+                g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(sofaX, sofaY, sofaW, sofaH);
+                int cW = sofaW / (type.equals("set-living-compact") ? 2 : 3);
+                g2.setStroke(new BasicStroke(sHair));
+                for (int c = 1; c < (type.equals("set-living-compact") ? 2 : 3); c++) g2.drawLine(sofaX + c * cW, sofaY, sofaX + c * cW, sofaY + sofaH);
+
+                int tblW = Math.max(20, (int)(sw * 0.3)), tblH = Math.max(12, (int)(sh * 0.2));
+                g2.setColor(Color.WHITE); g2.fillRect((sw - tblW) / 2, (sh - tblH) / 2, tblW, tblH);
+                g2.setColor(furnCol); g2.drawRect((sw - tblW) / 2, (sh - tblH) / 2, tblW, tblH);
+            }
+
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * scale))));
+            g2.drawString(el.name.toUpperCase(), 10, sh - 8);
+
+        // 3. Dining Sets & Breakfast Nook
+        } else if (type.equals("set-dining-formal") || type.equals("set-usa-dining-formal") || type.equals("set-dining-full") || type.equals("set-dining-compact")) {
+            g2.setColor(primaryCol);
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
+            g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+            // Buffet Credenza along top
+            int crW = (int)(sw * 0.7);
+            g2.setColor(Color.WHITE); g2.fillRect((sw - crW) / 2, 4, crW, 12);
+            g2.setColor(furnCol); g2.setStroke(new BasicStroke(sHair)); g2.drawRect((sw - crW) / 2, 4, crW, 12);
+
+            // Table
+            int tW = (int)(sw * 0.65), tH = (int)(sh * 0.44);
+            int tX = (sw - tW) / 2, tY = (sh - tH) / 2 + 4;
+            g2.setColor(Color.WHITE); g2.fillRect(tX, tY, tW, tH);
+            g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(tX, tY, tW, tH);
+
+            int chairs = type.equals("set-usa-dining-formal") ? 4 : (type.equals("set-dining-compact") ? 2 : 3);
+            int chW = tW / (chairs + 1);
+            g2.setStroke(new BasicStroke(sHair));
+            for (int i = 0; i < chairs; i++) {
+                int cx = tX + 6 + i * (tW - 12) / chairs;
+                g2.drawRect(cx, tY - 7, chW, 6);
+                g2.drawRect(cx, tY + tH + 1, chW, 6);
+            }
+            if (!type.equals("set-dining-compact")) {
+                g2.drawRect(tX - 7, tY + tH / 2 - 8, 6, 16);
+                g2.drawRect(tX + tW + 1, tY + tH / 2 - 8, 6, 16);
+            }
+
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * scale))));
+            g2.drawString(el.name.toUpperCase(), tX + 4, tY + tH / 2 + 3);
+
+        } else if (type.equals("set-dining-round")) {
+            g2.setColor(primaryCol);
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
+            g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+            int r = Math.min(sw, sh) / 3;
+            g2.setColor(Color.WHITE); g2.fillOval(sw / 2 - r, sh / 2 - r, r * 2, r * 2);
+            g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.drawOval(sw / 2 - r, sh / 2 - r, r * 2, r * 2);
+
+            for (int i = 0; i < 5; i++) {
+                double ang = i * 2.0 * Math.PI / 5.0;
+                int cx = (int)(sw / 2 + (r + 8) * Math.cos(ang));
+                int cy = (int)(sh / 2 + (r + 8) * Math.sin(ang));
+                drawAutoCADStool(g2, cx, cy, Math.max(4, (int)(5 * scale)), sMed, sHair, furnCol);
+            }
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * scale))));
+            g2.drawString("ROUND DINING", sw / 2 - 28, sh / 2 + 3);
+
+        } else if (type.equals("set-usa-breakfast-nook")) {
+            g2.setColor(primaryCol);
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
+            g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+            int bW = (int)(sw * 0.65), bH = (int)(sh * 0.65);
+            Path2D.Double bqPath = new Path2D.Double();
+            bqPath.moveTo(6, 6); bqPath.lineTo(6 + bW, 6); bqPath.lineTo(6 + bW, 20);
+            bqPath.lineTo(24, 20); bqPath.lineTo(24, 6 + bH); bqPath.lineTo(6, 6 + bH); bqPath.closePath();
+            g2.setColor(Color.WHITE); g2.fill(bqPath);
+            g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.draw(bqPath);
+
+            int tbW = (int)(sw * 0.45), tbH = (int)(sh * 0.38);
+            g2.setColor(Color.WHITE); g2.fillRect(32, 28, tbW, tbH);
+            g2.setColor(furnCol); g2.drawRect(32, 28, tbW, tbH);
+
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(7, (int)(8 * scale))));
+            g2.drawString("BREAKFAST NOOK", 10, sh - 8);
+
+        // 4. Primary Suite & Walk-In Closets
+        } else if (type.equals("set-usa-primary-wic")) {
+            g2.setColor(primaryCol);
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
+            g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+            // Walk-in closet right 30%
+            int wicW = (int)(sw * 0.3);
+            int wicX = sw - wicW;
+            g2.setColor(Color.WHITE); g2.fillRect(wicX, 4, wicW - 4, sh - 8);
+            g2.setColor(primaryCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(wicX, 4, wicW - 4, sh - 8);
+            g2.setStroke(new BasicStroke(sHair));
+            for (int y = 14; y < sh - 20; y += 12) {
+                g2.drawLine(wicX + 4, y, wicX + 14, y);
+                g2.drawLine(sw - 16, y, sw - 6, y);
+            }
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(7, (int)(7 * scale))));
+            g2.drawString("W.I.C.", wicX + 8, sh / 2);
+
+            // King Bed left
+            int bedW = (int)(sw * 0.42), bedH = (int)(sh * 0.54);
+            int bedX = 26, bedY = (sh - bedH) / 2;
+            g2.setColor(Color.WHITE); g2.fillRect(bedX, bedY, bedW, bedH);
+            g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(bedX, bedY, bedW, bedH);
+            g2.fillRect(bedX, bedY, 10, bedH);
+            int pw = (bedH - 16) / 2;
+            g2.setStroke(new BasicStroke(sHair));
+            g2.drawRoundRect(bedX + 14, bedY + 6, 14, pw, 3, 3);
+            g2.drawRoundRect(bedX + 14, bedY + bedH / 2 + 3, 14, pw, 3, 3);
+
+            // Nightstands
+            g2.drawRect(bedX - 16, bedY + 4, 12, 14);
+            g2.drawRect(bedX - 16, bedY + bedH - 18, 12, 14);
+
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * scale))));
+            g2.drawString("PRIMARY SUITE + WIC", 10, sh - 8);
+
+        } else if (type.equals("set-usa-walkin-closet")) {
+            g2.setColor(primaryCol);
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
+            g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+            int sD = (int)(sw * 0.22);
+            g2.setColor(Color.WHITE);
+            g2.fillRect(4, 4, sw - 8, sD); g2.fillRect(4, 4, sD, sh - 8); g2.fillRect(sw - sD - 4, 4, sD, sh - 8);
+            g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed));
+            g2.drawRect(4, 4, sw - 8, sD); g2.drawRect(4, 4, sD, sh - 8); g2.drawRect(sw - sD - 4, 4, sD, sh - 8);
+
+            int isW = (int)(sw * 0.3), isH = (int)(sh * 0.35);
+            g2.setColor(Color.WHITE); g2.fillRect((sw - isW) / 2, (sh - isH) / 2 + 10, isW, isH);
+            g2.setColor(furnCol); g2.drawRect((sw - isW) / 2, (sh - isH) / 2 + 10, isW, isH);
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(7, (int)(8 * scale))));
+            g2.drawString("WALK-IN CLOSET (WIC)", (sw - isW) / 2 - 14, sh - 4);
+
+        // 5. Bedroom Suites
+        } else if (type.equals("set-bedroom-master") || type.equals("set-bedroom-double")
+                || type.equals("set-bedroom-compact") || type.equals("set-bedroom-twin")
+                || type.equals("set-bedroom-grand") || type.equals("set-bedroom-square")
+                || type.equals("set-guest-deluxe") || type.equals("set-guest-sofabed") || type.equals("set-guest-compact")
+                || type.equals("set-kids-bunk") || type.equals("set-kids-single") || type.equals("set-kids-nursery")) {
+
+            g2.setColor(primaryCol);
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
+            g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+            if (type.equals("set-bedroom-twin")) {
+                int bedW = Math.max(22, (int)(sw * 0.28)), bedH = Math.max(36, (int)(sh * 0.58));
+                int b1X = 8, b2X = sw - bedW - 8, bY = 6;
+                g2.setColor(Color.WHITE); g2.fillRect(b1X, bY, bedW, bedH); g2.fillRect(b2X, bY, bedW, bedH);
+                g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed));
+                g2.drawRect(b1X, bY, bedW, bedH); g2.drawRect(b2X, bY, bedW, bedH);
+                // Nightstand center
+                int stW = (sw - bedW * 2 - 24);
+                g2.drawRect((sw - stW) / 2, bY, stW, stW);
+
+            } else if (type.equals("set-kids-bunk")) {
+                int bW = (int)(sw * 0.35), bH = (int)(sh * 0.65);
+                g2.setColor(Color.WHITE); g2.fillRect(6, 6, bW, bH);
+                g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(6, 6, bW, bH);
+                g2.setStroke(new BasicStroke(sHair));
+                for (int l = 1; l < 5; l++) g2.drawLine(bW, 6 + l * bH / 5, bW + 6, 6 + l * bH / 5);
+                int matR = Math.min(sw, sh) / 4;
+                g2.drawOval(sw - matR * 2 - 12, (sh - matR * 2) / 2, matR * 2, matR * 2);
+
+            } else {
+                int wardH = Math.max(14, (int)(sh * 0.18));
+                g2.setColor(Color.WHITE); g2.fillRect(4, 4, sw - 8, wardH);
+                g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(4, 4, sw - 8, wardH);
+                int doors = (type.equals("set-bedroom-master") || type.equals("set-bedroom-grand")) ? 6 : 4;
+                g2.setStroke(new BasicStroke(sHair));
+                for (int d = 1; d < doors; d++) g2.drawLine(4 + d * (sw - 8) / doors, 4, 4 + d * (sw - 8) / doors, 4 + wardH);
+
+                int bedW = Math.max(34, (int)(sw * 0.44)), bedH = Math.max(38, (int)(sh * 0.52));
+                int bedX = (sw - bedW) / 2, bedY = wardH + 12;
+                g2.setColor(Color.WHITE); g2.fillRect(bedX, bedY, bedW, bedH);
+                g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(bedX, bedY, bedW, bedH);
+                int hb = Math.max(6, bedH / 8);
+                g2.drawRect(bedX, bedY, bedW, hb);
+
+                int pw = (bedW - 12) / 2, ph = Math.max(8, (int)(bedH * 0.18));
+                g2.setStroke(new BasicStroke(sHair));
+                g2.drawRoundRect(bedX + 3, bedY + hb + 3, pw, ph, 4, 4);
+                g2.drawRoundRect(bedX + bedW - pw - 3, bedY + hb + 3, pw, ph, 4, 4);
+
+                int standW = Math.max(12, (int)(sw * 0.12));
+                g2.drawRect(bedX - standW - 4, bedY, standW, standW);
+                g2.drawRect(bedX + bedW + 4, bedY, standW, standW);
+            }
+
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * scale))));
+            g2.drawString(el.name.toUpperCase(), 10, sh - 8);
+
+        // 6. Home Office & Study
+        } else if (type.equals("set-study-executive") || type.equals("set-study-dual") || type.equals("set-study-library") || type.equals("set-study-compact")) {
+            g2.setColor(primaryCol);
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
+            g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+            if (type.equals("set-study-executive")) {
+                int dW = (int)(sw * 0.58), dH = (int)(sh * 0.45);
+                Path2D.Double deskPath = new Path2D.Double();
+                deskPath.moveTo(6, 6); deskPath.lineTo(6 + dW, 6); deskPath.lineTo(6 + dW, 6 + 18);
+                deskPath.lineTo(6 + 22, 6 + 18); deskPath.lineTo(6 + 22, 6 + dH); deskPath.lineTo(6, 6 + dH); deskPath.closePath();
+                g2.setColor(Color.WHITE); g2.fill(deskPath);
+                g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.draw(deskPath);
+
+                int bW = (int)(sw * 0.16);
+                g2.setColor(Color.WHITE); g2.fillRect(sw - bW - 6, 6, bW, sh - 12);
+                g2.setColor(furnCol); g2.drawRect(sw - bW - 6, 6, bW, sh - 12);
+            } else {
+                int dH = (int)(sh * 0.3);
+                g2.setColor(Color.WHITE); g2.fillRect(6, 6, sw - 12, dH);
+                g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(6, 6, sw - 12, dH);
+                g2.setStroke(new BasicStroke(sHair));
+                g2.drawLine(sw / 2, 6, sw / 2, 6 + dH);
+            }
+
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * scale))));
+            g2.drawString(el.name.toUpperCase(), 10, sh - 8);
+
+        // 7. Bathrooms
+        } else if (type.equals("set-usa-bath-5piece") || type.equals("set-bath-luxury") || type.equals("set-bath-master")
+                || type.equals("set-bath-linear") || type.equals("set-bath-corner") || type.equals("set-bath-standard") || type.equals("set-bath-powder")) {
+            g2.setColor(primaryCol);
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
+            g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+            // Double vanity top
+            int vH = Math.max(14, (int)(sh * 0.3));
+            g2.setColor(Color.WHITE); g2.fillRect(6, 6, sw - 12, vH);
+            g2.setColor(sanCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(6, 6, sw - 12, vH);
+            int sW = (sw - 12) / 3;
+            g2.setStroke(new BasicStroke(sHair));
+            g2.drawOval(14, 8, sW, vH - 6);
+            if (!type.equals("set-bath-powder") && !type.equals("set-bath-corner")) {
+                g2.drawOval(sw - 14 - sW, 8, sW, vH - 6);
+            }
+
+            // Tub & Shower
+            if (type.equals("set-usa-bath-5piece") || type.equals("set-bath-luxury")) {
+                int tubW = (int)(sw * 0.42), tubH = (int)(sh * 0.45);
+                g2.setColor(Color.WHITE); g2.fillOval(8, sh - tubH - 12, tubW, tubH);
+                g2.setColor(sanCol); g2.setStroke(new BasicStroke(sMed)); g2.drawOval(8, sh - tubH - 12, tubW, tubH);
+
+                int shW = (int)(sw * 0.38), shH = (int)(sh * 0.45);
+                g2.setColor(Color.WHITE); g2.fillRect(sw - shW - 8, sh - shH - 12, shW, shH);
+                g2.setColor(sanCol); g2.drawRect(sw - shW - 8, sh - shH - 12, shW, shH);
+                g2.drawOval(sw - shW / 2 - 12, sh - shH / 2 - 16, 8, 8);
+            } else {
+                int toiletW = Math.max(14, (int)(sw * 0.25)), toiletH = Math.max(20, (int)(sh * 0.35));
+                g2.setColor(Color.WHITE); g2.fillRect(sw - toiletW - 8, sh - toiletH - 8, toiletW, toiletH / 3);
+                g2.setColor(sanCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(sw - toiletW - 8, sh - toiletH - 8, toiletW, toiletH / 3);
+                g2.drawOval(sw - toiletW - 6, sh - toiletH - 8 + toiletH / 4, toiletW - 4, (int)(toiletH * 0.75));
+            }
+
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * scale))));
+            g2.drawString(el.name.toUpperCase(), 10, sh - 4);
+
+        // 8. Mudroom, Entry, Laundry & Mechanical
+        } else if (type.equals("set-usa-mudroom") || type.equals("set-usa-foyer") || type.equals("set-usa-dropzone")) {
+            g2.setColor(primaryCol);
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
+            g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+            int lkH = (int)(sh * 0.45);
+            g2.setColor(Color.WHITE); g2.fillRect(4, 4, sw - 8, lkH);
+            g2.setColor(primaryCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(4, 4, sw - 8, lkH);
+            int cubW = (sw - 8) / 4;
+            g2.setStroke(new BasicStroke(sHair));
+            for (int c = 1; c < 4; c++) g2.drawLine(4 + c * cubW, 4, 4 + c * cubW, 4 + lkH);
+
+            g2.drawString(el.name.toUpperCase(), 10, sh - 8);
+
+        } else if (type.equals("set-usa-laundry-full") || type.equals("set-usa-laundry-compact")) {
+            g2.setColor(primaryCol);
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
+            g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+            int appW = (int)(sw * 0.32), appH = (int)(sh * 0.5);
+            g2.setColor(Color.WHITE); g2.fillRect(6, 6, appW, appH); g2.fillRect(appW + 12, 6, appW, appH);
+            g2.setColor(appCol); g2.setStroke(new BasicStroke(sMed));
+            g2.drawRect(6, 6, appW, appH); g2.drawRect(appW + 12, 6, appW, appH);
+            g2.drawOval(6 + appW / 2 - 8, 6 + appH / 2 - 8, 16, 16);
+            g2.drawOval(appW + 12 + appW / 2 - 8, 6 + appH / 2 - 8, 16, 16);
+
+            if (type.equals("set-usa-laundry-full")) {
+                int sW = sw - (appW * 2 + 22) - 8;
+                drawAutoCADSink(g2, appW * 2 + 20, 6, sW, appH, sMed, sHair, kitCol);
+            }
+
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * scale))));
+            g2.drawString(el.name.toUpperCase(), 10, sh - 8);
+
+        } else if (type.equals("set-usa-mechanical")) {
+            g2.setColor(primaryCol);
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
+            g2.drawRoundRect(0, 0, sw, sh, 4, 4);
+
+            int fW = (int)(sw * 0.46), fH = (int)(sh * 0.65);
+            g2.setColor(Color.WHITE); g2.fillRect(6, 6, fW, fH);
+            g2.setColor(elecCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(6, 6, fW, fH);
+            g2.drawLine(6, 6, 6 + fW, 6 + fH); g2.drawLine(6, 6 + fH, 6 + fW, 6);
+
+            int whDia = (int)(sw * 0.4);
+            g2.setColor(Color.WHITE); g2.fillOval(sw - whDia - 8, 8, whDia, whDia);
+            g2.setColor(elecCol); g2.drawOval(sw - whDia - 8, 8, whDia, whDia);
+
+            g2.drawString("MECH / HVAC", 8, sh - 4);
+
+        // 9. Missing Site / Landscape Blocks
+        } else if (type.equals("tree-palm")) {
+            int cx = sw / 2, cy = sh / 2, r = Math.min(sw, sh) / 2 - 2;
+            g2.setColor(Color.WHITE); g2.fillOval(cx - r, cy - r, r * 2, r * 2);
+            g2.setColor(landCol); g2.setStroke(new BasicStroke(sMed));
+            for (int i = 0; i < 8; i++) {
+                double ang = (2 * Math.PI / 8) * i;
+                g2.drawArc(cx - r, cy - r, r * 2, r * 2, (int) Math.toDegrees(ang) - 20, 40);
+            }
+            g2.drawOval(cx - 3, cy - 3, 6, 6);
+
+        } else if (type.equals("shrub") || type.equals("planter-box")) {
+            g2.setColor(Color.WHITE); g2.fillRect(0, 0, sw, sh);
+            g2.setColor(landCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(0, 0, sw, sh);
+            int step = Math.max(10, sw / 4);
+            for (int x = step / 2; x < sw; x += step) g2.drawOval(x - 4, sh / 2 - 4, 8, 8);
+
+        } else if (type.equals("parking-bay")) {
+            g2.setColor(Color.WHITE); g2.fillRect(0, 0, sw, sh);
+            g2.setColor(primaryCol); g2.setStroke(new BasicStroke(sMed));
+            g2.drawLine(0, 0, sw, 0); g2.drawLine(0, sh, sw, sh);
+            g2.drawString("P", sw / 2 - 4, sh / 2 + 4);
+
+        } else if (type.equals("streetlight")) {
+            int cx = sw / 2, cy = sh / 2, r = Math.min(sw, sh) / 2;
+            g2.setColor(elecCol); g2.setStroke(new BasicStroke(sMed));
+            g2.drawOval(cx - 3, cy - 3, 6, 6);
+            g2.drawLine(cx - r, cy, cx + r, cy);
+            g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
+            g2.drawOval(cx - r + 2, cy - r + 2, (r - 2) * 2, (r - 2) * 2);
 
         } else if (type.startsWith("set-")) {
             g2.setColor(furnCol);
             g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
             g2.drawRoundRect(0, 0, sw, sh, 6, 6);
-            g2.setColor(new Color(primaryCol.getRed(), primaryCol.getGreen(), primaryCol.getBlue(), 20));
-            g2.fillRoundRect(1, 1, sw - 2, sh - 2, 6, 6);
             g2.setColor(primaryCol);
             g2.setFont(new Font("Consolas", Font.BOLD, Math.max(9, (int)(9 * scale))));
             FontMetrics fm = g2.getFontMetrics();
