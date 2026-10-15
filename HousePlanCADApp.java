@@ -327,6 +327,31 @@ public class HousePlanCADApp extends JFrame {
         }
     }
 
+    public enum RegionProfile {
+        INDIA("India", "🇮🇳 India", "Vastu & Brickwork (9\" / 4.5\" Walls)"),
+        USA_INTERNATIONAL("USA & International", "🇺🇸 USA & Int'l", "US IRC & Wood Framing (2x6 / 2x4 Walls)");
+
+        private final String displayName;
+        private final String shortBadge;
+        private final String description;
+
+        RegionProfile(String displayName, String shortBadge, String description) {
+            this.displayName = displayName;
+            this.shortBadge = shortBadge;
+            this.description = description;
+        }
+
+        public String getDisplayName() { return displayName; }
+        public String getShortBadge() { return shortBadge; }
+        public String getDescription() { return description; }
+    }
+
+    private RegionProfile currentRegion = RegionProfile.INDIA;
+    private ModernButton regionSwitcherBtn;
+    private JComboBox<String> wallThickCombo;
+    private JComboBox<String> presetsCombo;
+    private JPanel roomSetsContainer;
+
     public static class ArchitectAuditReport {
         public int score = 100;
         public String grade = "A+";
@@ -411,13 +436,49 @@ public class HousePlanCADApp extends JFrame {
     private JLabel headerProjectTitleLbl = null;
     private JLabel headerDirtyIndicator = null;
 
+    private void loadUserPreferences() {
+        try {
+            java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(HousePlanCADApp.class);
+            String reg = prefs.get("hde_region_profile", null);
+            if (reg != null) {
+                currentRegion = RegionProfile.valueOf(reg);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void saveUserPreferences() {
+        try {
+            java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(HousePlanCADApp.class);
+            prefs.put("hde_region_profile", currentRegion.name());
+            prefs.putBoolean("hde_region_first_run_done", true);
+            prefs.flush();
+        } catch (Exception ignored) {}
+    }
+
+    private boolean isFirstRun() {
+        try {
+            java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(HousePlanCADApp.class);
+            return !prefs.getBoolean("hde_region_first_run_done", false);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     public HousePlanCADApp() {
         super("HDE Studio — Architectural 2D CAD");
+        loadUserPreferences();
         initUI();
         initAutoSaveEngine();
-        loadPreset30x40();
+        if (currentRegion == RegionProfile.USA_INTERNATIONAL) {
+            loadPresetUSARanch();
+        } else {
+            loadPreset30x40();
+        }
         enableDarkWindowTitle();
         checkAutoSaveRecoveryOnStartup();
+        if (isFirstRun()) {
+            SwingUtilities.invokeLater(() -> showRegionSelectorDialog(true));
+        }
     }
 
     private void initUI() {
@@ -538,6 +599,14 @@ public class HousePlanCADApp extends JFrame {
         brandPanel.add(Box.createHorizontalStrut(6));
         brandPanel.add(headerProjectTitleLbl);
         brandPanel.add(headerDirtyIndicator);
+
+        brandPanel.add(Box.createHorizontalStrut(8));
+        regionSwitcherBtn = new ModernButton(currentRegion.getShortBadge(), new Color(24, 33, 53), new Color(56, 189, 248), new Color(14, 116, 144));
+        regionSwitcherBtn.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        regionSwitcherBtn.setToolTipText("Active Building Standard: " + currentRegion.getDisplayName() + " (Click to switch standards)");
+        regionSwitcherBtn.setPreferredSize(new Dimension(115, 26));
+        regionSwitcherBtn.addActionListener(e -> showRegionSelectorDialog(false));
+        brandPanel.add(regionSwitcherBtn);
         header.add(brandPanel, BorderLayout.WEST);
 
         JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 7));
@@ -568,15 +637,20 @@ public class HousePlanCADApp extends JFrame {
         redoBtn.setToolTipText("Redo (Ctrl+Y)");
         redoBtn.addActionListener(e -> redo());
 
-        JComboBox<String> presetsCombo = new JComboBox<>(new String[]{
-                "Sample Plans...", "30' × 40' Wall Plan",
-                "25' × 40' Wall Plan", "20' × 30' Wall Plan"});
+        presetsCombo = new JComboBox<>();
+        updatePresetsComboItems();
         styleComboBox(presetsCombo);
         presetsCombo.addActionListener(e -> {
             int idx = presetsCombo.getSelectedIndex();
-            if (idx == 1) loadPreset30x40();
-            else if (idx == 2) loadPreset25x40();
-            else if (idx == 3) loadPreset20x30();
+            if (currentRegion == RegionProfile.INDIA) {
+                if (idx == 1) loadPreset30x40();
+                else if (idx == 2) loadPreset25x40();
+                else if (idx == 3) loadPreset20x30();
+            } else {
+                if (idx == 1) loadPresetUSARanch();
+                else if (idx == 2) loadPresetUSACraftsman();
+                else if (idx == 3) loadPresetUSACottage();
+            }
         });
 
         ModernButton learnBtn = new ModernButton("📖 Learn", new Color(30, 41, 59), new Color(147, 197, 253), new Color(59, 130, 246));
@@ -626,11 +700,18 @@ public class HousePlanCADApp extends JFrame {
 
         ModernToggle panBtn = createToolToggle("Pan [H]", ToolMode.PAN, toolButtonGroup, false);
 
-        JComboBox<String> wallThickCombo = new JComboBox<>(new String[]{"9\" Wall (Ext)", "6\" Wall (Part)", "4.5\" Wall (Thin)"});
+        wallThickCombo = new JComboBox<>();
+        updateWallThickComboItems();
         styleComboBox(wallThickCombo);
         wallThickCombo.addActionListener(e -> {
             int idx = wallThickCombo.getSelectedIndex();
-            wallThicknessInches = (idx == 0) ? 9.0 : (idx == 1 ? 6.0 : 4.5);
+            if (idx >= 0) {
+                if (currentRegion == RegionProfile.INDIA) {
+                    wallThicknessInches = (idx == 0) ? 9.0 : (idx == 1 ? 6.0 : 4.5);
+                } else {
+                    wallThicknessInches = (idx == 0) ? 6.5 : (idx == 1 ? 4.5 : 6.0);
+                }
+            }
         });
 
         JComboBox<String> wallHatchCombo = new JComboBox<>(new String[]{"45° Brick Hatch", "Solid Black Poché", "Hollow Wall"});
@@ -1005,113 +1086,10 @@ public class HousePlanCADApp extends JFrame {
         // ═════════════════════════════════════════════════════════════════════
         // ─── ARCHITECTURAL ROOM SETS (Dedicated Categorized Room Suites) ───
         // ═════════════════════════════════════════════════════════════════════
-        JPanel roomSetsPanel = new JPanel(new BorderLayout());
-        roomSetsPanel.setBackground(new Color(15, 23, 42));
-
-        CardLayout setsCardLayout = new CardLayout();
-        JPanel setsCards = new JPanel(setsCardLayout);
-        setsCards.setBackground(new Color(15, 23, 42));
-
-        // Subcategory Filter Tab Bar (2-column grid of 8 room categories)
-        JPanel setsSubBar = new JPanel(new GridLayout(4, 2, 2, 2));
-        setsSubBar.setBackground(new Color(15, 23, 42));
-        setsSubBar.setBorder(new EmptyBorder(4, 6, 6, 6));
-
-        ButtonGroup setsSubGroup = new ButtonGroup();
-        ModernToggle livingSetsTab = createCategoryTab("Living Sets", "SETS_LIVING", setsCardLayout, setsCards, setsSubGroup, true);
-        ModernToggle bedSetsTab    = createCategoryTab("Bedroom Sets", "SETS_BEDROOM", setsCardLayout, setsCards, setsSubGroup, false);
-        ModernToggle kitSetsTab    = createCategoryTab("Kitchen Sets", "SETS_KITCHEN", setsCardLayout, setsCards, setsSubGroup, false);
-        ModernToggle dinSetsTab    = createCategoryTab("Dining Sets", "SETS_DINING", setsCardLayout, setsCards, setsSubGroup, false);
-        ModernToggle guestSetsTab  = createCategoryTab("Guest Sets", "SETS_GUEST", setsCardLayout, setsCards, setsSubGroup, false);
-        ModernToggle kidsSetsTab   = createCategoryTab("Children Sets", "SETS_KIDS", setsCardLayout, setsCards, setsSubGroup, false);
-        ModernToggle studySetsTab  = createCategoryTab("Study Sets", "SETS_STUDY", setsCardLayout, setsCards, setsSubGroup, false);
-        ModernToggle bathSetsTab   = createCategoryTab("Bathroom Sets", "SETS_BATH", setsCardLayout, setsCards, setsSubGroup, false);
-
-        setsSubBar.add(livingSetsTab); setsSubBar.add(bedSetsTab);
-        setsSubBar.add(kitSetsTab);    setsSubBar.add(dinSetsTab);
-        setsSubBar.add(guestSetsTab);  setsSubBar.add(kidsSetsTab);
-        setsSubBar.add(studySetsTab);  setsSubBar.add(bathSetsTab);
-
-        // 1. LIVING ROOM SETS PANEL
-        JPanel pLivingSets = createCatalogCategoryPanel();
-        addCatalogHeader(pLivingSets, "Living Room Suites (Multiple Sizes & Orientations)");
-        addCatalogItem(pLivingSets, "Grand Living Suite (20'×16')", "set-living-grand", 20.0, 16.0);
-        addCatalogItem(pLivingSets, "Standard Living Suite (16'×12')", "set-living-full", 16.0, 12.0);
-        addCatalogItem(pLivingSets, "L-Sectional Lounge (14'×12')", "set-living-sectional", 14.0, 12.0);
-        addCatalogItem(pLivingSets, "Compact Living / Apt (12'×10')", "set-living-compact", 12.0, 10.0);
-        addCatalogItem(pLivingSets, "Square Living Room (14'×14')", "set-living-square", 14.0, 14.0);
-        setsCards.add(wrapInScroll(pLivingSets), "SETS_LIVING");
-
-        // 2. BEDROOM SETS PANEL
-        JPanel pBedSets = createCatalogCategoryPanel();
-        addCatalogHeader(pBedSets, "Master & Double Bedroom Sets");
-        addCatalogItem(pBedSets, "Master Suite + Dresser (16'×14')", "set-bedroom-master", 16.0, 14.0);
-        addCatalogItem(pBedSets, "Grand Master Suite (18'×16')", "set-bedroom-grand", 18.0, 16.0);
-        addCatalogItem(pBedSets, "Double Bed + Wardrobe (14'×12')", "set-bedroom-double", 14.0, 12.0);
-        addCatalogItem(pBedSets, "Standard Bedroom (12'×12')", "set-bedroom-square", 12.0, 12.0);
-        addCatalogItem(pBedSets, "Compact Double Bed (12'×10')", "set-bedroom-compact", 12.0, 10.0);
-        setsCards.add(wrapInScroll(pBedSets), "SETS_BEDROOM");
-
-        // 3. KITCHEN SETS PANEL
-        JPanel pKitSets = createCatalogCategoryPanel();
-        addCatalogHeader(pKitSets, "Modular Kitchen Suites (Full Counter Layouts)");
-        addCatalogItem(pKitSets, "Chef's Island Kitchen (14'×12')", "set-kitchen-island", 14.0, 12.0);
-        addCatalogItem(pKitSets, "U-Shape Kitchen Suite (12'×10')", "set-kitchen-u", 12.0, 10.0);
-        addCatalogItem(pKitSets, "L-Shape Modular Kitchen (10'×9')", "set-kitchen-l", 10.0, 9.0);
-        addCatalogItem(pKitSets, "Parallel Galley Kitchen (10'×8')", "set-kitchen-parallel", 10.0, 8.0);
-        addCatalogItem(pKitSets, "Linear Studio Kitchenette (10'×6')", "set-kitchen-linear", 10.0, 6.0);
-        setsCards.add(wrapInScroll(pKitSets), "SETS_KITCHEN");
-
-        // 4. DINING ROOM SETS PANEL
-        JPanel pDinSets = createCatalogCategoryPanel();
-        addCatalogHeader(pDinSets, "Formal & Casual Dining Room Suites");
-        addCatalogItem(pDinSets, "Formal 8-Seat Dining (14'×12')", "set-dining-formal", 14.0, 12.0);
-        addCatalogItem(pDinSets, "Standard 6-Seat Dining (12'×10')", "set-dining-full", 12.0, 10.0);
-        addCatalogItem(pDinSets, "Compact 4-Seat Dining (10'×8')", "set-dining-compact", 10.0, 8.0);
-        addCatalogItem(pDinSets, "Round Family Dining (10'×10')", "set-dining-round", 10.0, 10.0);
-        setsCards.add(wrapInScroll(pDinSets), "SETS_DINING");
-
-        // 5. GUEST ROOM SETS PANEL
-        JPanel pGuestSets = createCatalogCategoryPanel();
-        addCatalogHeader(pGuestSets, "Guest Bedrooms & Multi-purpose Suites");
-        addCatalogItem(pGuestSets, "Deluxe Guest Suite (14'×12')", "set-guest-deluxe", 14.0, 12.0);
-        addCatalogItem(pGuestSets, "Standard Guest Room (12'×10')", "set-bedroom-compact", 12.0, 10.0);
-        addCatalogItem(pGuestSets, "Sofa-Bed Combo Room (11'×9')", "set-guest-sofabed", 11.0, 9.0);
-        addCatalogItem(pGuestSets, "Compact Guest / Daybed (10'×8')", "set-guest-compact", 10.0, 8.0);
-        setsCards.add(wrapInScroll(pGuestSets), "SETS_GUEST");
-
-        // 6. CHILDREN ROOM SETS PANEL
-        JPanel pKidsSets = createCatalogCategoryPanel();
-        addCatalogHeader(pKidsSets, "Children & Teens Room Suites");
-        addCatalogItem(pKidsSets, "Twin Beds + Dual Desk (14'×11')", "set-bedroom-twin", 14.0, 11.0);
-        addCatalogItem(pKidsSets, "Bunk Bed + Play Area (12'×10')", "set-kids-bunk", 12.0, 10.0);
-        addCatalogItem(pKidsSets, "Single Kid Room + Desk (11'×10')", "set-kids-single", 11.0, 10.0);
-        addCatalogItem(pKidsSets, "Play & Study Nursery (12'×11')", "set-kids-nursery", 12.0, 11.0);
-        setsCards.add(wrapInScroll(pKidsSets), "SETS_KIDS");
-
-        // 7. STUDY & HOME OFFICE SETS PANEL
-        JPanel pStudySets = createCatalogCategoryPanel();
-        addCatalogHeader(pStudySets, "Home Office, Study & Library Suites");
-        addCatalogItem(pStudySets, "Executive Corner Office (14'×12')", "set-study-executive", 14.0, 12.0);
-        addCatalogItem(pStudySets, "Dual Workstation Study (12'×10')", "set-study-dual", 12.0, 10.0);
-        addCatalogItem(pStudySets, "Library / Reading Room (12'×10')", "set-study-library", 12.0, 10.0);
-        addCatalogItem(pStudySets, "Compact Home Desk Study (9'×8')", "set-study-compact", 9.0, 8.0);
-        setsCards.add(wrapInScroll(pStudySets), "SETS_STUDY");
-
-        // 8. BATHROOM SETS PANEL
-        JPanel pBathSets = createCatalogCategoryPanel();
-        addCatalogHeader(pBathSets, "Ensuite, Family & Powder Bath Suites");
-        addCatalogItem(pBathSets, "Spa Luxury Bath (12'×10')", "set-bath-luxury", 12.0, 10.0);
-        addCatalogItem(pBathSets, "Master Ensuite Bath (10'×8')", "set-bath-master", 10.0, 8.0);
-        addCatalogItem(pBathSets, "Long Linear Bath (10'×5')", "set-bath-linear", 10.0, 5.0);
-        addCatalogItem(pBathSets, "Standard 3-Fixture Bath (8'×5')", "set-bath-standard", 8.0, 5.0);
-        addCatalogItem(pBathSets, "Corner Shower Bath (7'×6')", "set-bath-corner", 7.0, 6.0);
-        addCatalogItem(pBathSets, "Powder Room / Half (5'×5')", "set-bath-powder", 5.0, 5.0);
-        setsCards.add(wrapInScroll(pBathSets), "SETS_BATH");
-
-        roomSetsPanel.add(setsSubBar, BorderLayout.NORTH);
-        roomSetsPanel.add(setsCards, BorderLayout.CENTER);
-        catalogContentCards.add(roomSetsPanel, "ROOM_SETS");
+        roomSetsContainer = new JPanel(new BorderLayout());
+        roomSetsContainer.setBackground(new Color(15, 23, 42));
+        populateRoomSetsPanel();
+        catalogContentCards.add(roomSetsContainer, "ROOM_SETS");
 
         // DOORS & OPENINGS
         JPanel doorsPanel = createCatalogCategoryPanel();
@@ -1308,6 +1286,440 @@ public class HousePlanCADApp extends JFrame {
         sp.getViewport().setBackground(new Color(15, 23, 42));
         sp.getVerticalScrollBar().setUnitIncrement(16);
         return sp;
+    }
+
+    private void updateWallThickComboItems() {
+        if (wallThickCombo == null) return;
+        DefaultComboBoxModel<String> model;
+        if (currentRegion == RegionProfile.INDIA) {
+            model = new DefaultComboBoxModel<>(new String[]{"9\" Wall (Ext)", "6\" Wall (Part)", "4.5\" Wall (Thin)"});
+            wallThicknessInches = 9.0;
+        } else {
+            model = new DefaultComboBoxModel<>(new String[]{"6.5\" Ext (2x6 Stud)", "4.5\" Part (2x4 Stud)", "6.0\" Plumbing Chase"});
+            wallThicknessInches = 6.5;
+        }
+        wallThickCombo.setModel(model);
+        wallThickCombo.setSelectedIndex(0);
+    }
+
+    private void updatePresetsComboItems() {
+        if (presetsCombo == null) return;
+        DefaultComboBoxModel<String> model;
+        if (currentRegion == RegionProfile.INDIA) {
+            model = new DefaultComboBoxModel<>(new String[]{
+                    "Sample Plans...", "30' × 40' Wall Plan",
+                    "25' × 40' Wall Plan", "20' × 30' Wall Plan"});
+        } else {
+            model = new DefaultComboBoxModel<>(new String[]{
+                    "Sample Plans...", "36' × 48' Ranch Home (USA)",
+                    "30' × 42' Modern Craftsman", "24' × 36' Suburban Cottage"});
+        }
+        presetsCombo.setModel(model);
+        presetsCombo.setSelectedIndex(0);
+    }
+
+    public void setRegionProfile(RegionProfile profile) {
+        if (profile == null) return;
+        this.currentRegion = profile;
+        saveUserPreferences();
+
+        if (regionSwitcherBtn != null) {
+            regionSwitcherBtn.setText(profile.getShortBadge());
+            regionSwitcherBtn.setToolTipText("Active Building Standard: " + profile.getDisplayName() + " (Click to switch standards)");
+        }
+
+        updateWallThickComboItems();
+        updatePresetsComboItems();
+        populateRoomSetsPanel();
+
+        if (viewportPanel != null) {
+            String spec = (profile == RegionProfile.INDIA) ? "9\"/4.5\" Brickwork & Vastu" : "2x6/2x4 Wood Studs & IRC";
+            viewportPanel.showToastNotification("✓ Active Market: " + profile.getDisplayName() + " (" + spec + ")");
+            viewportPanel.repaint();
+        }
+    }
+
+    private void populateRoomSetsPanel() {
+        if (roomSetsContainer == null) return;
+        roomSetsContainer.removeAll();
+
+        CardLayout setsCardLayout = new CardLayout();
+        JPanel setsCards = new JPanel(setsCardLayout);
+        setsCards.setBackground(new Color(15, 23, 42));
+
+        JPanel setsSubBar = new JPanel(new GridLayout(4, 2, 2, 2));
+        setsSubBar.setBackground(new Color(15, 23, 42));
+        setsSubBar.setBorder(new EmptyBorder(4, 6, 6, 6));
+        ButtonGroup setsSubGroup = new ButtonGroup();
+
+        if (currentRegion == RegionProfile.INDIA) {
+            ModernToggle livingSetsTab = createCategoryTab("Living Sets", "SETS_LIVING", setsCardLayout, setsCards, setsSubGroup, true);
+            ModernToggle bedSetsTab    = createCategoryTab("Bedroom Sets", "SETS_BEDROOM", setsCardLayout, setsCards, setsSubGroup, false);
+            ModernToggle kitSetsTab    = createCategoryTab("Kitchen Sets", "SETS_KITCHEN", setsCardLayout, setsCards, setsSubGroup, false);
+            ModernToggle dinSetsTab    = createCategoryTab("Dining Sets", "SETS_DINING", setsCardLayout, setsCards, setsSubGroup, false);
+            ModernToggle guestSetsTab  = createCategoryTab("Guest Sets", "SETS_GUEST", setsCardLayout, setsCards, setsSubGroup, false);
+            ModernToggle kidsSetsTab   = createCategoryTab("Children Sets", "SETS_KIDS", setsCardLayout, setsCards, setsSubGroup, false);
+            ModernToggle studySetsTab  = createCategoryTab("Study Sets", "SETS_STUDY", setsCardLayout, setsCards, setsSubGroup, false);
+            ModernToggle bathSetsTab   = createCategoryTab("Bathroom Sets", "SETS_BATH", setsCardLayout, setsCards, setsSubGroup, false);
+
+            setsSubBar.add(livingSetsTab); setsSubBar.add(bedSetsTab);
+            setsSubBar.add(kitSetsTab);    setsSubBar.add(dinSetsTab);
+            setsSubBar.add(guestSetsTab);  setsSubBar.add(kidsSetsTab);
+            setsSubBar.add(studySetsTab);  setsSubBar.add(bathSetsTab);
+
+            // 1. Living Sets
+            JPanel pLivingSets = createCatalogCategoryPanel();
+            addCatalogHeader(pLivingSets, "Living Room Suites (Multiple Sizes & Orientations)");
+            addCatalogItem(pLivingSets, "Grand Living Suite (20'×16')", "set-living-grand", 20.0, 16.0);
+            addCatalogItem(pLivingSets, "Standard Living Suite (16'×12')", "set-living-full", 16.0, 12.0);
+            addCatalogItem(pLivingSets, "L-Sectional Lounge (14'×12')", "set-living-sectional", 14.0, 12.0);
+            addCatalogItem(pLivingSets, "Compact Living / Apt (12'×10')", "set-living-compact", 12.0, 10.0);
+            addCatalogItem(pLivingSets, "Square Living Room (14'×14')", "set-living-square", 14.0, 14.0);
+            setsCards.add(wrapInScroll(pLivingSets), "SETS_LIVING");
+
+            // 2. Bedroom Sets
+            JPanel pBedSets = createCatalogCategoryPanel();
+            addCatalogHeader(pBedSets, "Master & Double Bedroom Sets");
+            addCatalogItem(pBedSets, "Master Suite + Dresser (16'×14')", "set-bedroom-master", 16.0, 14.0);
+            addCatalogItem(pBedSets, "Grand Master Suite (18'×16')", "set-bedroom-grand", 18.0, 16.0);
+            addCatalogItem(pBedSets, "Double Bed + Wardrobe (14'×12')", "set-bedroom-double", 14.0, 12.0);
+            addCatalogItem(pBedSets, "Standard Bedroom (12'×12')", "set-bedroom-square", 12.0, 12.0);
+            addCatalogItem(pBedSets, "Compact Double Bed (12'×10')", "set-bedroom-compact", 12.0, 10.0);
+            setsCards.add(wrapInScroll(pBedSets), "SETS_BEDROOM");
+
+            // 3. Kitchen Sets
+            JPanel pKitSets = createCatalogCategoryPanel();
+            addCatalogHeader(pKitSets, "Modular Kitchen Suites (Full Counter Layouts)");
+            addCatalogItem(pKitSets, "Chef's Island Kitchen (14'×12')", "set-kitchen-island", 14.0, 12.0);
+            addCatalogItem(pKitSets, "U-Shape Kitchen Suite (12'×10')", "set-kitchen-u", 12.0, 10.0);
+            addCatalogItem(pKitSets, "L-Shape Modular Kitchen (10'×9')", "set-kitchen-l", 10.0, 9.0);
+            addCatalogItem(pKitSets, "Parallel Galley Kitchen (10'×8')", "set-kitchen-parallel", 10.0, 8.0);
+            addCatalogItem(pKitSets, "Linear Studio Kitchenette (10'×6')", "set-kitchen-linear", 10.0, 6.0);
+            setsCards.add(wrapInScroll(pKitSets), "SETS_KITCHEN");
+
+            // 4. Dining Sets
+            JPanel pDinSets = createCatalogCategoryPanel();
+            addCatalogHeader(pDinSets, "Formal & Casual Dining Room Suites");
+            addCatalogItem(pDinSets, "Formal 8-Seat Dining (14'×12')", "set-dining-formal", 14.0, 12.0);
+            addCatalogItem(pDinSets, "Standard 6-Seat Dining (12'×10')", "set-dining-full", 12.0, 10.0);
+            addCatalogItem(pDinSets, "Compact 4-Seat Dining (10'×8')", "set-dining-compact", 10.0, 8.0);
+            addCatalogItem(pDinSets, "Round Family Dining (10'×10')", "set-dining-round", 10.0, 10.0);
+            setsCards.add(wrapInScroll(pDinSets), "SETS_DINING");
+
+            // 5. Guest Sets
+            JPanel pGuestSets = createCatalogCategoryPanel();
+            addCatalogHeader(pGuestSets, "Guest Bedrooms & Multi-purpose Suites");
+            addCatalogItem(pGuestSets, "Deluxe Guest Suite (14'×12')", "set-guest-deluxe", 14.0, 12.0);
+            addCatalogItem(pGuestSets, "Standard Guest Room (12'×10')", "set-bedroom-compact", 12.0, 10.0);
+            addCatalogItem(pGuestSets, "Sofa-Bed Combo Room (11'×9')", "set-guest-sofabed", 11.0, 9.0);
+            addCatalogItem(pGuestSets, "Compact Guest / Daybed (10'×8')", "set-guest-compact", 10.0, 8.0);
+            setsCards.add(wrapInScroll(pGuestSets), "SETS_GUEST");
+
+            // 6. Children Sets
+            JPanel pKidsSets = createCatalogCategoryPanel();
+            addCatalogHeader(pKidsSets, "Children & Teens Room Suites");
+            addCatalogItem(pKidsSets, "Twin Beds + Dual Desk (14'×11')", "set-bedroom-twin", 14.0, 11.0);
+            addCatalogItem(pKidsSets, "Bunk Bed + Play Area (12'×10')", "set-kids-bunk", 12.0, 10.0);
+            addCatalogItem(pKidsSets, "Single Kid Room + Desk (11'×10')", "set-kids-single", 11.0, 10.0);
+            addCatalogItem(pKidsSets, "Play & Study Nursery (12'×11')", "set-kids-nursery", 12.0, 11.0);
+            setsCards.add(wrapInScroll(pKidsSets), "SETS_KIDS");
+
+            // 7. Study Sets
+            JPanel pStudySets = createCatalogCategoryPanel();
+            addCatalogHeader(pStudySets, "Home Office, Study & Library Suites");
+            addCatalogItem(pStudySets, "Executive Corner Office (14'×12')", "set-study-executive", 14.0, 12.0);
+            addCatalogItem(pStudySets, "Dual Workstation Study (12'×10')", "set-study-dual", 12.0, 10.0);
+            addCatalogItem(pStudySets, "Library / Reading Room (12'×10')", "set-study-library", 12.0, 10.0);
+            addCatalogItem(pStudySets, "Compact Home Desk Study (9'×8')", "set-study-compact", 9.0, 8.0);
+            setsCards.add(wrapInScroll(pStudySets), "SETS_STUDY");
+
+            // 8. Bathroom Sets
+            JPanel pBathSets = createCatalogCategoryPanel();
+            addCatalogHeader(pBathSets, "Ensuite, Family & Powder Bath Suites");
+            addCatalogItem(pBathSets, "Spa Luxury Bath (12'×10')", "set-bath-luxury", 12.0, 10.0);
+            addCatalogItem(pBathSets, "Master Ensuite Bath (10'×8')", "set-bath-master", 10.0, 8.0);
+            addCatalogItem(pBathSets, "Long Linear Bath (10'×5')", "set-bath-linear", 10.0, 5.0);
+            addCatalogItem(pBathSets, "Standard 3-Fixture Bath (8'×5')", "set-bath-standard", 8.0, 5.0);
+            addCatalogItem(pBathSets, "Corner Shower Bath (7'×6')", "set-bath-corner", 7.0, 6.0);
+            addCatalogItem(pBathSets, "Powder Room / Half (5'×5')", "set-bath-powder", 5.0, 5.0);
+            setsCards.add(wrapInScroll(pBathSets), "SETS_BATH");
+        } else {
+            // USA & INTERNATIONAL ROOM SETS
+            ModernToggle greatRoomTab = createCategoryTab("Great Room", "SETS_USA_GREAT", setsCardLayout, setsCards, setsSubGroup, true);
+            ModernToggle primaryTab   = createCategoryTab("Primary & WIC", "SETS_USA_PRIMARY", setsCardLayout, setsCards, setsSubGroup, false);
+            ModernToggle islandKitTab = createCategoryTab("Island Kitchen", "SETS_USA_KITCHEN", setsCardLayout, setsCards, setsSubGroup, false);
+            ModernToggle diningNookTab= createCategoryTab("Dining & Nook", "SETS_USA_DINING", setsCardLayout, setsCards, setsSubGroup, false);
+            ModernToggle mudroomTab   = createCategoryTab("Mudroom / Entry", "SETS_USA_MUD", setsCardLayout, setsCards, setsSubGroup, false);
+            ModernToggle laundryTab   = createCategoryTab("Laundry / Mech", "SETS_USA_LAUNDRY", setsCardLayout, setsCards, setsSubGroup, false);
+            ModernToggle bedSuitesTab = createCategoryTab("Bedrooms & Office", "SETS_USA_BEDS", setsCardLayout, setsCards, setsSubGroup, false);
+            ModernToggle spaBathTab   = createCategoryTab("5-Piece Bath", "SETS_USA_BATH", setsCardLayout, setsCards, setsSubGroup, false);
+
+            setsSubBar.add(greatRoomTab);  setsSubBar.add(primaryTab);
+            setsSubBar.add(islandKitTab);  setsSubBar.add(diningNookTab);
+            setsSubBar.add(mudroomTab);    setsSubBar.add(laundryTab);
+            setsSubBar.add(bedSuitesTab);  setsSubBar.add(spaBathTab);
+
+            // 1. USA Great Room & Living
+            JPanel pGreat = createCatalogCategoryPanel();
+            addCatalogHeader(pGreat, "Open-Concept Great Rooms & Living");
+            addCatalogItem(pGreat, "Open Great Room Suite (24'×18')", "set-usa-greatroom", 24.0, 18.0);
+            addCatalogItem(pGreat, "Hearth Room with Fireplace (18'×14')", "set-usa-hearth", 18.0, 14.0);
+            addCatalogItem(pGreat, "L-Sectional Family Room (16'×14')", "set-living-sectional", 16.0, 14.0);
+            addCatalogItem(pGreat, "Formal Living & Media (16'×12')", "set-living-full", 16.0, 12.0);
+            addCatalogItem(pGreat, "Sunroom / Covered Lanai (14'×12')", "set-living-square", 14.0, 12.0);
+            setsCards.add(wrapInScroll(pGreat), "SETS_USA_GREAT");
+
+            // 2. Primary Suite & Walk-In Closets (WIC)
+            JPanel pPrimary = createCatalogCategoryPanel();
+            addCatalogHeader(pPrimary, "Primary / Master Suites & WIC");
+            addCatalogItem(pPrimary, "Primary Suite + WIC (20'×16')", "set-usa-primary-wic", 20.0, 16.0);
+            addCatalogItem(pPrimary, "California King Suite (18'×16')", "set-bedroom-grand", 18.0, 16.0);
+            addCatalogItem(pPrimary, "Modern Primary Suite (16'×14')", "set-bedroom-master", 16.0, 14.0);
+            addCatalogItem(pPrimary, "Walk-In Closet Suite (10'×8')", "set-usa-walkin-closet", 10.0, 8.0);
+            addCatalogItem(pPrimary, "Guest Bedroom + Reach-In (14'×12')", "set-bedroom-double", 14.0, 12.0);
+            setsCards.add(wrapInScroll(pPrimary), "SETS_USA_PRIMARY");
+
+            // 3. USA Island Kitchen & Walk-in Pantry
+            JPanel pKitUSA = createCatalogCategoryPanel();
+            addCatalogHeader(pKitUSA, "Open Island Kitchens & Pantries");
+            addCatalogItem(pKitUSA, "Chef Island + 4 Barstools (16'×14')", "set-usa-kitchen-island", 16.0, 14.0);
+            addCatalogItem(pKitUSA, "Open L-Island Kitchen (14'×12')", "set-kitchen-island", 14.0, 12.0);
+            addCatalogItem(pKitUSA, "Walk-In Butler's Pantry (10'×8')", "set-usa-pantry", 10.0, 8.0);
+            addCatalogItem(pKitUSA, "Gourmet U-Kitchen (12'×10')", "set-kitchen-u", 12.0, 10.0);
+            addCatalogItem(pKitUSA, "Suburban Galley Kitchen (12'×9')", "set-kitchen-parallel", 12.0, 9.0);
+            setsCards.add(wrapInScroll(pKitUSA), "SETS_USA_KITCHEN");
+
+            // 4. Dining & Breakfast Nooks
+            JPanel pDinUSA = createCatalogCategoryPanel();
+            addCatalogHeader(pDinUSA, "Formal Dining & Casual Breakfast Nooks");
+            addCatalogItem(pDinUSA, "Formal 10-Seat Dining (16'×12')", "set-usa-dining-formal", 16.0, 12.0);
+            addCatalogItem(pDinUSA, "Standard 8-Seat Dining (14'×11')", "set-dining-formal", 14.0, 11.0);
+            addCatalogItem(pDinUSA, "Banquette Breakfast Nook (10'×9')", "set-usa-breakfast-nook", 10.0, 9.0);
+            addCatalogItem(pDinUSA, "Round Family Dining (11'×11')", "set-dining-round", 11.0, 11.0);
+            setsCards.add(wrapInScroll(pDinUSA), "SETS_USA_DINING");
+
+            // 5. Mudroom & Entry
+            JPanel pMud = createCatalogCategoryPanel();
+            addCatalogHeader(pMud, "Mudrooms, Foyers & Drop Zones");
+            addCatalogItem(pMud, "Mudroom + Lockers & Bench (12'×8')", "set-usa-mudroom", 12.0, 8.0);
+            addCatalogItem(pMud, "Entry Foyer + Coat Closet (10'×8')", "set-usa-foyer", 10.0, 8.0);
+            addCatalogItem(pMud, "Garage Entry Drop-Zone (8'×6')", "set-usa-dropzone", 8.0, 6.0);
+            setsCards.add(wrapInScroll(pMud), "SETS_USA_MUD");
+
+            // 6. Laundry & Mechanical
+            JPanel pLaund = createCatalogCategoryPanel();
+            addCatalogHeader(pLaund, "Dedicated Laundry & Mechanical");
+            addCatalogItem(pLaund, "Full Laundry + Sink & Folding (10'×8')", "set-usa-laundry-full", 10.0, 8.0);
+            addCatalogItem(pLaund, "Compact Laundry Closet (8'×6')", "set-usa-laundry-compact", 8.0, 6.0);
+            addCatalogItem(pLaund, "HVAC & Water Heater Closet (6'×5')", "set-usa-mechanical", 6.0, 5.0);
+            setsCards.add(wrapInScroll(pLaund), "SETS_USA_LAUNDRY");
+
+            // 7. Bedrooms & Home Office
+            JPanel pBedsUSA = createCatalogCategoryPanel();
+            addCatalogHeader(pBedsUSA, "Secondary Bedrooms & Home Office");
+            addCatalogItem(pBedsUSA, "Executive Home Office (14'×12')", "set-study-executive", 14.0, 12.0);
+            addCatalogItem(pBedsUSA, "Twin Beds Suite + Desks (14'×12')", "set-bedroom-twin", 14.0, 12.0);
+            addCatalogItem(pBedsUSA, "Kid Bunk Bed Suite (12'×10')", "set-kids-bunk", 12.0, 10.0);
+            addCatalogItem(pBedsUSA, "Single Kid Bedroom (12'×10')", "set-kids-single", 12.0, 10.0);
+            addCatalogItem(pBedsUSA, "Nursery Suite (12'×11')", "set-kids-nursery", 12.0, 11.0);
+            setsCards.add(wrapInScroll(pBedsUSA), "SETS_USA_BEDS");
+
+            // 8. 5-Piece Primary Bath & Powder
+            JPanel pBathUSA = createCatalogCategoryPanel();
+            addCatalogHeader(pBathUSA, "5-Piece Luxury & Powder Baths");
+            addCatalogItem(pBathUSA, "5-Piece Spa Bath (14'×10')", "set-usa-bath-5piece", 14.0, 10.0);
+            addCatalogItem(pBathUSA, "4-Piece Ensuite Bath (10'×8')", "set-bath-luxury", 10.0, 8.0);
+            addCatalogItem(pBathUSA, "Long 3-Fixture Full Bath (10'×5')", "set-bath-linear", 10.0, 5.0);
+            addCatalogItem(pBathUSA, "Standard 3-Fixture Bath (8'×5')", "set-bath-standard", 8.0, 5.0);
+            addCatalogItem(pBathUSA, "Powder Room / Half Bath (6'×5')", "set-bath-powder", 6.0, 5.0);
+            setsCards.add(wrapInScroll(pBathUSA), "SETS_USA_BATH");
+        }
+
+        roomSetsContainer.add(setsSubBar, BorderLayout.NORTH);
+        roomSetsContainer.add(setsCards, BorderLayout.CENTER);
+        roomSetsContainer.revalidate();
+        roomSetsContainer.repaint();
+    }
+
+    public void showRegionSelectorDialog(boolean isFirstRun) {
+        JDialog dlg = new JDialog(this, "Architectural Region & Building Code Standards", true);
+        dlg.setUndecorated(true);
+
+        JPanel root = new JPanel(new BorderLayout(0, 16));
+        root.setBackground(new Color(15, 23, 42)); // Slate #0f172a
+        root.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(56, 189, 248), 1, true),
+                new EmptyBorder(22, 26, 22, 26)));
+
+        // Header Panel
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        headerPanel.setOpaque(false);
+
+        JPanel titleBlock = new JPanel();
+        titleBlock.setLayout(new BoxLayout(titleBlock, BoxLayout.Y_AXIS));
+        titleBlock.setOpaque(false);
+
+        JLabel badge = new JLabel("ARCHITECTURAL MARKET & BUILDING CODES");
+        badge.setFont(new Font("Consolas", Font.BOLD, 10));
+        badge.setForeground(new Color(56, 189, 248));
+
+        JLabel heading = new JLabel(isFirstRun ? "Welcome to HDE Studio — Select Your Market" : "Switch Architectural Standards");
+        heading.setFont(new Font("Segoe UI", Font.BOLD, 19));
+        heading.setForeground(Color.WHITE);
+
+        JLabel sub = new JLabel("<html><span style='color:#94a3b8'>Select your primary architectural market. HDE Studio configures wall thicknesses, standard room suites,<br>framing assemblies, and code verification rules accordingly.</span></html>");
+        sub.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+
+        titleBlock.add(badge);
+        titleBlock.add(Box.createVerticalStrut(4));
+        titleBlock.add(heading);
+        titleBlock.add(Box.createVerticalStrut(4));
+        titleBlock.add(sub);
+        headerPanel.add(titleBlock, BorderLayout.WEST);
+
+        if (!isFirstRun) {
+            JLabel closeLbl = new JLabel(" ✕ ");
+            closeLbl.setFont(new Font("Segoe UI", Font.BOLD, 16));
+            closeLbl.setForeground(new Color(148, 163, 184));
+            closeLbl.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            closeLbl.addMouseListener(new MouseAdapter() {
+                @Override public void mouseClicked(MouseEvent e) { dlg.dispose(); }
+            });
+            headerPanel.add(closeLbl, BorderLayout.EAST);
+        }
+        root.add(headerPanel, BorderLayout.NORTH);
+
+        // Body: 2 Interactive Cards
+        JPanel cardsContainer = new JPanel(new GridLayout(1, 2, 18, 0));
+        cardsContainer.setOpaque(false);
+
+        final RegionProfile[] selected = new RegionProfile[]{ currentRegion };
+
+        JPanel cardIndia = new JPanel(new BorderLayout(0, 10));
+        JPanel cardUSA = new JPanel(new BorderLayout(0, 10));
+
+        JLabel indiaCheck = new JLabel();
+        indiaCheck.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        JLabel usaCheck = new JLabel();
+        usaCheck.setFont(new Font("Segoe UI", Font.BOLD, 11));
+
+        Runnable updateVisuals = () -> {
+            boolean isInd = selected[0] == RegionProfile.INDIA;
+
+            cardIndia.setBackground(isInd ? new Color(24, 33, 53) : new Color(17, 24, 39));
+            cardIndia.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(isInd ? new Color(56, 189, 248) : new Color(51, 65, 85), isInd ? 2 : 1, true),
+                    new EmptyBorder(16, 18, 16, 18)));
+            indiaCheck.setText(isInd ? "● ACTIVE STANDARD" : "○ SELECT");
+            indiaCheck.setForeground(isInd ? new Color(56, 189, 248) : new Color(100, 116, 139));
+
+            cardUSA.setBackground(!isInd ? new Color(24, 33, 53) : new Color(17, 24, 39));
+            cardUSA.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(!isInd ? new Color(56, 189, 248) : new Color(51, 65, 85), !isInd ? 2 : 1, true),
+                    new EmptyBorder(16, 18, 16, 18)));
+            usaCheck.setText(!isInd ? "● ACTIVE STANDARD" : "○ SELECT");
+            usaCheck.setForeground(!isInd ? new Color(56, 189, 248) : new Color(100, 116, 139));
+
+            cardIndia.repaint();
+            cardUSA.repaint();
+        };
+
+        // India Card contents
+        JPanel indTop = new JPanel(new BorderLayout());
+        indTop.setOpaque(false);
+        JLabel indTitle = new JLabel("🇮🇳  India Standards");
+        indTitle.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        indTitle.setForeground(Color.WHITE);
+        indTop.add(indTitle, BorderLayout.WEST);
+        indTop.add(indiaCheck, BorderLayout.EAST);
+
+        JLabel indBody = new JLabel("<html><div style='line-height:1.6; color:#cbd5e1; font-family:Segoe UI; font-size:11px;'>"
+                + "<span style='color:#38bdf8'><b>NBC & Vastu Guidelines</b></span><br><br>"
+                + "• <b>Masonry Walls:</b> 9\" Exterior Brick, 4.5\" Partition Walls, RCC 8\" Columns<br>"
+                + "• <b>Vastu Shastra:</b> Directional compass, Kitchen/Master/Pooja audits<br>"
+                + "• <b>Room Suites:</b> Pooja Room, Sit-Out / Verandah, Wet Kitchen & Utility<br>"
+                + "• <b>Dimensions:</b> Ft-Inches & Metric (Sq.ft, Cent, Guntha, Ankanam)"
+                + "</div></html>");
+
+        cardIndia.add(indTop, BorderLayout.NORTH);
+        cardIndia.add(indBody, BorderLayout.CENTER);
+        cardIndia.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        cardIndia.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) {
+                selected[0] = RegionProfile.INDIA;
+                updateVisuals.run();
+            }
+        });
+
+        // USA Card contents
+        JPanel usaTop = new JPanel(new BorderLayout());
+        usaTop.setOpaque(false);
+        JLabel usaTitle = new JLabel("🇺🇸  USA & International");
+        usaTitle.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        usaTitle.setForeground(Color.WHITE);
+        usaTop.add(usaTitle, BorderLayout.WEST);
+        usaTop.add(usaCheck, BorderLayout.EAST);
+
+        JLabel usaBody = new JLabel("<html><div style='line-height:1.6; color:#cbd5e1; font-family:Segoe UI; font-size:11px;'>"
+                + "<span style='color:#38bdf8'><b>IRC / IBC & Wood Framing</b></span><br><br>"
+                + "• <b>Stud Framing:</b> 2x6 Exterior (6.5\"), 2x4 Interior Partitions (4.5\")<br>"
+                + "• <b>IRC Building Code:</b> Bedroom Egress windows, Smoke/CO alarm zones<br>"
+                + "• <b>American Suites:</b> Open Great Room, Island Kitchen, Walk-in Closets (WIC), Mudroom, Laundry Suite, 2-Car Garage<br>"
+                + "• <b>Dimensions:</b> Fractional Ft-Inches, Standard AIA CAD Layers"
+                + "</div></html>");
+
+        cardUSA.add(usaTop, BorderLayout.NORTH);
+        cardUSA.add(usaBody, BorderLayout.CENTER);
+        cardUSA.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        cardUSA.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) {
+                selected[0] = RegionProfile.USA_INTERNATIONAL;
+                updateVisuals.run();
+            }
+        });
+
+        updateVisuals.run();
+
+        cardsContainer.add(cardIndia);
+        cardsContainer.add(cardUSA);
+        root.add(cardsContainer, BorderLayout.CENTER);
+
+        // Bottom Action Bar
+        JPanel footerPanel = new JPanel(new BorderLayout());
+        footerPanel.setOpaque(false);
+
+        JLabel footNote = new JLabel("💡 You can switch standards anytime from the top bar.");
+        footNote.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        footNote.setForeground(new Color(148, 163, 184));
+        footerPanel.add(footNote, BorderLayout.WEST);
+
+        JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        btnRow.setOpaque(false);
+
+        if (!isFirstRun) {
+            ModernButton cancelBtn = new ModernButton("Cancel", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
+            cancelBtn.setPreferredSize(new Dimension(85, 30));
+            cancelBtn.addActionListener(e -> dlg.dispose());
+            btnRow.add(cancelBtn);
+        }
+
+        ModernButton applyBtn = new ModernButton(isFirstRun ? "Start HDE Studio" : "Apply Standards",
+                new Color(14, 116, 144), Color.WHITE, new Color(56, 189, 248));
+        applyBtn.setPreferredSize(new Dimension(140, 30));
+        applyBtn.addActionListener(e -> {
+            setRegionProfile(selected[0]);
+            dlg.dispose();
+        });
+        btnRow.add(applyBtn);
+
+        footerPanel.add(btnRow, BorderLayout.EAST);
+        root.add(footerPanel, BorderLayout.SOUTH);
+
+        dlg.setContentPane(root);
+        dlg.pack();
+        dlg.setSize(760, 420);
+        dlg.setLocationRelativeTo(this);
+        dlg.setVisible(true);
     }
 
     public static void showModernDialog(Component parent, String title, String heading, String message) {
@@ -7663,6 +8075,550 @@ public class HousePlanCADApp extends JFrame {
                 g2.setColor(new Color(148, 163, 184));
                 g2.setFont(new Font("Consolas", Font.BOLD, Math.max(7, (int)(8 * zoom))));
                 g2.drawString("CORNER BATH", 6, sh - 4);
+
+            // ─── USA OPEN GREAT ROOM (24'×18') ───────────────────────────
+            } else if (type.equals("set-usa-greatroom")) {
+                g2.setColor(new Color(30, 41, 59, 100));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.setStroke(new BasicStroke(0.8f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, new float[]{5, 3}, 0));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Entertainment / Media Wall along top
+                int tvW = (int)(sw * 0.55);
+                int tvX = (sw - tvW) / 2;
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRoundRect(tvX, 4, tvW, (int)(sh * 0.08), 3, 3);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect(tvX, 4, tvW, (int)(sh * 0.08), 3, 3);
+                g2.setColor(new Color(56, 189, 248));
+                g2.fillRect(tvX + (int)(tvW * 0.2), 2, (int)(tvW * 0.6), 3);
+
+                // Large Central Area Rug
+                int rugW = (int)(sw * 0.75);
+                int rugH = (int)(sh * 0.55);
+                int rugX = (sw - rugW) / 2;
+                int rugY = (int)(sh * 0.22);
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillRoundRect(rugX, rugY, rugW, rugH, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 100));
+                g2.drawRoundRect(rugX, rugY, rugW, rugH, 6, 6);
+
+                // L-Sectional Sofa
+                int sofaX = rugX + 6;
+                int sofaY = rugY + 6;
+                int sofaW = (int)(rugW * 0.65);
+                int sofaH = (int)(rugH * 0.7);
+                Path2D.Double secPath = new Path2D.Double();
+                secPath.moveTo(sofaX, sofaY + sofaH);
+                secPath.lineTo(sofaX, sofaY);
+                secPath.lineTo(sofaX + sofaW, sofaY);
+                secPath.lineTo(sofaX + sofaW, sofaY + 22);
+                secPath.lineTo(sofaX + 22, sofaY + 22);
+                secPath.lineTo(sofaX + 22, sofaY + sofaH);
+                secPath.closePath();
+                g2.setColor(new Color(30, 41, 59));
+                g2.fill(secPath);
+                g2.setColor(new Color(203, 213, 225));
+                g2.draw(secPath);
+
+                // Coffee Table in center
+                int ctW = (int)(rugW * 0.3);
+                int ctH = (int)(rugH * 0.25);
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRoundRect(rugX + rugW / 2 - ctW / 2 + 10, rugY + rugH / 2 - ctH / 2 + 5, ctW, ctH, 4, 4);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawRoundRect(rugX + rugW / 2 - ctW / 2 + 10, rugY + rugH / 2 - ctH / 2 + 5, ctW, ctH, 4, 4);
+
+                // 2 Accent Armchairs right
+                int acW = (int)(rugW * 0.2);
+                int acH = (int)(rugH * 0.25);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect(rugX + rugW - acW - 6, rugY + 12, acW, acH, 4, 4);
+                g2.fillRoundRect(rugX + rugW - acW - 6, rugY + rugH - acH - 12, acW, acH, 4, 4);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect(rugX + rugW - acW - 6, rugY + 12, acW, acH, 4, 4);
+                g2.drawRoundRect(rugX + rugW - acW - 6, rugY + rugH - acH - 12, acW, acH, 4, 4);
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * zoom))));
+                g2.drawString("OPEN GREAT ROOM", rugX + 10, sh - 8);
+
+            // ─── HEARTH ROOM & FIREPLACE (18'×14') ───────────────────────
+            } else if (type.equals("set-usa-hearth")) {
+                g2.setColor(new Color(30, 41, 59, 100));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Top: Stone Fireplace Hearth
+                int fpW = (int)(sw * 0.45);
+                int fpX = (sw - fpW) / 2;
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRect(fpX, 2, fpW, (int)(sh * 0.15));
+                g2.setColor(new Color(245, 158, 11)); // Amber fireplace glow
+                g2.drawRect(fpX, 2, fpW, (int)(sh * 0.15));
+                g2.setColor(new Color(245, 158, 11, 140));
+                g2.fillRect(fpX + fpW / 4, 4, fpW / 2, (int)(sh * 0.1));
+
+                // 2 Flanking Wingback Chairs
+                int chW = (int)(sw * 0.22);
+                int chH = (int)(sh * 0.28);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect(14, (int)(sh * 0.35), chW, chH, 6, 6);
+                g2.fillRoundRect(sw - chW - 14, (int)(sh * 0.35), chW, chH, 6, 6);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect(14, (int)(sh * 0.35), chW, chH, 6, 6);
+                g2.drawRoundRect(sw - chW - 14, (int)(sh * 0.35), chW, chH, 6, 6);
+
+                // Round Coffee Table center
+                int rDia = (int)(sw * 0.25);
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillOval((sw - rDia) / 2, (int)(sh * 0.45), rDia, rDia);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawOval((sw - rDia) / 2, (int)(sh * 0.45), rDia, rDia);
+
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("HEARTH & FIREPLACE", 12, sh - 8);
+
+            // ─── PRIMARY SUITE + WIC (20'×16') ───────────────────────────
+            } else if (type.equals("set-usa-primary-wic")) {
+                g2.setColor(new Color(30, 41, 59, 100));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Right 30%: Partitioned Walk-in Closet (WIC)
+                int wicW = (int)(sw * 0.3);
+                int wicX = sw - wicW;
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillRect(wicX, 4, wicW - 4, sh - 8);
+                g2.setColor(new Color(56, 189, 248, 120));
+                g2.drawRect(wicX, 4, wicW - 4, sh - 8);
+                // Hanging rods and clothes lines
+                g2.setColor(new Color(100, 116, 139));
+                for (int y = 14; y < sh - 20; y += 12) {
+                    g2.drawLine(wicX + 4, y, wicX + 16, y);
+                    g2.drawLine(sw - 18, y, sw - 6, y);
+                }
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(7, (int)(7 * zoom))));
+                g2.drawString("W.I.C.", wicX + 8, sh / 2);
+
+                // Left 70%: King Bed with Nightstands
+                int bedW = (int)(sw * 0.4);
+                int bedH = (int)(sh * 0.55);
+                int bedX = 28;
+                int bedY = (sh - bedH) / 2;
+                // Nightstand 1 (top)
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRoundRect(bedX - 18, bedY + 4, 14, 16, 3, 3);
+                g2.fillRoundRect(bedX - 18, bedY + bedH - 20, 14, 16, 3, 3);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect(bedX - 18, bedY + 4, 14, 16, 3, 3);
+                g2.drawRoundRect(bedX - 18, bedY + bedH - 20, 14, 16, 3, 3);
+
+                // King Bed frame
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect(bedX, bedY, bedW, bedH, 6, 6);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect(bedX, bedY, bedW, bedH, 6, 6);
+                // Headboard
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRect(bedX, bedY, 10, bedH);
+                g2.drawRect(bedX, bedY, 10, bedH);
+                // Dual Pillows
+                g2.setColor(new Color(241, 245, 249));
+                g2.fillRoundRect(bedX + 14, bedY + 8, 16, (bedH / 2) - 14, 4, 4);
+                g2.fillRoundRect(bedX + 14, bedY + bedH / 2 + 6, 16, (bedH / 2) - 14, 4, 4);
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("PRIMARY SUITE + WIC", 10, sh - 8);
+
+            // ─── DEDICATED WALK-IN CLOSET (10'×8') ────────────────────────
+            } else if (type.equals("set-usa-walkin-closet")) {
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 120));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Perimeter Shelving (U-shape)
+                int sD = (int)(sw * 0.22);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRect(4, 4, sw - 8, sD);
+                g2.fillRect(4, 4, sD, sh - 8);
+                g2.fillRect(sw - sD - 4, 4, sD, sh - 8);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRect(4, 4, sw - 8, sD);
+                g2.drawRect(4, 4, sD, sh - 8);
+                g2.drawRect(sw - sD - 4, 4, sD, sh - 8);
+
+                // Center Island Dresser
+                int isW = (int)(sw * 0.3);
+                int isH = (int)(sh * 0.35);
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRoundRect((sw - isW) / 2, (sh - isH) / 2 + 10, isW, isH, 4, 4);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawRoundRect((sw - isW) / 2, (sh - isH) / 2 + 10, isW, isH, 4, 4);
+
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("WALK-IN CLOSET (WIC)", (sw - isW) / 2 - 14, sh - 4);
+
+            // ─── CHEF ISLAND KITCHEN (16'×14') ───────────────────────────
+            } else if (type.equals("set-usa-kitchen-island")) {
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 120));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Perimeter L-Counter top & left
+                int cD = (int)(sh * 0.22);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRect(4, 4, sw - 8, cD);
+                g2.fillRect(4, 4, (int)(sw * 0.2), sh - 8);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRect(4, 4, sw - 8, cD);
+                g2.drawRect(4, 4, (int)(sw * 0.2), sh - 8);
+
+                // Commercial 6-Burner Range Cooktop
+                drawCooktop4Burner(g2, sw / 2 - 20, 4, 40, cD);
+
+                // Massive Center Island with 4 Barstools
+                int islW = (int)(sw * 0.55);
+                int islH = (int)(sh * 0.32);
+                int islX = (sw - islW) / 2 + 15;
+                int islY = (sh - islH) / 2 + 10;
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRoundRect(islX, islY, islW, islH, 6, 6);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawRoundRect(islX, islY, islW, islH, 6, 6);
+
+                // Undermount prep sink on island
+                drawUndermountSink(g2, islX + 8, islY + 4, 24, islH - 8);
+
+                // 4 Barstools along bottom of island
+                int bR = Math.max(4, Math.min(8, (int)(6 * zoom)));
+                for (int b = 0; b < 4; b++) {
+                    int bx = islX + 12 + b * (islW - 24) / 3;
+                    drawBarStool(g2, bx, islY + islH + bR + 4, bR);
+                }
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("CHEF ISLAND KITCHEN", islX, islY + islH / 2 + 3);
+
+            // ─── WALK-IN BUTLER'S PANTRY (10'×8') ────────────────────────
+            } else if (type.equals("set-usa-pantry")) {
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 120));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Deep U-Shelving
+                int sD = (int)(sw * 0.26);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRect(4, 4, sw - 8, sD);
+                g2.fillRect(4, 4, sD, sh - 8);
+                g2.fillRect(sw - sD - 4, 4, sD, sh - 8);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRect(4, 4, sw - 8, sD);
+                g2.drawRect(4, 4, sD, sh - 8);
+                g2.drawRect(sw - sD - 4, 4, sD, sh - 8);
+
+                // Slotted shelf lines
+                for (int i = 1; i <= 3; i++) {
+                    g2.drawLine(4, 4 + i * sD / 4, sw - 8, 4 + i * sD / 4);
+                }
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("WALK-IN PANTRY", sw / 2 - 36, sh - 8);
+
+            // ─── FORMAL 10-SEAT DINING (16'×12') ─────────────────────────
+            } else if (type.equals("set-usa-dining-formal")) {
+                g2.setColor(new Color(30, 41, 59, 100));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 80));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Top Credenza / Sideboard
+                int crW = (int)(sw * 0.8);
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRoundRect((sw - crW) / 2, 4, crW, 14, 3, 3);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect((sw - crW) / 2, 4, crW, 14, 3, 3);
+
+                // 10-Seat Table (4 top, 4 bottom, 2 at heads)
+                int tW = (int)(sw * 0.72);
+                int tH = (int)(sh * 0.44);
+                int tX = (sw - tW) / 2;
+                int tY = (sh - tH) / 2 + 5;
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect(tX, tY, tW, tH, 6, 6);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect(tX, tY, tW, tH, 6, 6);
+
+                int cW = tW / 5;
+                for (int i = 0; i < 4; i++) {
+                    int cx = tX + 6 + i * (tW - 12) / 4;
+                    g2.drawRect(cx, tY - 8, cW - 4, 7);
+                    g2.drawRect(cx, tY + tH + 1, cW - 4, 7);
+                }
+                g2.drawRect(tX - 8, tY + tH / 2 - 8, 7, 16);
+                g2.drawRect(tX + tW + 1, tY + tH / 2 - 8, 7, 16);
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("FORMAL DINING (10-SEAT)", tX + 8, tY + tH / 2 + 3);
+
+            // ─── BANQUETTE BREAKFAST NOOK (10'×9') ───────────────────────
+            } else if (type.equals("set-usa-breakfast-nook")) {
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 120));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // L-Shaped Banquette Booth Bench top and left
+                int bW = (int)(sw * 0.65);
+                int bH = (int)(sh * 0.65);
+                Path2D.Double bqPath = new Path2D.Double();
+                bqPath.moveTo(6, 6);
+                bqPath.lineTo(6 + bW, 6);
+                bqPath.lineTo(6 + bW, 22);
+                bqPath.lineTo(26, 22);
+                bqPath.lineTo(26, 6 + bH);
+                bqPath.lineTo(6, 6 + bH);
+                bqPath.closePath();
+                g2.setColor(new Color(30, 41, 59));
+                g2.fill(bqPath);
+                g2.setColor(new Color(203, 213, 225));
+                g2.draw(bqPath);
+
+                // Center Table
+                int tbW = (int)(sw * 0.45);
+                int tbH = (int)(sh * 0.38);
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRoundRect(34, 30, tbW, tbH, 6, 6);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawRoundRect(34, 30, tbW, tbH, 6, 6);
+
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(7, (int)(8 * zoom))));
+                g2.drawString("BREAKFAST NOOK", 10, sh - 8);
+
+            // ─── MUDROOM & LOCKERS (12'×8') ──────────────────────────────
+            } else if (type.equals("set-usa-mudroom")) {
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 120));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Top: Mudroom Built-in Lockers & Bench
+                int lkH = (int)(sh * 0.4);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRect(4, 4, sw - 8, lkH);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRect(4, 4, sw - 8, lkH);
+
+                // 4 Locker Cubbies
+                int numLk = 4;
+                int cubW = (sw - 8) / numLk;
+                for (int c = 0; c < numLk; c++) {
+                    int cx = 4 + c * cubW;
+                    g2.drawRect(cx, 4, cubW, lkH);
+                    // Hook symbol
+                    g2.drawOval(cx + cubW / 2 - 2, 8, 4, 4);
+                }
+
+                // Bottom Bench line
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRect(4, 4 + lkH, sw - 8, 12);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawRect(4, 4 + lkH, sw - 8, 12);
+
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("MUDROOM & LOCKERS", 12, sh - 8);
+
+            // ─── ENTRY FOYER (10'×8') ────────────────────────────────────
+            } else if (type.equals("set-usa-foyer")) {
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 120));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Top: Coat Closet with Bifold doors
+                int clH = (int)(sh * 0.35);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRect(4, 4, sw - 8, clH);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRect(4, 4, sw - 8, clH);
+                g2.drawString("COAT CLOSET", sw / 2 - 30, clH / 2 + 6);
+
+                // Entry Area Rug
+                int rW = (int)(sw * 0.6);
+                int rH = (int)(sh * 0.4);
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillRoundRect((sw - rW) / 2, clH + 10, rW, rH, 4, 4);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawRoundRect((sw - rW) / 2, clH + 10, rW, rH, 4, 4);
+
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("ENTRY FOYER", 10, sh - 4);
+
+            // ─── DROP ZONE (8'×6') ───────────────────────────────────────
+            } else if (type.equals("set-usa-dropzone")) {
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillRoundRect(0, 0, sw, sh, 4, 4);
+                g2.setColor(new Color(56, 189, 248, 120));
+                g2.drawRoundRect(0, 0, sw, sh, 4, 4);
+
+                // Counter with mail organizer
+                int cW = (int)(sw * 0.7);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRect(4, 4, cW, (int)(sh * 0.45));
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRect(4, 4, cW, (int)(sh * 0.45));
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(7, (int)(8 * zoom))));
+                g2.drawString("DROP ZONE", 8, sh - 8);
+
+            // ─── FULL LAUNDRY SUITE (10'×8') ─────────────────────────────
+            } else if (type.equals("set-usa-laundry-full")) {
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 120));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Top Counter Run with Washer, Dryer, and Laundry Sink
+                int appW = (int)(sw * 0.3);
+                int appH = (int)(sh * 0.48);
+
+                // Washer (front load)
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRect(6, 6, appW, appH);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRect(6, 6, appW, appH);
+                g2.drawOval(6 + appW / 2 - 10, 6 + appH / 2 - 10, 20, 20);
+                g2.drawString("WASHER", 8, 6 + appH - 4);
+
+                // Dryer (front load)
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRect(appW + 12, 6, appW, appH);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRect(appW + 12, 6, appW, appH);
+                g2.drawOval(appW + 12 + appW / 2 - 10, 6 + appH / 2 - 10, 20, 20);
+                g2.drawString("DRYER", appW + 16, 6 + appH - 4);
+
+                // Deep Laundry Sink
+                int sW = sw - (appW * 2 + 20) - 8;
+                drawUndermountSink(g2, appW * 2 + 18, 6, sW, appH);
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("LAUNDRY SUITE", 10, sh - 8);
+
+            // ─── COMPACT LAUNDRY CLOSET (8'×6') ──────────────────────────
+            } else if (type.equals("set-usa-laundry-compact")) {
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillRoundRect(0, 0, sw, sh, 4, 4);
+                g2.setColor(new Color(56, 189, 248, 120));
+                g2.drawRoundRect(0, 0, sw, sh, 4, 4);
+
+                int wW = (int)(sw * 0.45);
+                int wH = (int)(sh * 0.6);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRect(6, 6, wW, wH);
+                g2.fillRect(wW + 12, 6, wW, wH);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRect(6, 6, wW, wH);
+                g2.drawRect(wW + 12, 6, wW, wH);
+                g2.drawOval(6 + wW / 2 - 8, 6 + wH / 2 - 8, 16, 16);
+                g2.drawOval(wW + 12 + wW / 2 - 8, 6 + wH / 2 - 8, 16, 16);
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(7, (int)(8 * zoom))));
+                g2.drawString("W/D CLOSET", 10, sh - 6);
+
+            // ─── HVAC & WATER HEATER MECHANICAL (6'×5') ──────────────────
+            } else if (type.equals("set-usa-mechanical")) {
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillRoundRect(0, 0, sw, sh, 4, 4);
+                g2.setColor(new Color(56, 189, 248, 120));
+                g2.drawRoundRect(0, 0, sw, sh, 4, 4);
+
+                // Furnace / Air Handler box with duct cross
+                int fW = (int)(sw * 0.46);
+                int fH = (int)(sh * 0.65);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRect(6, 6, fW, fH);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRect(6, 6, fW, fH);
+                g2.drawLine(6, 6, 6 + fW, 6 + fH);
+                g2.drawLine(6, 6 + fH, 6 + fW, 6);
+                g2.drawString("HVAC", 10, 6 + fH + 12);
+
+                // 50-Gal Round Water Heater
+                int whDia = (int)(sw * 0.4);
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillOval(sw - whDia - 8, 8, whDia, whDia);
+                g2.setColor(new Color(245, 158, 11)); // Amber
+                g2.drawOval(sw - whDia - 8, 8, whDia, whDia);
+                g2.drawOval(sw - whDia - 8 + whDia / 4, 8 + whDia / 4, whDia / 2, whDia / 2);
+                g2.drawString("W.H.", sw - whDia - 4, 8 + whDia + 14);
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(7, (int)(7 * zoom))));
+                g2.drawString("MECH CLOSET", 8, sh - 4);
+
+            // ─── 5-PIECE PRIMARY SPA BATH (14'×10') ──────────────────────
+            } else if (type.equals("set-usa-bath-5piece")) {
+                g2.setColor(new Color(15, 23, 42));
+                g2.fillRoundRect(0, 0, sw, sh, 6, 6);
+                g2.setColor(new Color(56, 189, 248, 120));
+                g2.drawRoundRect(0, 0, sw, sh, 6, 6);
+
+                // Top: 72" Double Vanity with 2 Oval Sinks
+                int vH = (int)(sh * 0.32);
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRoundRect(6, 6, sw - 12, vH, 4, 4);
+                g2.setColor(new Color(203, 213, 225));
+                g2.drawRoundRect(6, 6, sw - 12, vH, 4, 4);
+                // 2 Sinks
+                int sW = (sw - 12) / 3;
+                g2.setColor(new Color(241, 245, 249));
+                g2.fillOval(14, 10, sW, vH - 8);
+                g2.fillOval(sw - 14 - sW, 10, sW, vH - 8);
+                g2.setColor(new Color(100, 116, 139));
+                g2.drawOval(14, 10, sW, vH - 8);
+                g2.drawOval(sw - 14 - sW, 10, sW, vH - 8);
+
+                // Bottom-Left: Freestanding Soaker Tub (oval)
+                int tubW = (int)(sw * 0.42);
+                int tubH = (int)(sh * 0.45);
+                int tubX = 8;
+                int tubY = sh - tubH - 14;
+                g2.setColor(new Color(24, 33, 53));
+                g2.fillOval(tubX, tubY, tubW, tubH);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawOval(tubX, tubY, tubW, tubH);
+                g2.drawOval(tubX + 4, tubY + 4, tubW - 8, tubH - 8);
+
+                // Bottom-Right: Frameless Glass Walk-in Shower Stall
+                int shW = (int)(sw * 0.38);
+                int shH = (int)(sh * 0.45);
+                int shX = sw - shW - 8;
+                int shY = sh - shH - 14;
+                g2.setColor(new Color(30, 41, 59));
+                g2.fillRect(shX, shY, shW, shH);
+                g2.setColor(new Color(56, 189, 248));
+                g2.drawRect(shX, shY, shW, shH);
+                // Showerhead drain
+                g2.drawOval(shX + shW / 2 - 4, shY + shH / 2 - 4, 8, 8);
+                g2.drawLine(shX, shY, shX + shW, shY + shH);
+
+                g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * zoom))));
+                g2.drawString("5-PIECE SPA BATH", sw / 2 - 38, sh - 4);
             }
         }
 
@@ -9119,6 +10075,165 @@ public class HousePlanCADApp extends JFrame {
         dimensions.add(new CADDimension(ox, bathY, ox, oy + ph, 26.0)); // 10' Service Height
         dimensions.add(new CADDimension(ox, oy + ph, bathX, oy + ph, 26.0)); // 12' Kitchenette Width
         dimensions.add(new CADDimension(bathX, oy + ph, ox + pw, oy + ph, 26.0)); // 8' Bath Width
+
+        autoJoinAllWalls(); checkAllCollisions(); viewportPanel.repaint();
+    }
+
+    private void loadPresetUSARanch() {
+        clearCanvas();
+        double ox = 100.0, oy = 100.0;
+        double pw = 48.0 * FT_PX, ph = 34.0 * FT_PX;
+
+        // Exterior Perimeter Walls (6.5" 2x6 Stud Framing with Sheathing & Siding)
+        walls.add(new Wall(ox, oy, ox + pw, oy, 6.5));
+        walls.add(new Wall(ox + pw, oy, ox + pw, oy + ph, 6.5));
+        walls.add(new Wall(ox + pw, oy + ph, ox, oy + ph, 6.5));
+        walls.add(new Wall(ox, oy + ph, ox, oy, 6.5));
+
+        // Interior Partitions (4.5" 2x4 Wood Stud with 1/2" Drywall)
+        // 1. Garage Demising Wall (20' from right, 22' deep from top)
+        double garX = ox + pw - 20.0 * FT_PX;
+        double garY = oy + 22.0 * FT_PX;
+        walls.add(new Wall(garX, oy, garX, garY, 6.5)); // Fire-rated garage demising wall
+        walls.add(new Wall(garX, garY, ox + pw, garY, 6.5));
+
+        // 2. Primary Suite Wing (Left 16' span)
+        double primX = ox + 16.0 * FT_PX;
+        walls.add(new Wall(primX, oy, primX, oy + ph, 4.5));
+        double primBathY = oy + 12.0 * FT_PX;
+        walls.add(new Wall(ox, primBathY, primX, primBathY, 4.5)); // Primary Bath / Bedroom divider
+        double wicX = ox + 8.0 * FT_PX;
+        walls.add(new Wall(wicX, oy, wicX, primBathY, 4.5)); // WIC divider
+
+        // 3. Great Room to Mudroom & Laundry (Middle section)
+        double mudY = oy + 24.0 * FT_PX;
+        walls.add(new Wall(primX, mudY, garX, mudY, 4.5));
+        double mudDivX = primX + 10.0 * FT_PX;
+        walls.add(new Wall(mudDivX, mudY, mudDivX, oy + ph, 4.5)); // Laundry vs Bedroom 2
+
+        // Openings: Doors
+        elements.add(new CADElement("door", "Front Entry 3'-0\"", primX + 2.0 * FT_PX, oy - 0.27 * FT_PX, 3.0 * FT_PX, 0.54 * FT_PX));
+        elements.add(new CADElement("door-sliding", "Patio Slider 6'-0\"", primX + 12.0 * FT_PX, oy + ph - 0.27 * FT_PX, 6.0 * FT_PX, 0.54 * FT_PX));
+        elements.add(new CADElement("door", "Garage Entry 2'-8\"", garX - 0.27 * FT_PX, oy + 4.0 * FT_PX, 2.67 * FT_PX, 0.45 * FT_PX));
+        elements.add(new CADElement("door", "Primary Suite 2'-10\"", primX - 0.27 * FT_PX, primBathY + 4.0 * FT_PX, 2.83 * FT_PX, 0.45 * FT_PX));
+        elements.add(new CADElement("door-pocket", "Primary Bath Pocket 2'-6\"", ox + 4.0 * FT_PX, primBathY - 0.2 * FT_PX, 2.5 * FT_PX, 0.45 * FT_PX));
+        elements.add(new CADElement("door-pocket", "WIC Pocket 2'-6\"", wicX - 0.2 * FT_PX, oy + 4.0 * FT_PX, 2.5 * FT_PX, 0.45 * FT_PX));
+        elements.add(new CADElement("door", "Bed 2 Door 2'-8\"", mudDivX + 1.0 * FT_PX, mudY - 0.2 * FT_PX, 2.67 * FT_PX, 0.45 * FT_PX));
+        elements.add(new CADElement("door", "Laundry 2'-8\"", primX + 2.0 * FT_PX, mudY - 0.2 * FT_PX, 2.67 * FT_PX, 0.45 * FT_PX));
+
+        // Garage 16' Sectional Overhead Door
+        elements.add(new CADElement("opening-wall", "Overhead Door 16'-0\"", ox + pw - 18.0 * FT_PX, oy - 0.3 * FT_PX, 16.0 * FT_PX, 0.6 * FT_PX));
+
+        // Windows (IRC Egress & Casement)
+        elements.add(new CADElement("window", "Primary Egress 3'×5'", ox - 0.27 * FT_PX, primBathY + 6.0 * FT_PX, 3.5 * FT_PX, 0.54 * FT_PX));
+        elements.add(new CADElement("window", "Great Room Picture 6'", primX + 4.0 * FT_PX, oy + ph - 0.27 * FT_PX, 6.0 * FT_PX, 0.54 * FT_PX));
+        elements.add(new CADElement("window", "Bed 2 Egress 3'×5'", ox + pw - 28.0 * FT_PX, oy + ph - 0.27 * FT_PX, 3.5 * FT_PX, 0.54 * FT_PX));
+        elements.add(new CADElement("window", "Kitchen Double-Hung 4'", garX - 6.0 * FT_PX, oy - 0.27 * FT_PX, 4.0 * FT_PX, 0.54 * FT_PX));
+
+        // Tags
+        elements.add(new CADElement("tag", "OPEN GREAT ROOM\n20'-0\" \u00d7 18'-0\"", primX + 4.0 * FT_PX, oy + 8.0 * FT_PX, 14.0 * FT_PX, 4.0 * FT_PX));
+        elements.add(new CADElement("tag", "ISLAND KITCHEN & DINING\n16'-0\" \u00d7 14'-0\"", primX + 3.0 * FT_PX, oy + 15.0 * FT_PX, 14.0 * FT_PX, 3.5 * FT_PX));
+        elements.add(new CADElement("tag", "PRIMARY BEDROOM\n16'-0\" \u00d7 14'-0\"", ox + 2.0 * FT_PX, primBathY + 6.0 * FT_PX, 12.0 * FT_PX, 4.0 * FT_PX));
+        elements.add(new CADElement("tag", "5-PIECE SPA BATH\n10'-0\" \u00d7 8'-0\"", ox + 2.0 * FT_PX, oy + 3.0 * FT_PX, 10.0 * FT_PX, 3.5 * FT_PX));
+        elements.add(new CADElement("tag", "WALK-IN CLOSET (WIC)\n8'-0\" \u00d7 8'-0\"", wicX + 1.0 * FT_PX, oy + 3.0 * FT_PX, 8.0 * FT_PX, 3.0 * FT_PX));
+        elements.add(new CADElement("tag", "BEDROOM 2\n12'-0\" \u00d7 11'-0\"", mudDivX + 1.5 * FT_PX, mudY + 3.0 * FT_PX, 10.0 * FT_PX, 3.5 * FT_PX));
+        elements.add(new CADElement("tag", "MUDROOM & LAUNDRY\n10'-0\" \u00d7 8'-0\"", primX + 1.0 * FT_PX, mudY + 3.0 * FT_PX, 9.0 * FT_PX, 3.0 * FT_PX));
+        elements.add(new CADElement("tag", "2-CAR GARAGE\n20'-0\" \u00d7 22'-0\"", garX + 3.0 * FT_PX, oy + 9.0 * FT_PX, 14.0 * FT_PX, 4.0 * FT_PX));
+        elements.add(new CADElement("north-arrow", "North", ox + pw + 3.0 * FT_PX, oy + 2.0 * FT_PX, 3.0 * FT_PX, 3.0 * FT_PX));
+
+        // Dimensions
+        dimensions.add(new CADDimension(ox, oy, ox + pw, oy, -30.0)); // 48' Overall Top
+        dimensions.add(new CADDimension(ox + pw, oy, ox + pw, oy + ph, -30.0)); // 34' Overall Right
+        dimensions.add(new CADDimension(ox, oy, ox, primBathY, 26.0)); // 12' Bath Height
+        dimensions.add(new CADDimension(ox, primBathY, ox, oy + ph, 26.0)); // 22' Primary Height
+        dimensions.add(new CADDimension(ox, oy + ph, primX, oy + ph, 26.0)); // 16' Primary Width
+        dimensions.add(new CADDimension(garX, oy + ph, ox + pw, oy + ph, 26.0)); // 20' Garage Width
+
+        autoJoinAllWalls(); checkAllCollisions(); viewportPanel.repaint();
+    }
+
+    private void loadPresetUSACraftsman() {
+        clearCanvas();
+        double ox = 120.0, oy = 120.0;
+        double pw = 30.0 * FT_PX, ph = 42.0 * FT_PX;
+
+        // Exterior Walls 6.5"
+        walls.add(new Wall(ox, oy, ox + pw, oy, 6.5));
+        walls.add(new Wall(ox + pw, oy, ox + pw, oy + ph, 6.5));
+        walls.add(new Wall(ox + pw, oy + ph, ox, oy + ph, 6.5));
+        walls.add(new Wall(ox, oy + ph, ox, oy, 6.5));
+
+        // Partitions 4.5"
+        double midY = oy + 20.0 * FT_PX;
+        walls.add(new Wall(ox, midY, ox + pw, midY, 4.5)); // Living vs Bedrooms
+        double bedDivX = ox + 16.0 * FT_PX;
+        walls.add(new Wall(bedDivX, midY, bedDivX, oy + ph, 4.5)); // Bed 1 vs Bed 2
+        double bathY = oy + 32.0 * FT_PX;
+        walls.add(new Wall(bedDivX, bathY, ox + pw, bathY, 4.5)); // Bath divider
+
+        // Doors & Windows
+        elements.add(new CADElement("door", "Front Entry 3'-0\"", ox + 6.0 * FT_PX, oy - 0.27 * FT_PX, 3.0 * FT_PX, 0.54 * FT_PX));
+        elements.add(new CADElement("door", "Primary Suite 2'-8\"", ox + 2.0 * FT_PX, midY - 0.2 * FT_PX, 2.67 * FT_PX, 0.45 * FT_PX));
+        elements.add(new CADElement("door", "Bed 2 Door 2'-8\"", bedDivX + 1.5 * FT_PX, midY - 0.2 * FT_PX, 2.67 * FT_PX, 0.45 * FT_PX));
+        elements.add(new CADElement("door", "Bath Door 2'-6\"", bedDivX + 1.5 * FT_PX, bathY - 0.2 * FT_PX, 2.5 * FT_PX, 0.45 * FT_PX));
+        elements.add(new CADElement("window", "Craftsman Living 5'", ox + 18.0 * FT_PX, oy - 0.27 * FT_PX, 5.0 * FT_PX, 0.54 * FT_PX));
+        elements.add(new CADElement("window", "Primary Egress 3'×5'", ox - 0.27 * FT_PX, midY + 6.0 * FT_PX, 3.5 * FT_PX, 0.54 * FT_PX));
+        elements.add(new CADElement("window", "Bed 2 Egress 3'×5'", ox + pw - 0.27 * FT_PX, midY + 4.0 * FT_PX, 3.5 * FT_PX, 0.54 * FT_PX));
+
+        // Tags
+        elements.add(new CADElement("tag", "CRAFTSMAN GREAT ROOM\n30'-0\" \u00d7 20'-0\"", ox + 7.0 * FT_PX, oy + 8.0 * FT_PX, 16.0 * FT_PX, 4.0 * FT_PX));
+        elements.add(new CADElement("tag", "PRIMARY BEDROOM\n16'-0\" \u00d7 22'-0\"", ox + 2.0 * FT_PX, midY + 8.0 * FT_PX, 12.0 * FT_PX, 4.0 * FT_PX));
+        elements.add(new CADElement("tag", "BEDROOM 02\n14'-0\" \u00d7 12'-0\"", bedDivX + 1.5 * FT_PX, midY + 4.0 * FT_PX, 10.0 * FT_PX, 3.5 * FT_PX));
+        elements.add(new CADElement("tag", "FULL BATHROOM\n14'-0\" \u00d7 10'-0\"", bedDivX + 1.5 * FT_PX, bathY + 3.0 * FT_PX, 10.0 * FT_PX, 3.5 * FT_PX));
+
+        // Dimensions
+        dimensions.add(new CADDimension(ox, oy, ox + pw, oy, -30.0));
+        dimensions.add(new CADDimension(ox + pw, oy, ox + pw, oy + ph, -30.0));
+        dimensions.add(new CADDimension(ox, oy, ox, midY, 26.0));
+        dimensions.add(new CADDimension(ox, midY, ox, oy + ph, 26.0));
+
+        autoJoinAllWalls(); checkAllCollisions(); viewportPanel.repaint();
+    }
+
+    private void loadPresetUSACottage() {
+        clearCanvas();
+        double ox = 120.0, oy = 120.0;
+        double pw = 24.0 * FT_PX, ph = 36.0 * FT_PX;
+
+        // Exterior Walls 6.5"
+        walls.add(new Wall(ox, oy, ox + pw, oy, 6.5));
+        walls.add(new Wall(ox + pw, oy, ox + pw, oy + ph, 6.5));
+        walls.add(new Wall(ox + pw, oy + ph, ox, oy + ph, 6.5));
+        walls.add(new Wall(ox, oy + ph, ox, oy, 6.5));
+
+        // Partitions 4.5"
+        double midY = oy + 18.0 * FT_PX;
+        walls.add(new Wall(ox, midY, ox + pw, midY, 4.5)); // Living vs Beds
+        double bedDivX = ox + 13.0 * FT_PX;
+        walls.add(new Wall(bedDivX, midY, bedDivX, oy + ph, 4.5)); // Bed 1 vs Bed 2 / Bath
+        double bathY = oy + 28.0 * FT_PX;
+        walls.add(new Wall(bedDivX, bathY, ox + pw, bathY, 4.5)); // Bath divider
+
+        // Doors & Windows
+        elements.add(new CADElement("door", "Front Entry 3'-0\"", ox + 4.0 * FT_PX, oy - 0.27 * FT_PX, 3.0 * FT_PX, 0.54 * FT_PX));
+        elements.add(new CADElement("door", "Bed 1 Door 2'-8\"", ox + 2.0 * FT_PX, midY - 0.2 * FT_PX, 2.67 * FT_PX, 0.45 * FT_PX));
+        elements.add(new CADElement("door", "Bed 2 Door 2'-8\"", bedDivX + 1.0 * FT_PX, midY - 0.2 * FT_PX, 2.67 * FT_PX, 0.45 * FT_PX));
+        elements.add(new CADElement("door", "Bath Door 2'-4\"", bedDivX + 1.0 * FT_PX, bathY - 0.2 * FT_PX, 2.33 * FT_PX, 0.45 * FT_PX));
+        elements.add(new CADElement("window", "Cottage Living 5'", ox + 14.0 * FT_PX, oy - 0.27 * FT_PX, 5.0 * FT_PX, 0.54 * FT_PX));
+        elements.add(new CADElement("window", "Bed 1 Egress 3'×5'", ox - 0.27 * FT_PX, midY + 6.0 * FT_PX, 3.5 * FT_PX, 0.54 * FT_PX));
+        elements.add(new CADElement("window", "Bed 2 Egress 3'×5'", ox + pw - 0.27 * FT_PX, midY + 3.0 * FT_PX, 3.5 * FT_PX, 0.54 * FT_PX));
+
+        // Tags
+        elements.add(new CADElement("tag", "COTTAGE LIVING & KITCHEN\n24'-0\" \u00d7 18'-0\"", ox + 4.0 * FT_PX, oy + 7.0 * FT_PX, 16.0 * FT_PX, 4.0 * FT_PX));
+        elements.add(new CADElement("tag", "BEDROOM 01\n13'-0\" \u00d7 18'-0\"", ox + 1.5 * FT_PX, midY + 7.0 * FT_PX, 10.0 * FT_PX, 3.5 * FT_PX));
+        elements.add(new CADElement("tag", "BEDROOM 02\n11'-0\" \u00d7 10'-0\"", bedDivX + 1.0 * FT_PX, midY + 3.5 * FT_PX, 9.0 * FT_PX, 3.0 * FT_PX));
+        elements.add(new CADElement("tag", "BATHROOM\n11'-0\" \u00d7 8'-0\"", bedDivX + 1.0 * FT_PX, bathY + 2.5 * FT_PX, 9.0 * FT_PX, 3.0 * FT_PX));
+
+        // Dimensions
+        dimensions.add(new CADDimension(ox, oy, ox + pw, oy, -30.0));
+        dimensions.add(new CADDimension(ox + pw, oy, ox + pw, oy + ph, -30.0));
+        dimensions.add(new CADDimension(ox, oy, ox, midY, 26.0));
+        dimensions.add(new CADDimension(ox, midY, ox, oy + ph, 26.0));
 
         autoJoinAllWalls(); checkAllCollisions(); viewportPanel.repaint();
     }
