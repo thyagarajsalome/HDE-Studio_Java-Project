@@ -62,8 +62,24 @@ public class HousePlanCADApp extends JFrame {
             g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 6, 6);
             g2.setColor(fg); g2.setFont(getFont());
             FontMetrics fm = g2.getFontMetrics();
-            g2.drawString(getText(), (getWidth() - fm.stringWidth(getText())) / 2,
-                    (getHeight() + fm.getAscent() - fm.getDescent()) / 2);
+
+            Icon icon = getIcon();
+            String text = getText();
+            if (icon != null) {
+                int textW = (text != null && !text.isEmpty()) ? fm.stringWidth(text) : 0;
+                int gap = (textW > 0) ? 6 : 0;
+                int totalW = icon.getIconWidth() + gap + textW;
+                int startX = (getWidth() - totalW) / 2;
+                int iconY = (getHeight() - icon.getIconHeight()) / 2;
+                icon.paintIcon(this, g2, startX, iconY);
+                if (textW > 0) {
+                    g2.drawString(text, startX + icon.getIconWidth() + gap,
+                            (getHeight() + fm.getAscent() - fm.getDescent()) / 2);
+                }
+            } else if (text != null && !text.isEmpty()) {
+                g2.drawString(text, (getWidth() - fm.stringWidth(text)) / 2,
+                        (getHeight() + fm.getAscent() - fm.getDescent()) / 2);
+            }
             g2.dispose();
         }
 
@@ -328,8 +344,8 @@ public class HousePlanCADApp extends JFrame {
     }
 
     public enum RegionProfile {
-        INDIA("India", "🇮🇳 India", "Vastu & Brickwork (9\" / 4.5\" Walls)"),
-        USA_INTERNATIONAL("USA & International", "🇺🇸 USA & Int'l", "US IRC & Wood Framing (2x6 / 2x4 Walls)");
+        INDIA("India", "India", "Vastu & Brickwork (9\" / 4.5\" Walls)"),
+        USA_INTERNATIONAL("USA & International", "USA & Int'l", "US IRC & Wood Framing (2x6 / 2x4 Walls)");
 
         private final String displayName;
         private final String shortBadge;
@@ -344,6 +360,97 @@ public class HousePlanCADApp extends JFrame {
         public String getDisplayName() { return displayName; }
         public String getShortBadge() { return shortBadge; }
         public String getDescription() { return description; }
+
+        public ImageIcon getFlagIcon(int w, int h) {
+            if (this == INDIA) {
+                return createIndiaFlagIcon(w, h);
+            } else {
+                return createUSAFlagIcon(w, h);
+            }
+        }
+    }
+
+    public static ImageIcon createIndiaFlagIcon(int w, int h) {
+        BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2 = img.createGraphics();
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+
+        int sH = Math.max(1, h / 3);
+        // Top saffron stripe
+        g2.setColor(new Color(255, 153, 51));
+        g2.fillRect(0, 0, w, sH);
+        // Middle white stripe
+        g2.setColor(Color.WHITE);
+        g2.fillRect(0, sH, w, sH);
+        // Bottom green stripe
+        g2.setColor(new Color(19, 136, 8));
+        g2.fillRect(0, sH * 2, w, h - sH * 2);
+
+        // Ashoka Chakra in center of middle stripe
+        double cx = w / 2.0;
+        double cy = sH + (sH / 2.0);
+        double r = Math.max(1.5, (sH * 0.76) / 2.0);
+
+        g2.setColor(new Color(0, 0, 128));
+        g2.setStroke(new BasicStroke(1.0f));
+        g2.draw(new Ellipse2D.Double(cx - r, cy - r, r * 2.0, r * 2.0));
+        g2.fill(new Ellipse2D.Double(cx - 0.75, cy - 0.75, 1.5, 1.5));
+
+        int spokes = 12;
+        for (int i = 0; i < spokes; i++) {
+            double angle = i * (Math.PI / (spokes / 2.0));
+            double x2 = cx + r * Math.cos(angle);
+            double y2 = cy + r * Math.sin(angle);
+            g2.draw(new Line2D.Double(cx, cy, x2, y2));
+        }
+
+        // Subtle border
+        g2.setColor(new Color(51, 65, 85, 200));
+        g2.drawRect(0, 0, w - 1, h - 1);
+        g2.dispose();
+        return new ImageIcon(img);
+    }
+
+    public static ImageIcon createUSAFlagIcon(int w, int h) {
+        BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2 = img.createGraphics();
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+
+        // 13 alternating red and white stripes
+        for (int i = 0; i < 13; i++) {
+            int y1 = (int) Math.round(i * (double) h / 13.0);
+            int y2 = (int) Math.round((i + 1) * (double) h / 13.0);
+            g2.setColor((i % 2 == 0) ? new Color(178, 34, 52) : Color.WHITE);
+            g2.fillRect(0, y1, w, Math.max(1, y2 - y1));
+        }
+
+        // Blue canton
+        int cantonW = (int) Math.round(w * 0.44);
+        int cantonH = (int) Math.round(7.0 * h / 13.0);
+        g2.setColor(new Color(60, 59, 110));
+        g2.fillRect(0, 0, cantonW, cantonH);
+
+        // Crisp star field dots
+        g2.setColor(Color.WHITE);
+        int cols = 3;
+        int rows = 3;
+        for (int r = 0; r < rows; r++) {
+            int sy = (int) Math.round((r + 0.6) * (cantonH / (double) rows));
+            for (int c = 0; c < cols; c++) {
+                int sx = (int) Math.round((c + 0.6) * (cantonW / (double) cols));
+                if (sx < cantonW && sy < cantonH) {
+                    g2.fillRect(sx, sy, 1, 1);
+                }
+            }
+        }
+
+        // Subtle border
+        g2.setColor(new Color(51, 65, 85, 200));
+        g2.drawRect(0, 0, w - 1, h - 1);
+        g2.dispose();
+        return new ImageIcon(img);
     }
 
     private RegionProfile currentRegion = RegionProfile.INDIA;
@@ -603,8 +710,9 @@ public class HousePlanCADApp extends JFrame {
         brandPanel.add(Box.createHorizontalStrut(8));
         regionSwitcherBtn = new ModernButton(currentRegion.getShortBadge(), new Color(24, 33, 53), new Color(56, 189, 248), new Color(14, 116, 144));
         regionSwitcherBtn.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        regionSwitcherBtn.setIcon(currentRegion.getFlagIcon(18, 12));
         regionSwitcherBtn.setToolTipText("Active Building Standard: " + currentRegion.getDisplayName() + " (Click to switch standards)");
-        regionSwitcherBtn.setPreferredSize(new Dimension(115, 26));
+        regionSwitcherBtn.setPreferredSize(new Dimension(125, 26));
         regionSwitcherBtn.addActionListener(e -> showRegionSelectorDialog(false));
         brandPanel.add(regionSwitcherBtn);
         header.add(brandPanel, BorderLayout.WEST);
@@ -1325,6 +1433,7 @@ public class HousePlanCADApp extends JFrame {
 
         if (regionSwitcherBtn != null) {
             regionSwitcherBtn.setText(profile.getShortBadge());
+            regionSwitcherBtn.setIcon(profile.getFlagIcon(18, 12));
             regionSwitcherBtn.setToolTipText("Active Building Standard: " + profile.getDisplayName() + " (Click to switch standards)");
         }
 
@@ -1627,7 +1736,8 @@ public class HousePlanCADApp extends JFrame {
         // India Card contents
         JPanel indTop = new JPanel(new BorderLayout());
         indTop.setOpaque(false);
-        JLabel indTitle = new JLabel("🇮🇳  India Standards");
+        JLabel indTitle = new JLabel("  India Standards");
+        indTitle.setIcon(createIndiaFlagIcon(24, 16));
         indTitle.setFont(new Font("Segoe UI", Font.BOLD, 16));
         indTitle.setForeground(Color.WHITE);
         indTop.add(indTitle, BorderLayout.WEST);
@@ -1654,7 +1764,8 @@ public class HousePlanCADApp extends JFrame {
         // USA Card contents
         JPanel usaTop = new JPanel(new BorderLayout());
         usaTop.setOpaque(false);
-        JLabel usaTitle = new JLabel("🇺🇸  USA & International");
+        JLabel usaTitle = new JLabel("  USA & International");
+        usaTitle.setIcon(createUSAFlagIcon(24, 16));
         usaTitle.setFont(new Font("Segoe UI", Font.BOLD, 16));
         usaTitle.setForeground(Color.WHITE);
         usaTop.add(usaTitle, BorderLayout.WEST);
