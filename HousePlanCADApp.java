@@ -442,6 +442,7 @@ public class HousePlanCADApp extends JFrame {
     private boolean osnapEnabled = true;
     private boolean showSnapCursor = false;
     private boolean collisionDetectionEnabled = true;
+    private boolean lightThemeEnabled = false; // Canvas Light/Dark Theme [F6]
 
     // Viewport Navigation
     private double zoom = 1.0;
@@ -455,7 +456,7 @@ public class HousePlanCADApp extends JFrame {
     // UI Components
     private CADViewportPanel viewportPanel;
     private JLabel statusCursorLabel, statusCollisionLabel, statusSelectionLabel;
-    private ModernToggle orthoBtn, gridBtn, snapBtn, snapCursorBtn, collisionBtn;
+    private ModernToggle orthoBtn, gridBtn, snapBtn, snapCursorBtn, collisionBtn, themeToggleBtn;
     private ButtonGroup toolButtonGroup;
     private ModernButton undoBtn, redoBtn;
 
@@ -2978,6 +2979,12 @@ public class HousePlanCADApp extends JFrame {
             checkAllCollisions(); viewportPanel.repaint();
         });
 
+        themeToggleBtn = new ModernToggle("☀️ Light [F6]", false,
+                new Color(251, 191, 36), new Color(245, 158, 11), new Color(69, 26, 3));
+        themeToggleBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        themeToggleBtn.setToolTipText("Canvas Theme (F6): Switch between Pure White Drafting Paper and Dark Blueprint");
+        themeToggleBtn.addActionListener(e -> setLightTheme(themeToggleBtn.isSelected()));
+
         ModernButton zoomOutBtn = new ModernButton("−", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
         zoomOutBtn.setPreferredSize(new Dimension(26, 22));
         ModernButton zoomInBtn = new ModernButton("+", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
@@ -2989,6 +2996,7 @@ public class HousePlanCADApp extends JFrame {
         zoomInBtn.addActionListener(e -> { zoom = Math.min(4.0, zoom * 1.2); viewportPanel.repaint(); });
         zoomResetBtn.addActionListener(e -> { viewportPanel.zoomToFit(); });
 
+        trayGroup.add(themeToggleBtn);
         trayGroup.add(gridBtn);
         trayGroup.add(orthoBtn);
         trayGroup.add(snapBtn);
@@ -3001,6 +3009,21 @@ public class HousePlanCADApp extends JFrame {
 
         status.add(trayGroup, BorderLayout.EAST);
         return status;
+    }
+
+    public void setLightTheme(boolean light) {
+        this.lightThemeEnabled = light;
+        if (themeToggleBtn != null && themeToggleBtn.isSelected() != light) {
+            themeToggleBtn.setSelected(light);
+        }
+        if (themeToggleBtn != null) {
+            themeToggleBtn.setText(light ? "☀️ Light [F6]" : "🌙 Dark [F6]");
+        }
+        if (viewportPanel != null) {
+            viewportPanel.setBackground(light ? Color.WHITE : new Color(17, 24, 39));
+            viewportPanel.showToastNotification(light ? "Canvas Theme: White Drafting Paper" : "Canvas Theme: Dark Blueprint");
+            viewportPanel.repaint();
+        }
     }
 
     public static double parseDimensionFeet(String text) {
@@ -3083,7 +3106,10 @@ public class HousePlanCADApp extends JFrame {
             if (e.getID() != KeyEvent.KEY_PRESSED) return false;
             boolean isTyping = (KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() instanceof javax.swing.text.JTextComponent);
 
-            if (e.getKeyCode() == KeyEvent.VK_F7) {
+            if (e.getKeyCode() == KeyEvent.VK_F6) {
+                setLightTheme(!lightThemeEnabled);
+                return true;
+            } else if (e.getKeyCode() == KeyEvent.VK_F7) {
                 showGrid = !showGrid; if (gridBtn != null) gridBtn.setSelected(showGrid); viewportPanel.repaint(); return true;
             } else if (e.getKeyCode() == KeyEvent.VK_F8) {
                 orthoMode = !orthoMode; orthoBtn.setSelected(orthoMode); viewportPanel.repaint(); return true;
@@ -4764,6 +4790,11 @@ public class HousePlanCADApp extends JFrame {
             g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
             hudButtons.clear();
 
+            if (lightThemeEnabled) {
+                g2.setColor(Color.WHITE);
+                g2.fillRect(0, 0, getWidth(), getHeight());
+            }
+
             drawGrid(g2);
             drawFloorElements(g2);
             drawWallsWithCutThrough(g2);
@@ -4802,25 +4833,36 @@ public class HousePlanCADApp extends JFrame {
             int th = 36;
             int tx = (getWidth() - tw) / 2;
             int ty = getHeight() - 56;
-            gToast.setColor(new Color(15, 23, 42, 240));
-            gToast.fillRoundRect(tx, ty, tw, th, 18, 18);
-            gToast.setColor(new Color(56, 189, 248));
-            gToast.setStroke(new BasicStroke(1.4f));
-            gToast.drawRoundRect(tx, ty, tw, th, 18, 18);
-            gToast.setColor(Color.WHITE);
-            gToast.drawString(toastMessage, tx + 18, ty + 23);
+            if (lightThemeEnabled) {
+                gToast.setColor(new Color(255, 255, 255, 245));
+                gToast.fillRoundRect(tx, ty, tw, th, 18, 18);
+                gToast.setColor(new Color(2, 132, 199));
+                gToast.setStroke(new BasicStroke(1.4f));
+                gToast.drawRoundRect(tx, ty, tw, th, 18, 18);
+                gToast.setColor(new Color(15, 23, 42));
+                gToast.drawString(toastMessage, tx + 18, ty + 23);
+            } else {
+                gToast.setColor(new Color(15, 23, 42, 240));
+                gToast.fillRoundRect(tx, ty, tw, th, 18, 18);
+                gToast.setColor(new Color(56, 189, 248));
+                gToast.setStroke(new BasicStroke(1.4f));
+                gToast.drawRoundRect(tx, ty, tw, th, 18, 18);
+                gToast.setColor(Color.WHITE);
+                gToast.drawString(toastMessage, tx + 18, ty + 23);
+            }
             gToast.dispose();
         }
 
         private void drawHoverHighlight(Graphics2D g2) {
             if (hoveredObject == null || isSelected(hoveredObject) || isDrawing || isDragging || isRotating) return;
+            Color hColor = lightThemeEnabled ? new Color(2, 132, 199, 160) : new Color(56, 189, 248, 130);
 
             if (hoveredObject instanceof Wall) {
                 Wall hw = (Wall) hoveredObject;
                 Point p1 = worldToScreen(hw.x1, hw.y1);
                 Point p2 = worldToScreen(hw.x2, hw.y2);
                 float thickS = (float) (((hw.thicknessInches / 12.0) * FT_PX) * zoom);
-                g2.setColor(new Color(56, 189, 248, 120));
+                g2.setColor(hColor);
                 g2.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
                 g2.draw(createWallSegmentPath(p1, p2, thickS + 4));
             } else if (hoveredObject instanceof CADElement) {
@@ -4834,7 +4876,7 @@ public class HousePlanCADApp extends JFrame {
                         polyScreen.lineTo(pi.x, pi.y);
                     }
                     polyScreen.closePath();
-                    g2.setColor(new Color(56, 189, 248, 150));
+                    g2.setColor(hColor);
                     g2.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
                     g2.draw(polyScreen);
                 } else {
@@ -4844,7 +4886,7 @@ public class HousePlanCADApp extends JFrame {
                     AffineTransform old = g2.getTransform();
                     g2.translate(center.x, center.y);
                     g2.rotate(Math.toRadians(el.rotation));
-                    g2.setColor(new Color(56, 189, 248, 140));
+                    g2.setColor(hColor);
                     g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, new float[]{4, 3}, 0));
                     g2.drawRect(-sw / 2 - 2, -sh / 2 - 2, sw + 4, sh + 4);
                     g2.setTransform(old);
@@ -4860,7 +4902,7 @@ public class HousePlanCADApp extends JFrame {
                     double perpX = (-dy / len) * offset, perpY = (dx / len) * offset;
                     double d1x = p1.x + perpX, d1y = p1.y + perpY;
                     double d2x = p2.x + perpX, d2y = p2.y + perpY;
-                    g2.setColor(new Color(56, 189, 248, 160));
+                    g2.setColor(hColor);
                     g2.setStroke(new BasicStroke(1.8f));
                     g2.draw(new Line2D.Double(d1x, d1y, d2x, d2y));
                 }
@@ -4927,14 +4969,14 @@ public class HousePlanCADApp extends JFrame {
             double stepFeet = (snapStepFeet > 0.0) ? snapStepFeet : 5.0;
             double gridStep = (stepFeet * FT_PX) * zoom;
             if (gridStep < 6) return;
-            g2.setColor(new Color(30, 41, 59, 100));
+            g2.setColor(lightThemeEnabled ? new Color(226, 232, 240, 200) : new Color(30, 41, 59, 100));
             g2.setStroke(new BasicStroke(0.5f));
             double startX = panX % gridStep, startY = panY % gridStep;
             for (double x = startX; x < w; x += gridStep) g2.draw(new Line2D.Double(x, 0, x, h));
             for (double y = startY; y < h; y += gridStep) g2.draw(new Line2D.Double(0, y, w, y));
             double majorStep = (5.0 * FT_PX) * zoom;
             if (majorStep >= 16) {
-                g2.setColor(new Color(51, 65, 85, 140));
+                g2.setColor(lightThemeEnabled ? new Color(203, 213, 225, 230) : new Color(51, 65, 85, 140));
                 g2.setStroke(new BasicStroke(0.8f));
                 double mSX = panX % majorStep, mSY = panY % majorStep;
                 for (double x = mSX; x < w; x += majorStep) g2.draw(new Line2D.Double(x, 0, x, h));
@@ -5003,11 +5045,11 @@ public class HousePlanCADApp extends JFrame {
 
             // Monolithic wall fill & architectural hatching
             if ("DIAGONAL_45".equals(wallHatchStyle)) {
-                g2.setColor(new Color(24, 33, 53));
+                g2.setColor(lightThemeEnabled ? new Color(241, 245, 249) : new Color(24, 33, 53));
                 g2.fill(combinedWallsArea);
                 Shape oldClip = g2.getClip();
                 g2.clip(combinedWallsArea);
-                g2.setColor(new Color(148, 163, 184, 170));
+                g2.setColor(lightThemeEnabled ? new Color(71, 85, 105) : new Color(148, 163, 184, 170));
                 g2.setStroke(new BasicStroke(1.0f));
                 Rectangle b = combinedWallsArea.getBounds();
                 int step = (int) Math.max(6, 8 * zoom);
@@ -5016,20 +5058,20 @@ public class HousePlanCADApp extends JFrame {
                 }
                 g2.setClip(oldClip);
             } else if ("HOLLOW".equals(wallHatchStyle)) {
-                g2.setColor(new Color(15, 23, 42));
+                g2.setColor(lightThemeEnabled ? Color.WHITE : new Color(15, 23, 42));
                 g2.fill(combinedWallsArea);
             } else {
-                g2.setColor(new Color(51, 65, 85));
+                g2.setColor(lightThemeEnabled ? new Color(30, 41, 59) : new Color(51, 65, 85));
                 g2.fill(combinedWallsArea);
             }
 
             // Monolithic outer border
-            g2.setColor(new Color(203, 213, 225));
-            g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_MITER));
+            g2.setColor(lightThemeEnabled ? new Color(15, 23, 42) : new Color(203, 213, 225));
+            g2.setStroke(new BasicStroke(lightThemeEnabled ? 1.8f : 1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_MITER));
             g2.draw(combinedWallsArea);
 
             // Threshold lines in openings
-            g2.setColor(new Color(71, 85, 105));
+            g2.setColor(lightThemeEnabled ? new Color(148, 163, 184) : new Color(71, 85, 105));
             g2.setStroke(new BasicStroke(1.0f));
             for (Line2D.Double t : thresholdLines) g2.draw(t);
 
@@ -5045,12 +5087,12 @@ public class HousePlanCADApp extends JFrame {
                         g2.setColor(new Color(251, 191, 36)); // Amber for frozen
                         g2.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, new float[]{6, 4}, 0));
                     } else {
-                        g2.setColor(new Color(56, 189, 248)); // Bright Cyan for active
+                        g2.setColor(lightThemeEnabled ? new Color(2, 132, 199) : new Color(56, 189, 248)); // Deep Blue / Cyan
                         g2.setStroke(new BasicStroke(2.0f));
                     }
                     g2.draw(createWallSegmentPath(p1, p2, thickS));
                     String label = formatImperial(selW.getLength()) + " (" + (int)selW.thicknessInches + "\")" + (isLocked ? " 🔒 FROZEN" : "");
-                    drawCADDimension(g2, p1.x, p1.y, p2.x, p2.y, label, 24);
+                    drawCADDimension(g2, p1.x, p1.y, p2.x, p2.y, label, 24, true);
                     drawGrip(g2, p1.x, p1.y, isLocked);
                     drawGrip(g2, p2.x, p2.y, isLocked);
                     drawGrip(g2, (p1.x + p2.x) / 2, (p1.y + p2.y) / 2, isLocked);
@@ -5063,9 +5105,9 @@ public class HousePlanCADApp extends JFrame {
         }
 
         private void drawGrip(Graphics2D g2, int x, int y, boolean isLocked) {
-            g2.setColor(isLocked ? new Color(245, 158, 11) : new Color(56, 189, 248));
+            g2.setColor(isLocked ? new Color(245, 158, 11) : (lightThemeEnabled ? new Color(2, 132, 199) : new Color(56, 189, 248)));
             g2.fillRect(x - 4, y - 4, 8, 8);
-            g2.setColor(Color.WHITE);
+            g2.setColor(lightThemeEnabled ? new Color(15, 23, 42) : Color.WHITE);
             g2.drawRect(x - 4, y - 4, 8, 8);
         }
 
@@ -5280,7 +5322,13 @@ public class HousePlanCADApp extends JFrame {
                 if (el.flipV) g2.scale(1, -1);
                 g2.translate(-sw / 2, -sh / 2);
 
-                renderCADElement(g2, el, sw, sh);
+                if (el.type.equals("tag") || el.type.equals("north-arrow") || el.type.equals("section-tag")) {
+                    renderCADElement(g2, el, sw, sh);
+                } else if (lightThemeEnabled) {
+                    renderAutoCADBlock(g2, el, sw, sh, false, 1.0);
+                } else {
+                    renderCADElement(g2, el, sw, sh);
+                }
 
                 // Collision badge
                 if (el.hasCollision) {
@@ -5296,7 +5344,7 @@ public class HousePlanCADApp extends JFrame {
                 // Selection highlight
                 if (isSelected(el)) {
                     boolean isLocked = isObjectLocked(el);
-                    g2.setColor(isLocked ? new Color(251, 191, 36) : new Color(56, 189, 248));
+                    g2.setColor(isLocked ? new Color(245, 158, 11) : (lightThemeEnabled ? new Color(2, 132, 199) : new Color(56, 189, 248)));
                     g2.setStroke(new BasicStroke(1.4f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, new float[]{5, 4}, 0));
                     g2.drawRect(-4, -4, sw + 8, sh + 8);
                     drawGrip(g2, -4, -4, isLocked);
@@ -6429,12 +6477,12 @@ public class HousePlanCADApp extends JFrame {
                         new int[]{cx, cx + wingW, cx},
                         new int[]{topY, wingY, botY}, 3);
 
-                g2.setColor(new Color(56, 189, 248)); // Cyan accent on left
+                g2.setColor(lightThemeEnabled ? new Color(2, 132, 199) : new Color(56, 189, 248)); // Blue/Cyan accent on left
                 g2.fillPolygon(needleL);
-                g2.setColor(Color.WHITE); // White on right
+                g2.setColor(lightThemeEnabled ? new Color(226, 232, 240) : Color.WHITE); // Slate/white on right
                 g2.fillPolygon(needleR);
 
-                g2.setColor(new Color(203, 213, 225));
+                g2.setColor(lightThemeEnabled ? new Color(15, 23, 42) : new Color(203, 213, 225));
                 g2.setStroke(new BasicStroke(1.0f));
                 g2.drawPolygon(needleL);
                 g2.drawPolygon(needleR);
@@ -6443,6 +6491,7 @@ public class HousePlanCADApp extends JFrame {
                 // Compass Cardinal "N"
                 g2.setFont(new Font("Segoe UI", Font.BOLD, Math.max(11, (int)(14 * zoom))));
                 FontMetrics fm = g2.getFontMetrics();
+                g2.setColor(lightThemeEnabled ? new Color(15, 23, 42) : new Color(203, 213, 225));
                 g2.drawString("N", cx - fm.stringWidth("N") / 2, topY - 2);
 
             // ─── SECTION CUT LINE & CALLOUT TAG ─────────────────────────
@@ -6574,11 +6623,19 @@ public class HousePlanCADApp extends JFrame {
                 int maskY = (sh - maskH) / 2;
 
                 // AutoCAD-style subtle background mask so lines underneath don't clash (minimal padding)
-                g2.setColor(new Color(15, 23, 42, 215));
-                g2.fillRoundRect(maskX, maskY, maskW, maskH, 6, 6);
-                g2.setColor(new Color(56, 189, 248, 80));
-                g2.setStroke(new BasicStroke(0.8f));
-                g2.drawRoundRect(maskX, maskY, maskW, maskH, 6, 6);
+                if (lightThemeEnabled) {
+                    g2.setColor(new Color(255, 255, 255, 240));
+                    g2.fillRoundRect(maskX, maskY, maskW, maskH, 6, 6);
+                    g2.setColor(new Color(203, 213, 225));
+                    g2.setStroke(new BasicStroke(0.9f));
+                    g2.drawRoundRect(maskX, maskY, maskW, maskH, 6, 6);
+                } else {
+                    g2.setColor(new Color(15, 23, 42, 215));
+                    g2.fillRoundRect(maskX, maskY, maskW, maskH, 6, 6);
+                    g2.setColor(new Color(56, 189, 248, 80));
+                    g2.setStroke(new BasicStroke(0.8f));
+                    g2.drawRoundRect(maskX, maskY, maskW, maskH, 6, 6);
+                }
 
                 // Draw each text line centered
                 int curY = maskY + padY + (int)(titleSize * 0.95);
@@ -6592,11 +6649,11 @@ public class HousePlanCADApp extends JFrame {
                     int lx = (sw - fm.stringWidth(line)) / 2;
 
                     if (isTitle) {
-                        g2.setColor(Color.WHITE);
+                        g2.setColor(lightThemeEnabled ? new Color(15, 23, 42) : Color.WHITE);
                     } else if (isArea) {
-                        g2.setColor(new Color(56, 189, 248)); // Cyan area highlight
+                        g2.setColor(lightThemeEnabled ? new Color(2, 132, 199) : new Color(56, 189, 248)); // Deep blue / cyan
                     } else {
-                        g2.setColor(new Color(203, 213, 225)); // Light slate dimensions
+                        g2.setColor(lightThemeEnabled ? new Color(71, 85, 105) : new Color(203, 213, 225)); // Slate
                     }
                     g2.drawString(line, lx, curY);
                     curY += lineH;
@@ -9302,15 +9359,20 @@ public class HousePlanCADApp extends JFrame {
             double extX = (offset != 0) ? (perpX / offset) * 3.5 : 0;
             double extY = (offset != 0) ? (perpY / offset) * 3.5 : 0;
 
-            Color dimColor = isSel ? new Color(56, 189, 248) : new Color(56, 189, 248, 175);
+            Color dimColor;
+            if (isSel) {
+                dimColor = new Color(2, 132, 199);
+            } else {
+                dimColor = lightThemeEnabled ? new Color(30, 41, 59, 210) : new Color(56, 189, 248, 175);
+            }
             g2.setColor(dimColor);
-            g2.setStroke(isSel ? new BasicStroke(1.5f) : new BasicStroke(0.65f));
+            g2.setStroke(isSel ? new BasicStroke(1.5f) : new BasicStroke(lightThemeEnabled ? 0.85f : 0.65f));
             g2.draw(new Line2D.Double(p1x, p1y, d1x + extX, d1y + extY));
             g2.draw(new Line2D.Double(p2x, p2y, d2x + extX, d2y + extY));
             g2.draw(new Line2D.Double(d1x, d1y, d2x, d2y));
 
             double tick = 3.5;
-            g2.setStroke(new BasicStroke(isSel ? 1.6f : 0.85f));
+            g2.setStroke(new BasicStroke(isSel ? 1.6f : (lightThemeEnabled ? 1.0f : 0.85f)));
             g2.draw(new Line2D.Double(d1x - tick, d1y - tick, d1x + tick, d1y + tick));
             g2.draw(new Line2D.Double(d2x - tick, d2y - tick, d2x + tick, d2y + tick));
 
@@ -9326,10 +9388,11 @@ public class HousePlanCADApp extends JFrame {
             FontMetrics fm = g2.getFontMetrics();
             int tw = fm.stringWidth(text);
             int midX = (int)((d1x + d2x) / 2), midY = (int)((d1y + d2y) / 2);
-            g2.setColor(new Color(15, 23, 42));
+            g2.setColor(lightThemeEnabled ? Color.WHITE : new Color(15, 23, 42));
             g2.fillRect(midX - tw / 2 - 4, midY - 7, tw + 8, 14);
-            g2.setColor(isSel ? new Color(251, 191, 36) : new Color(56, 189, 248));
+            g2.setColor(isSel ? new Color(245, 158, 11) : (lightThemeEnabled ? new Color(71, 85, 105) : new Color(56, 189, 248)));
             g2.drawRect(midX - tw / 2 - 4, midY - 7, tw + 8, 14);
+            g2.setColor(isSel ? new Color(180, 83, 9) : (lightThemeEnabled ? new Color(15, 23, 42) : Color.WHITE));
             g2.drawString(text, midX - tw / 2, midY + 4);
             if (isSel) {
                 drawGrip(g2, midX, midY);
@@ -9383,7 +9446,7 @@ public class HousePlanCADApp extends JFrame {
                 }
             }
 
-            Color wallDimColor = new Color(56, 189, 248); // Cyan
+            Color wallDimColor = lightThemeEnabled ? new Color(2, 132, 199) : new Color(56, 189, 248);
             double maxSearchDist = 40.0 * FT_PX;
 
             // Left Wall Dimension
@@ -9466,11 +9529,12 @@ public class HousePlanCADApp extends JFrame {
             g2.setFont(new Font("Consolas", Font.BOLD, 10));
             FontMetrics fm = g2.getFontMetrics();
             int tw = fm.stringWidth(label);
-            g2.setColor(new Color(15, 23, 42, 235));
+            g2.setColor(lightThemeEnabled ? Color.WHITE : new Color(15, 23, 42, 235));
             g2.fillRoundRect(midX - tw / 2 - 4, midY - 7, tw + 8, 14, 4, 4);
             g2.setColor(color);
             g2.setStroke(new BasicStroke(1.0f));
             g2.drawRoundRect(midX - tw / 2 - 4, midY - 7, tw + 8, 14, 4, 4);
+            g2.setColor(lightThemeEnabled ? new Color(15, 23, 42) : Color.WHITE);
             g2.drawString(label, midX - tw / 2, midY + 4);
         }
 
@@ -9814,18 +9878,18 @@ public class HousePlanCADApp extends JFrame {
             if (handle == null) return;
 
             // Stalk line
-            g2.setColor(new Color(56, 189, 248, 140));
+            g2.setColor(lightThemeEnabled ? new Color(2, 132, 199, 160) : new Color(56, 189, 248, 140));
             g2.setStroke(new BasicStroke(1.2f));
             g2.drawLine(center.x, center.y, handle.x, handle.y);
 
             // Handle knob
             int r = (int) ROT_HANDLE_RADIUS;
-            g2.setColor(new Color(30, 41, 59));
+            g2.setColor(lightThemeEnabled ? Color.WHITE : new Color(30, 41, 59));
             g2.fillOval(handle.x - r, handle.y - r, r * 2, r * 2);
-            g2.setColor(new Color(56, 189, 248));
+            g2.setColor(lightThemeEnabled ? new Color(2, 132, 199) : new Color(56, 189, 248));
             g2.setStroke(new BasicStroke(2.0f));
             g2.drawOval(handle.x - r, handle.y - r, r * 2, r * 2);
-            g2.setColor(Color.WHITE);
+            g2.setColor(lightThemeEnabled ? new Color(15, 23, 42) : Color.WHITE);
             g2.setFont(new Font("Segoe UI Symbol", Font.BOLD, 10));
             g2.drawString("\u21bb", handle.x - 4, handle.y + 4);
 
@@ -9835,18 +9899,19 @@ public class HousePlanCADApp extends JFrame {
                 g2.setFont(new Font("Consolas", Font.BOLD, 11));
                 FontMetrics fm = g2.getFontMetrics();
                 int tw = fm.stringWidth(angStr) + 10;
-                g2.setColor(new Color(15, 23, 42, 220));
+                g2.setColor(lightThemeEnabled ? new Color(255, 255, 255, 240) : new Color(15, 23, 42, 220));
                 g2.fillRoundRect(handle.x + 14, handle.y - 10, tw, 20, 6, 6);
-                g2.setColor(new Color(56, 189, 248));
+                g2.setColor(lightThemeEnabled ? new Color(2, 132, 199) : new Color(56, 189, 248));
                 g2.drawRoundRect(handle.x + 14, handle.y - 10, tw, 20, 6, 6);
+                g2.setColor(lightThemeEnabled ? new Color(15, 23, 42) : Color.WHITE);
                 g2.drawString(angStr, handle.x + 19, handle.y + 4);
             }
 
             // Floating action HUD
             int hudX = handle.x - 90, hudY = handle.y - 32;
-            g2.setColor(new Color(15, 23, 42, 220));
+            g2.setColor(lightThemeEnabled ? new Color(255, 255, 255, 245) : new Color(15, 23, 42, 220));
             g2.fillRoundRect(hudX - 6, hudY - 4, 190, 26, 10, 10);
-            g2.setColor(new Color(56, 189, 248, 120));
+            g2.setColor(lightThemeEnabled ? new Color(203, 213, 225) : new Color(56, 189, 248, 120));
             g2.setStroke(new BasicStroke(0.8f));
             g2.drawRoundRect(hudX - 6, hudY - 4, 190, 26, 10, 10);
 
@@ -9860,14 +9925,26 @@ public class HousePlanCADApp extends JFrame {
             Rectangle rect = new Rectangle(x, y, w, h);
             hudButtons.add(new HUDButton(rect, text, action));
             boolean hovered = rect.contains(mouseScreen);
-            g2.setColor(hovered ? new Color(2, 132, 199) : new Color(30, 41, 59));
-            g2.fillRoundRect(x, y, w, h, 6, 6);
-            g2.setColor(hovered ? Color.WHITE : new Color(203, 213, 225));
-            g2.setStroke(new BasicStroke(0.8f));
-            g2.drawRoundRect(x, y, w, h, 6, 6);
-            g2.setFont(new Font("Segoe UI", Font.BOLD, 10));
-            FontMetrics fm = g2.getFontMetrics();
-            g2.drawString(text, x + (w - fm.stringWidth(text)) / 2, y + 13);
+            if (lightThemeEnabled) {
+                g2.setColor(hovered ? new Color(2, 132, 199) : new Color(241, 245, 249));
+                g2.fillRoundRect(x, y, w, h, 6, 6);
+                g2.setColor(hovered ? new Color(2, 132, 199) : new Color(203, 213, 225));
+                g2.setStroke(new BasicStroke(0.8f));
+                g2.drawRoundRect(x, y, w, h, 6, 6);
+                g2.setFont(new Font("Segoe UI", Font.BOLD, 10));
+                FontMetrics fm = g2.getFontMetrics();
+                g2.setColor(hovered ? Color.WHITE : new Color(15, 23, 42));
+                g2.drawString(text, x + (w - fm.stringWidth(text)) / 2, y + 13);
+            } else {
+                g2.setColor(hovered ? new Color(2, 132, 199) : new Color(30, 41, 59));
+                g2.fillRoundRect(x, y, w, h, 6, 6);
+                g2.setColor(hovered ? Color.WHITE : new Color(203, 213, 225));
+                g2.setStroke(new BasicStroke(0.8f));
+                g2.drawRoundRect(x, y, w, h, 6, 6);
+                g2.setFont(new Font("Segoe UI", Font.BOLD, 10));
+                FontMetrics fm = g2.getFontMetrics();
+                g2.drawString(text, x + (w - fm.stringWidth(text)) / 2, y + 13);
+            }
         }
     } // end CADViewportPanel
 
