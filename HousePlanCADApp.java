@@ -1032,6 +1032,13 @@ public class HousePlanCADApp extends JFrame {
         public static LicensePayload verifyCryptographicKey(String email, String rawKey) {
             if (rawKey == null || email == null) return null;
             String cleanKey = rawKey.trim();
+
+            // Built-in Master Developer / Creator Key for owner email
+            if (email.trim().equalsIgnoreCase("thyagarajsalome@gmail.com") &&
+                (cleanKey.equalsIgnoreCase("HDE-GLOBAL-PRO-2026") || cleanKey.equalsIgnoreCase("HDE-MASTER-DEV-KEY"))) {
+                return new LicensePayload("thyagarajsalome@gmail.com", "GLOBAL_PRO", System.currentTimeMillis(), 0L);
+            }
+
             if (!cleanKey.startsWith("HDE.")) return null;
 
             String[] parts = cleanKey.split("\\.");
