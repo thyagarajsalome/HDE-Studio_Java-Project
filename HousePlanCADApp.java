@@ -11666,17 +11666,21 @@ public class HousePlanCADApp extends JFrame {
         double doorH = (thick / 12.0) * FT_PX;
         String doorName = name + " Door " + (isBath ? "2'-6\"" : "3'-0\"");
 
-        if (doorPos == 0) { // South Wall (Bottom)
-            elements.add(new CADElement("door", doorName, ox + pw * 0.2, oy + ph - doorH / 2.0, doorW, doorH));
-        } else if (doorPos == 1) { // North Wall (Top)
-            elements.add(new CADElement("door", doorName, ox + pw * 0.2, oy - doorH / 2.0, doorW, doorH));
-        } else if (doorPos == 2) { // East Wall (Right)
+        if (doorPos == 0) { // South Wall (Bottom) - swings inward (upward into room)
+            CADElement d = new CADElement("door", doorName, ox + pw * 0.2, oy + ph - doorH / 2.0, doorW, doorH);
+            elements.add(d);
+        } else if (doorPos == 1) { // North Wall (Top) - swings inward (downward into room)
+            CADElement d = new CADElement("door", doorName, ox + pw * 0.2, oy - doorH / 2.0, doorW, doorH);
+            d.flipV = true;
+            elements.add(d);
+        } else if (doorPos == 2) { // East Wall (Right) - swings inward (leftward into room)
             CADElement d = new CADElement("door", doorName, ox + pw - doorH / 2.0, oy + ph * 0.2, doorH, doorW);
             d.rotation = 90;
             elements.add(d);
-        } else if (doorPos == 3) { // West Wall (Left)
+        } else if (doorPos == 3) { // West Wall (Left) - swings inward (rightward into room)
             CADElement d = new CADElement("door", doorName, ox - doorH / 2.0, oy + ph * 0.2, doorH, doorW);
             d.rotation = 90;
+            d.flipH = true;
             elements.add(d);
         }
 
@@ -12380,29 +12384,61 @@ public class HousePlanCADApp extends JFrame {
             g2.setStroke(new BasicStroke(2.0f));
             g2.drawRect(originX, ceilY, bldgW, plinthY - ceilY);
 
-            // 4. Doors & Windows projection
+            // 4. Doors & Windows projection (Strict Architectural Facade Visibility & Alignment)
+            double lintelHtFt = 7.0;
+            int lintelY = plinthY - (int)(lintelHtFt * scale);
+            int visibleOpeningsCount = 0;
+
             for (CADElement el : elements) {
-                boolean isDoor = "door".equals(el.type);
+                boolean isDoor = "door".equals(el.type) || (el.type != null && el.type.startsWith("door-"));
                 boolean isWin = el.type != null && el.type.contains("window");
                 if (!isDoor && !isWin) continue;
 
-                // Compute plan position along chosen facade projection axis
-                double elPlanPos = isXAxis ? (el.x + el.w / 2.0 - minX) : (el.y + el.h / 2.0 - minY);
-                if (viewMode == 1) elPlanPos = (maxX - (el.x + el.w / 2.0)); // North inverted
-                if (viewMode == 3) elPlanPos = (maxY - (el.y + el.h / 2.0)); // East inverted
+                // Strict Facade Visibility Check: Only project openings that face this specific exterior facade!
+                if (!isOpeningVisibleOnFacade(el, viewMode, walls)) continue;
+                visibleOpeningsCount++;
 
-                double elWidthFt = isXAxis ? (el.w / FT_PX) : (el.h / FT_PX);
+                double cx = el.x + el.w / 2.0;
+                double cy = el.y + el.h / 2.0;
+                boolean isRotated90 = Math.abs(Math.sin(Math.toRadians(el.rotation))) > 0.7;
+                double spanX = isRotated90 ? el.h : el.w;
+                double spanY = isRotated90 ? el.w : el.h;
+
+                // Compute plan position along chosen facade projection axis
+                double elPlanPos = isXAxis ? (cx - minX) : (cy - minY);
+                if (viewMode == 1) elPlanPos = (maxX - cx); // North facade (East on left, West on right)
+                if (viewMode == 3) elPlanPos = (maxY - cy); // East facade (South on left, North on right)
+
+                double elWidthFt = isXAxis ? (spanX / FT_PX) : (spanY / FT_PX);
                 if (elWidthFt < 1.0) elWidthFt = 3.0; // Standard default
 
                 int elX = originX + (int)((elPlanPos / FT_PX - elWidthFt / 2.0) * scale);
-                int elW = Math.max(12, (int)(elWidthFt * scale));
+                int elW = Math.max(14, (int)(elWidthFt * scale));
 
                 if (isDoor) {
-                    double doorHtFt = 7.0;
-                    int dTopY = plinthY - (int)(doorHtFt * scale);
+                    int dTopY = lintelY; // Aligns strictly with architectural lintel band (+7'-0" from plinth)
                     int dH = plinthY - dTopY;
 
-                    // Door Casing
+                    // Concrete Plinth Entrance Steps (Ground Level to Plinth Level transition)
+                    int stepCount = 3;
+                    int stepH = Math.max(3, (glY - plinthY) / stepCount);
+                    for (int s = 0; s < stepCount; s++) {
+                        int sY = plinthY + s * stepH;
+                        int sPad = (s + 1) * Math.max(4, (int)(0.35 * scale)); // Step treads expand outward
+                        int sLeft = elX - sPad;
+                        int sW = elW + sPad * 2;
+                        int sBot = (s == stepCount - 1) ? glY : (plinthY + (s + 1) * stepH);
+
+                        g2.setColor(isExport ? new Color(226, 232, 240) : new Color(30, 41, 59));
+                        g2.fillRect(sLeft, sY, sW, sBot - sY);
+                        g2.setColor(isExport ? new Color(203, 213, 225) : new Color(51, 65, 85));
+                        g2.drawLine(sLeft, sY, sLeft + sW, sY);
+                        g2.setColor(isExport ? new Color(148, 163, 184) : new Color(71, 85, 105));
+                        g2.setStroke(new BasicStroke(1.0f));
+                        g2.drawRect(sLeft, sY, sW, sBot - sY);
+                    }
+
+                    // Door Casing / Architrave
                     g2.setColor(new Color(51, 65, 85));
                     g2.fillRect(elX - 2, dTopY - 2, elW + 4, dH + 2);
 
@@ -12413,7 +12449,7 @@ public class HousePlanCADApp extends JFrame {
                     g2.setStroke(new BasicStroke(1.2f));
                     g2.drawRect(elX, dTopY, elW, dH);
 
-                    // 4-Panel detailing
+                    // Multi-Panel detailing
                     int pMidX = elX + elW / 2;
                     int pMidY = dTopY + dH / 2;
                     g2.drawRect(elX + 3, dTopY + 4, elW / 2 - 5, dH / 2 - 8);
@@ -12426,15 +12462,19 @@ public class HousePlanCADApp extends JFrame {
                     g2.fillOval(elX + elW - 8, dTopY + (int)(dH * 0.55), 4, 4);
 
                 } else if (isWin) {
-                    double sillFt = 3.5;
-                    double winHtFt = 4.0;
-                    int wSillY = plinthY - (int)(sillFt * scale);
-                    int wTopY = wSillY - (int)(winHtFt * scale);
-                    int wH = wSillY - wTopY;
+                    boolean isVent = el.type != null && el.type.contains("vent");
+                    double winHtFt = isVent ? 2.0 : 4.0;
+                    int wTopY = lintelY; // STRICT ARCHITECTURAL ALIGNMENT: Top of window matches door lintel!
+                    int wH = Math.max(10, (int)(winHtFt * scale));
+                    int wSillY = wTopY + wH;
 
-                    // Weather shade / Chajja (Slab overhang)
-                    g2.setColor(new Color(100, 116, 139));
-                    g2.fillRect(elX - 6, wTopY - 5, elW + 12, 5);
+                    // Cantilever RCC Weather shade / Chajja (extends 6" past window, 4" thick)
+                    int chajjaExt = Math.max(6, (int)(0.5 * scale));
+                    int chajjaThick = Math.max(3, (int)(0.35 * scale));
+                    g2.setColor(isExport ? new Color(203, 213, 225) : new Color(148, 163, 184));
+                    g2.fillRect(elX - chajjaExt, wTopY - chajjaThick, elW + chajjaExt * 2, chajjaThick);
+                    g2.setColor(isExport ? new Color(100, 116, 139) : new Color(51, 65, 85));
+                    g2.drawRect(elX - chajjaExt, wTopY - chajjaThick, elW + chajjaExt * 2, chajjaThick);
 
                     // Window Frame
                     g2.setColor(new Color(30, 41, 59));
@@ -12456,11 +12496,21 @@ public class HousePlanCADApp extends JFrame {
                 }
             }
 
-            // 5. RCC Ceiling Slab (6" RCC)
+            // Solid Wall Annotation if no exterior openings exist on this facade
+            if (visibleOpeningsCount == 0) {
+                g2.setColor(isExport ? new Color(148, 163, 184) : new Color(100, 116, 139, 160));
+                g2.setFont(new Font("Segoe UI", Font.BOLD, 12));
+                String note = "SOLID MASONRY FACADE (NO OPENINGS)";
+                FontMetrics fm = g2.getFontMetrics();
+                g2.drawString(note, originX + (bldgW - fm.stringWidth(note)) / 2, ceilY + (plinthY - ceilY) / 2);
+            }
+
+            // 5. RCC Ceiling Slab (6" RCC with architectural overhang)
+            int slabOverhang = Math.max(8, (int)(0.75 * scale)); // 9" cornice overhang
             g2.setColor(isExport ? new Color(203, 213, 225) : new Color(30, 41, 59));
-            g2.fillRect(originX - 6, slabY, bldgW + 12, ceilY - slabY);
+            g2.fillRect(originX - slabOverhang, slabY, bldgW + slabOverhang * 2, ceilY - slabY);
             g2.setColor(new Color(148, 163, 184));
-            g2.drawRect(originX - 6, slabY, bldgW + 12, ceilY - slabY);
+            g2.drawRect(originX - slabOverhang, slabY, bldgW + slabOverhang * 2, ceilY - slabY);
 
             // 6. Terrace Parapet Wall
             g2.setColor(isExport ? new Color(241, 245, 249) : new Color(15, 23, 42));
@@ -12477,6 +12527,7 @@ public class HousePlanCADApp extends JFrame {
                 drawDatumTag(g2, originX - 40, parapetY, String.format("+%.1f' TOP OF PARAPET", parapetFt), isExport);
                 drawDatumTag(g2, originX - 40, slabY, String.format("+%.1f' ROOF SLAB", slabFt), isExport);
                 drawDatumTag(g2, originX - 40, ceilY, String.format("+%.1f' CEILING", ceilFt), isExport);
+                drawDatumTag(g2, originX - 40, lintelY, String.format("+%.1f' LINTEL LEVEL", plinthFt + lintelHtFt), isExport);
                 drawDatumTag(g2, originX - 40, plinthY, String.format("+%.1f' PLINTH", plinthFt), isExport);
                 drawDatumTag(g2, originX - 40, glY, "±0.0' GROUND LEVEL", isExport);
             }
@@ -12501,6 +12552,69 @@ public class HousePlanCADApp extends JFrame {
             String titleText = currentView.toUpperCase() + " — 1:100 SCALE";
             FontMetrics fm = g2.getFontMetrics();
             g2.drawString(titleText, originX + (bldgW - fm.stringWidth(titleText)) / 2, glY + 50);
+        }
+
+        private boolean isOpeningVisibleOnFacade(CADElement el, int viewMode, List<Wall> wallList) {
+            if (wallList == null || wallList.isEmpty()) return false;
+
+            double cx = el.x + el.w / 2.0;
+            double cy = el.y + el.h / 2.0;
+
+            boolean isRotated90 = Math.abs(Math.sin(Math.toRadians(el.rotation))) > 0.7;
+            double spanX = isRotated90 ? el.h : el.w;
+            double spanY = isRotated90 ? el.w : el.h;
+            boolean isHorizontalOpening = spanX >= spanY;
+
+            // ViewMode: 0=South, 1=North, 2=West, 3=East
+            if (viewMode == 0 || viewMode == 1) {
+                if (!isHorizontalOpening) return false;
+
+                if (viewMode == 0) { // South facade: looking from South towards North
+                    for (Wall w : wallList) {
+                        double minWx = Math.min(w.x1, w.x2);
+                        double maxWx = Math.max(w.x1, w.x2);
+                        if (cx >= minWx - 10.0 && cx <= maxWx + 10.0) {
+                            double wy = (w.y1 + w.y2) / 2.0;
+                            if (wy > cy + 15.0) return false; // Blocked by wall further south
+                        }
+                    }
+                    return true;
+                } else { // North facade: looking from North towards South
+                    for (Wall w : wallList) {
+                        double minWx = Math.min(w.x1, w.x2);
+                        double maxWx = Math.max(w.x1, w.x2);
+                        if (cx >= minWx - 10.0 && cx <= maxWx + 10.0) {
+                            double wy = (w.y1 + w.y2) / 2.0;
+                            if (wy < cy - 15.0) return false; // Blocked by wall further north
+                        }
+                    }
+                    return true;
+                }
+            } else {
+                if (isHorizontalOpening) return false;
+
+                if (viewMode == 2) { // West elevation: looking from West towards East
+                    for (Wall w : wallList) {
+                        double minWy = Math.min(w.y1, w.y2);
+                        double maxWy = Math.max(w.y1, w.y2);
+                        if (cy >= minWy - 10.0 && cy <= maxWy + 10.0) {
+                            double wx = (w.x1 + w.x2) / 2.0;
+                            if (wx < cx - 15.0) return false; // Blocked by wall further west
+                        }
+                    }
+                    return true;
+                } else { // East elevation: looking from East towards West
+                    for (Wall w : wallList) {
+                        double minWy = Math.min(w.y1, w.y2);
+                        double maxWy = Math.max(w.y1, w.y2);
+                        if (cy >= minWy - 10.0 && cy <= maxWy + 10.0) {
+                            double wx = (w.x1 + w.x2) / 2.0;
+                            if (wx > cx + 15.0) return false; // Blocked by wall further east
+                        }
+                    }
+                    return true;
+                }
+            }
         }
 
         private void drawDatumTag(Graphics2D g2, int x, int y, String label, boolean isExport) {
