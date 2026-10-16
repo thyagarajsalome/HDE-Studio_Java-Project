@@ -456,7 +456,7 @@ public class HousePlanCADApp extends JFrame {
     // UI Components
     private CADViewportPanel viewportPanel;
     private JLabel statusCursorLabel, statusCollisionLabel, statusSelectionLabel;
-    private ModernToggle orthoBtn, gridBtn, snapBtn, snapCursorBtn, collisionBtn, themeToggleBtn;
+    private ModernToggle orthoBtn, gridBtn, snapBtn, snapCursorBtn, collisionBtn, themeToggleBtn, headerThemeBtn, toolbarThemeBtn;
     private ButtonGroup toolButtonGroup;
     private ModernButton undoBtn, redoBtn;
 
@@ -876,6 +876,14 @@ public class HousePlanCADApp extends JFrame {
         clearBtn.setToolTipText("Clear all drawings with prompt");
         clearBtn.addActionListener(e -> newDrawingWithPrompt());
 
+        headerThemeBtn = new ModernToggle("☀️ White Canvas [F6]", false,
+                new Color(251, 191, 36), new Color(245, 158, 11), new Color(69, 26, 3));
+        headerThemeBtn.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        headerThemeBtn.setPreferredSize(new Dimension(150, 28));
+        headerThemeBtn.setToolTipText("Toggle Canvas Theme (F6): Switch between Pure White Drafting Paper and Dark Blueprint");
+        headerThemeBtn.addActionListener(e -> setLightTheme(headerThemeBtn.isSelected()));
+
+        actionPanel.add(headerThemeBtn);
         actionPanel.add(exportBtn);
         actionPanel.add(licenseBtn);
         actionPanel.add(learnBtn);
@@ -957,6 +965,17 @@ public class HousePlanCADApp extends JFrame {
         toolsGroup.add(autoJoinBtn);
         toolsGroup.add(panBtn);
         toolbar.add(toolsGroup, BorderLayout.CENTER);
+
+        JPanel rightTools = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 3));
+        rightTools.setOpaque(false);
+        toolbarThemeBtn = new ModernToggle("☀️ White Canvas [F6]", false,
+                new Color(251, 191, 36), new Color(245, 158, 11), new Color(69, 26, 3));
+        toolbarThemeBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        toolbarThemeBtn.setToolTipText("Toggle Canvas Theme (F6): Switch between Pure White Drafting Paper and Dark Blueprint");
+        toolbarThemeBtn.addActionListener(e -> setLightTheme(toolbarThemeBtn.isSelected()));
+        rightTools.add(toolbarThemeBtn);
+        toolbar.add(rightTools, BorderLayout.EAST);
+
         return toolbar;
     }
 
@@ -3016,8 +3035,20 @@ public class HousePlanCADApp extends JFrame {
         if (themeToggleBtn != null && themeToggleBtn.isSelected() != light) {
             themeToggleBtn.setSelected(light);
         }
+        if (headerThemeBtn != null && headerThemeBtn.isSelected() != light) {
+            headerThemeBtn.setSelected(light);
+        }
+        if (toolbarThemeBtn != null && toolbarThemeBtn.isSelected() != light) {
+            toolbarThemeBtn.setSelected(light);
+        }
         if (themeToggleBtn != null) {
-            themeToggleBtn.setText(light ? "☀️ Light [F6]" : "🌙 Dark [F6]");
+            themeToggleBtn.setText(light ? "🌙 Blueprint [F6]" : "☀️ Light [F6]");
+        }
+        if (headerThemeBtn != null) {
+            headerThemeBtn.setText(light ? "🌙 Blueprint [F6]" : "☀️ White Canvas [F6]");
+        }
+        if (toolbarThemeBtn != null) {
+            toolbarThemeBtn.setText(light ? "🌙 Blueprint [F6]" : "☀️ White Canvas [F6]");
         }
         if (viewportPanel != null) {
             viewportPanel.setBackground(light ? Color.WHITE : new Color(17, 24, 39));
