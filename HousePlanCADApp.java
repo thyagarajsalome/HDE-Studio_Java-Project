@@ -984,6 +984,10 @@ public class HousePlanCADApp extends JFrame {
         columnGridBtn.setToolTipText("Structural Column Grid Generator: Auto-place RCC columns at wall corners and spans (Ctrl+Shift+G)");
         columnGridBtn.addActionListener(e -> showStructuralGridDialog());
 
+        ModernButton stairsBtn = new ModernButton("Stairs", new Color(30, 41, 59), new Color(168, 85, 247), new Color(147, 51, 234));
+        stairsBtn.setToolTipText("Architectural Staircase Library & Parametric Generator: Straight, Dog-Leg, L-Shape, Spiral, Open-Well (Ctrl+Shift+T / Alt+S)");
+        stairsBtn.addActionListener(e -> showStaircaseDialog(null));
+
         toolsGroup.add(selectBtn);
         toolsGroup.add(wallBtn);
         toolsGroup.add(wallThickCombo);
@@ -991,6 +995,7 @@ public class HousePlanCADApp extends JFrame {
         toolsGroup.add(roomBtn);
         toolsGroup.add(roomBuilderBtn);
         toolsGroup.add(columnGridBtn);
+        toolsGroup.add(stairsBtn);
         toolsGroup.add(floorBtn);
         toolsGroup.add(hatchBtn);
         toolsGroup.add(dimBtn);
@@ -1491,9 +1496,12 @@ public class HousePlanCADApp extends JFrame {
         // SITE, LANDSCAPE, STRUCTURE & INFRASTRUCTURE
         JPanel siteExtPanel = createCatalogCategoryPanel();
         addCatalogItem(siteExtPanel, "RCC Column 9\"×12\"", "column", 0.75, 1.0);
-        addCatalogItem(siteExtPanel, "Square Column 9\"×9\"", "column-sq", 0.75, 0.75);
-        addCatalogItem(siteExtPanel, "Dog-Leg Stair 7'×10'", "stair-dogleg", 7.0, 10.0);
         addCatalogItem(siteExtPanel, "Straight Stair 3'-6\"×12'", "stair-straight", 3.5, 12.0);
+        addCatalogItem(siteExtPanel, "Dog-Leg Stair 7'×10'", "stair-dogleg", 7.0, 10.0);
+        addCatalogItem(siteExtPanel, "L-Shape Stair 7'×10'", "stair-lshape", 7.0, 10.0);
+        addCatalogItem(siteExtPanel, "Open-Well Stair 8'×12'", "stair-openwell", 8.0, 12.0);
+        addCatalogItem(siteExtPanel, "Spiral Stair 6'×6'", "stair-spiral", 6.0, 6.0);
+        addCatalogItem(siteExtPanel, "Bifurcated Stair 10'×14'", "stair-bifurcated", 10.0, 14.0);
         addCatalogItem(siteExtPanel, "Deciduous Tree (12'×12')", "tree-deciduous", 12.0, 12.0);
         addCatalogItem(siteExtPanel, "Evergreen Pine (8'×8')", "tree-pine", 8.0, 8.0);
         addCatalogItem(siteExtPanel, "Tropical Palm (10'×10')", "tree-palm", 10.0, 10.0);
@@ -3211,6 +3219,7 @@ public class HousePlanCADApp extends JFrame {
                 if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_N) { newDrawingWithPrompt(); return true; }
                 if (e.isControlDown() && e.isShiftDown() && e.getKeyCode() == KeyEvent.VK_R) { showParametricRoomDialog(); return true; }
                 if (e.isControlDown() && e.isShiftDown() && e.getKeyCode() == KeyEvent.VK_G) { showStructuralGridDialog(); return true; }
+                if ((e.isControlDown() && e.isShiftDown() && e.getKeyCode() == KeyEvent.VK_T) || (e.isAltDown() && e.getKeyCode() == KeyEvent.VK_S)) { showStaircaseDialog(null); return true; }
 
                 if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_Z) { undo(); return true; }
                 if (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_Y) { redo(); return true; }
@@ -4307,11 +4316,15 @@ public class HousePlanCADApp extends JFrame {
                                 }
                             }
 
-                            // Double click on Section Tag opens the Sectional Elevation Dialog
+                            // Double click on Section Tag or Staircase
                             if (e.getClickCount() >= 2 && hit instanceof CADElement) {
                                 CADElement secEl = (CADElement) hit;
                                 if ("section-tag".equals(secEl.type)) {
                                     showSectionalElevationDialog(secEl);
+                                    return;
+                                }
+                                if (secEl.type != null && secEl.type.startsWith("stair")) {
+                                    showStaircaseDialog(secEl);
                                     return;
                                 }
                             }
@@ -4880,6 +4893,7 @@ public class HousePlanCADApp extends JFrame {
             drawDynamicDimensions(g2);
             drawSelectionRectangle(g2);
             drawActiveTools(g2);
+            drawFacadeOrientationIndicators(g2);
             if (isSnipMode) {
                 drawSnipOverlay(g2);
             }
@@ -4927,6 +4941,204 @@ public class HousePlanCADApp extends JFrame {
                 gToast.drawString(toastMessage, tx + 18, ty + 23);
             }
             gToast.dispose();
+        }
+
+        private void drawFacadeOrientationIndicators(Graphics2D g2) {
+            int w = getWidth(), h = getHeight();
+            if (w < 200 || h < 200) return;
+
+            String activeElev = (elevationViewportPanel != null) ? elevationViewportPanel.getCurrentView() : "Front Facade (South)";
+            boolean isElevOpen = (elevationViewportPanel != null && elevationViewportPanel.isShowing());
+
+            // 1. Perimeter Facade Direction Badges (AutoCAD Architectural Cardinal System)
+            int badgeW = 190;
+            int badgeH = 24;
+
+            // --- NORTH / REAR (Top Center) ---
+            boolean actNorth = activeElev != null && (activeElev.contains("North") || activeElev.contains("Rear"));
+            int nX = (w - badgeW) / 2, nY = 8;
+            Rectangle rNorth = new Rectangle(nX, nY, badgeW, badgeH);
+            hudButtons.add(new HUDButton(rNorth, "North", () -> setElevationView("Rear Facade (North)")));
+            drawOrientationBadge(g2, rNorth, "▲ REAR FACADE (NORTH)", actNorth, isElevOpen);
+
+            // --- SOUTH / FRONT (Bottom Center) ---
+            boolean actSouth = activeElev != null && (activeElev.contains("South") || activeElev.contains("Front"));
+            int sX = (w - badgeW) / 2, sY = h - badgeH - 8;
+            Rectangle rSouth = new Rectangle(sX, sY, badgeW, badgeH);
+            hudButtons.add(new HUDButton(rSouth, "South", () -> setElevationView("Front Facade (South)")));
+            drawOrientationBadge(g2, rSouth, "▼ FRONT FACADE (SOUTH)", actSouth, isElevOpen);
+
+            // --- WEST / LEFT (Left Center) ---
+            boolean actWest = activeElev != null && (activeElev.contains("West") || activeElev.contains("Left"));
+            int wX = 8, wY = (h - badgeH) / 2;
+            Rectangle rWest = new Rectangle(wX, wY, badgeW - 15, badgeH);
+            hudButtons.add(new HUDButton(rWest, "West", () -> setElevationView("Left Elevation (West)")));
+            drawOrientationBadge(g2, rWest, "◄ LEFT ELEVATION (WEST)", actWest, isElevOpen);
+
+            // --- EAST / RIGHT (Right Center) ---
+            boolean actEast = activeElev != null && (activeElev.contains("East") || activeElev.contains("Right"));
+            int eX = w - (badgeW - 15) - 8, eY = (h - badgeH) / 2;
+            Rectangle rEast = new Rectangle(eX, eY, badgeW - 15, badgeH);
+            hudButtons.add(new HUDButton(rEast, "East", () -> setElevationView("Right Elevation (East)")));
+            drawOrientationBadge(g2, rEast, "► RIGHT ELEVATION (EAST)", actEast, isElevOpen);
+
+            // 2. Active Building Sightline Frustum (Camera Arrow on Plan)
+            if (!walls.isEmpty() && isElevOpen) {
+                double minX = Double.MAX_VALUE, maxX = -Double.MAX_VALUE;
+                double minY = Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
+                for (Wall wall : walls) {
+                    minX = Math.min(minX, Math.min(wall.x1, wall.x2));
+                    maxX = Math.max(maxX, Math.max(wall.x1, wall.x2));
+                    minY = Math.min(minY, Math.min(wall.y1, wall.y2));
+                    maxY = Math.max(maxY, Math.max(wall.y1, wall.y2));
+                }
+
+                Point p1 = worldToScreen(minX, minY);
+                Point p2 = worldToScreen(maxX, maxY);
+                int bLeft = Math.min(p1.x, p2.x), bRight = Math.max(p1.x, p2.x);
+                int bTop = Math.min(p1.y, p2.y), bBottom = Math.max(p1.y, p2.y);
+
+                drawActiveCameraSightline(g2, bLeft, bRight, bTop, bBottom, activeElev);
+            }
+
+            // 3. Architectural Compass Rose HUD in Top-Right
+            drawCompassRoseHUD(g2, w - 46, 44, activeElev, isElevOpen);
+        }
+
+        private void drawOrientationBadge(Graphics2D g2, Rectangle r, String text, boolean isActive, boolean isElevOpen) {
+            boolean hovered = (mouseScreen != null && r.contains(mouseScreen));
+            Graphics2D gb = (Graphics2D) g2.create();
+            gb.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            gb.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+            if (isActive && isElevOpen) {
+                // Vibrant Emerald Active Elevation Badge
+                gb.setColor(new Color(6, 78, 59, 230));
+                gb.fillRoundRect(r.x, r.y, r.width, r.height, 12, 12);
+                gb.setColor(hovered ? new Color(110, 231, 183) : new Color(52, 211, 153));
+                gb.setStroke(new BasicStroke(1.8f));
+                gb.drawRoundRect(r.x, r.y, r.width, r.height, 12, 12);
+                gb.setColor(Color.WHITE);
+                gb.setFont(new Font("Segoe UI", Font.BOLD, 10));
+                FontMetrics fm = gb.getFontMetrics();
+                String lbl = text + " [LIVE]";
+                gb.drawString(lbl, r.x + (r.width - fm.stringWidth(lbl)) / 2, r.y + 16);
+            } else {
+                // Sleek Slate Cardinal Badge
+                gb.setColor(hovered ? new Color(30, 41, 59, 230) : (lightThemeEnabled ? new Color(241, 245, 249, 200) : new Color(15, 23, 42, 180)));
+                gb.fillRoundRect(r.x, r.y, r.width, r.height, 12, 12);
+                gb.setColor(hovered ? new Color(56, 189, 248) : (lightThemeEnabled ? new Color(203, 213, 225) : new Color(51, 65, 85, 180)));
+                gb.setStroke(new BasicStroke(hovered ? 1.4f : 1.0f));
+                gb.drawRoundRect(r.x, r.y, r.width, r.height, 12, 12);
+                gb.setColor(hovered ? new Color(56, 189, 248) : (lightThemeEnabled ? new Color(71, 85, 105) : new Color(148, 163, 184)));
+                gb.setFont(new Font("Segoe UI", Font.BOLD, 10));
+                FontMetrics fm = gb.getFontMetrics();
+                gb.drawString(text, r.x + (r.width - fm.stringWidth(text)) / 2, r.y + 16);
+            }
+            gb.dispose();
+        }
+
+        private void drawActiveCameraSightline(Graphics2D g2, int bLeft, int bRight, int bTop, int bBottom, String activeElev) {
+            Graphics2D gc = (Graphics2D) g2.create();
+            gc.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            gc.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            gc.setFont(new Font("Segoe UI", Font.BOLD, 10));
+            FontMetrics fm = gc.getFontMetrics();
+
+            Color camColor = new Color(52, 211, 153);
+            gc.setColor(camColor);
+            gc.setStroke(new BasicStroke(1.5f));
+
+            float[] dash = {4, 4};
+            Stroke dashed = new BasicStroke(1.2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dash, 0);
+
+            if (activeElev.contains("East") || activeElev.contains("Right")) {
+                int midY = (bTop + bBottom) / 2;
+                int camX = bRight + 32;
+                gc.setStroke(dashed);
+                gc.drawLine(bRight + 2, bTop - 10, bRight + 2, bBottom + 10);
+                gc.setStroke(new BasicStroke(1.8f));
+                gc.drawLine(camX, midY, bRight + 8, midY);
+                gc.fillPolygon(new int[]{bRight + 8, bRight + 16, bRight + 16}, new int[]{midY, midY - 5, midY + 5}, 3);
+                String tag = "◀ LIVE ELEVATION: EAST";
+                gc.drawString(tag, camX + 8, midY + 4);
+
+            } else if (activeElev.contains("West") || activeElev.contains("Left")) {
+                int midY = (bTop + bBottom) / 2;
+                int camX = bLeft - 32;
+                gc.setStroke(dashed);
+                gc.drawLine(bLeft - 2, bTop - 10, bLeft - 2, bBottom + 10);
+                gc.setStroke(new BasicStroke(1.8f));
+                gc.drawLine(camX, midY, bLeft - 8, midY);
+                gc.fillPolygon(new int[]{bLeft - 8, bLeft - 16, bLeft - 16}, new int[]{midY, midY - 5, midY + 5}, 3);
+                String tag = "LIVE ELEVATION: WEST ▶";
+                gc.drawString(tag, camX - fm.stringWidth(tag) - 8, midY + 4);
+
+            } else if (activeElev.contains("North") || activeElev.contains("Rear")) {
+                int midX = (bLeft + bRight) / 2;
+                int camY = bTop - 28;
+                gc.setStroke(dashed);
+                gc.drawLine(bLeft - 10, bTop - 2, bRight + 10, bTop - 2);
+                gc.setStroke(new BasicStroke(1.8f));
+                gc.drawLine(midX, camY, midX, bTop - 8);
+                gc.fillPolygon(new int[]{midX, midX - 5, midX + 5}, new int[]{bTop - 8, bTop - 16, bTop - 16}, 3);
+                String tag = "▼ LIVE ELEVATION: NORTH";
+                gc.drawString(tag, midX - fm.stringWidth(tag) / 2, camY - 6);
+
+            } else if (activeElev.contains("South") || activeElev.contains("Front")) {
+                int midX = (bLeft + bRight) / 2;
+                int camY = bBottom + 28;
+                gc.setStroke(dashed);
+                gc.drawLine(bLeft - 10, bBottom + 2, bRight + 10, bBottom + 2);
+                gc.setStroke(new BasicStroke(1.8f));
+                gc.drawLine(midX, camY, midX, bBottom + 8);
+                gc.fillPolygon(new int[]{midX, midX - 5, midX + 5}, new int[]{bBottom + 8, bBottom + 16, bBottom + 16}, 3);
+                String tag = "▲ LIVE ELEVATION: SOUTH";
+                gc.drawString(tag, midX - fm.stringWidth(tag) / 2, camY + 16);
+            }
+            gc.dispose();
+        }
+
+        private void drawCompassRoseHUD(Graphics2D g2, int cx, int cy, String activeElev, boolean isElevOpen) {
+            Graphics2D gc = (Graphics2D) g2.create();
+            gc.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            gc.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+            int r = 18;
+            gc.setColor(lightThemeEnabled ? new Color(241, 245, 249, 210) : new Color(15, 23, 42, 210));
+            gc.fillOval(cx - r - 4, cy - r - 4, (r + 4) * 2, (r + 4) * 2);
+            gc.setColor(lightThemeEnabled ? new Color(203, 213, 225) : new Color(51, 65, 85));
+            gc.setStroke(new BasicStroke(1.0f));
+            gc.drawOval(cx - r - 4, cy - r - 4, (r + 4) * 2, (r + 4) * 2);
+
+            // Cross lines
+            gc.drawLine(cx - r, cy, cx + r, cy);
+            gc.drawLine(cx, cy - r, cx, cy + r);
+
+            // North Arrow pointer
+            boolean isNorth = isElevOpen && activeElev != null && (activeElev.contains("North") || activeElev.contains("Rear"));
+            gc.setColor(isNorth ? new Color(52, 211, 153) : new Color(239, 68, 68));
+            gc.fillPolygon(new int[]{cx, cx - 4, cx + 4}, new int[]{cy - r, cy - 2, cy - 2}, 3);
+
+            // Cardinal Labels
+            gc.setFont(new Font("Consolas", Font.BOLD, 9));
+            FontMetrics fm = gc.getFontMetrics();
+            gc.setColor(isNorth ? new Color(52, 211, 153) : (lightThemeEnabled ? new Color(15, 23, 42) : Color.WHITE));
+            gc.drawString("N", cx - fm.stringWidth("N") / 2, cy - r - 6);
+
+            boolean isSouth = isElevOpen && activeElev != null && (activeElev.contains("South") || activeElev.contains("Front"));
+            gc.setColor(isSouth ? new Color(52, 211, 153) : (lightThemeEnabled ? new Color(100, 116, 139) : new Color(148, 163, 184)));
+            gc.drawString("S", cx - fm.stringWidth("S") / 2, cy + r + 11);
+
+            boolean isEast = isElevOpen && activeElev != null && (activeElev.contains("East") || activeElev.contains("Right"));
+            gc.setColor(isEast ? new Color(52, 211, 153) : (lightThemeEnabled ? new Color(100, 116, 139) : new Color(148, 163, 184)));
+            gc.drawString("E", cx + r + 5, cy + 4);
+
+            boolean isWest = isElevOpen && activeElev != null && (activeElev.contains("West") || activeElev.contains("Left"));
+            gc.setColor(isWest ? new Color(52, 211, 153) : (lightThemeEnabled ? new Color(100, 116, 139) : new Color(148, 163, 184)));
+            gc.drawString("W", cx - r - fm.stringWidth("W") - 5, cy + 4);
+
+            gc.dispose();
         }
 
         private void drawHoverHighlight(Graphics2D g2) {
@@ -6621,32 +6833,9 @@ public class HousePlanCADApp extends JFrame {
                 String letterP = letter + "'";
                 g2.drawString(letterP, sw - bubR - fmb.stringWidth(letterP) / 2, cy + fmb.getAscent() / 2 - 2);
 
-            // ─── STAIRCASE ──────────────────────────────────────────────
+            // ─── STAIRCASE (Architectural Staircase Library) ──────────────
             } else if (type.startsWith("stair")) {
-                g2.setColor(new Color(11, 19, 36));
-                g2.fillRect(0, 0, sw, sh);
-                g2.setColor(new Color(148, 163, 184));
-                g2.setStroke(new BasicStroke(1.0f));
-                g2.drawRect(0, 0, sw, sh);
-
-                // Treads
-                int treads = type.equals("stair-dogleg") ? 8 : 10;
-                for (int t = 1; t < treads; t++) {
-                    int ty = (sh / treads) * t;
-                    g2.drawLine(0, ty, sw, ty);
-                }
-
-                // UP arrow
-                g2.setColor(new Color(245, 158, 11));
-                g2.setFont(new Font("Segoe UI", Font.BOLD, Math.max(9, (int)(10 * zoom))));
-                g2.drawString("UP \u2191", sw / 2 - 12, sh - 6);
-
-                // Halfway line for dog-leg
-                if (type.equals("stair-dogleg")) {
-                    g2.setColor(new Color(56, 189, 248));
-                    g2.setStroke(new BasicStroke(1.5f));
-                    g2.drawLine(0, sh / 2, sw, sh / 2);
-                }
+                renderArchitecturalStaircase(g2, type, sw, sh, false, zoom, true);
 
             // ─── ROOM AREA TAG ──────────────────────────────────────────
             } else if (type.equals("tag")) {
@@ -12033,6 +12222,20 @@ public class HousePlanCADApp extends JFrame {
         list.add(new Point2D.Double(x, y));
     }
 
+    public void setElevationView(String viewName) {
+        if (!splitElevationBtn.isSelected()) {
+            splitElevationBtn.setSelected(true);
+            setSplitElevationView(true);
+        }
+        if (elevationViewportPanel != null) {
+            elevationViewportPanel.setCurrentView(viewName);
+        }
+        if (viewportPanel != null) {
+            viewportPanel.showToastNotification("Live Elevation: " + viewName);
+            viewportPanel.repaint();
+        }
+    }
+
     public void setSplitElevationView(boolean enable) {
         if (splitElevationBtn != null && splitElevationBtn.isSelected() != enable) {
             splitElevationBtn.setSelected(enable);
@@ -12055,6 +12258,519 @@ public class HousePlanCADApp extends JFrame {
         }
     }
 
+    private void styleSpinner(JSpinner spinner) {
+        spinner.setPreferredSize(new Dimension(100, 26));
+        JComponent editor = spinner.getEditor();
+        if (editor instanceof JSpinner.DefaultEditor) {
+            JTextField tf = ((JSpinner.DefaultEditor) editor).getTextField();
+            tf.setBackground(new Color(24, 33, 53));
+            tf.setForeground(Color.WHITE);
+            tf.setCaretColor(new Color(56, 189, 248));
+            tf.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            tf.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+        }
+        spinner.setBorder(BorderFactory.createLineBorder(new Color(51, 65, 85)));
+    }
+
+    public void showStaircaseDialog(CADElement existingStair) {
+        boolean isEditing = (existingStair != null);
+        JDialog dlg = new JDialog(this, isEditing ? "Modify Architectural Staircase" : "Architectural Staircase Library & Parametric Generator", true);
+        dlg.setLayout(new BorderLayout());
+        dlg.getContentPane().setBackground(new Color(15, 23, 42));
+
+        String[] types = {
+            "stair-straight",
+            "stair-dogleg",
+            "stair-lshape",
+            "stair-openwell",
+            "stair-spiral",
+            "stair-bifurcated"
+        };
+        String[] typeNames = {
+            "Straight Flight Staircase (3'-6\" × 12'-0\")",
+            "Dog-Legged / Half-Turn with Mid-Landing (7'-0\" × 10'-0\")",
+            "L-Shaped Quarter-Turn (7'-0\" × 10'-0\")",
+            "Open-Well with Lightwell (8'-0\" × 12'-0\")",
+            "Spiral / Circular Staircase (6'-0\" × 6'-0\")",
+            "Bifurcated Grand Entrance Staircase (10'-0\" × 14'-0\")"
+        };
+
+        JComboBox<String> typeCombo = new JComboBox<>(typeNames);
+        styleComboBox(typeCombo);
+
+        double initW = isEditing ? (existingStair.w / FT_PX) : 7.0;
+        double initD = isEditing ? (existingStair.h / FT_PX) : 10.0;
+        if (isEditing && existingStair.type != null) {
+            for (int i = 0; i < types.length; i++) {
+                if (types[i].equals(existingStair.type)) {
+                    typeCombo.setSelectedIndex(i);
+                    break;
+                }
+            }
+        } else {
+            typeCombo.setSelectedIndex(1); // Dogleg default
+        }
+
+        JSpinner widthSpinner = new JSpinner(new SpinnerNumberModel(initW, 2.5, 25.0, 0.5));
+        JSpinner depthSpinner = new JSpinner(new SpinnerNumberModel(initD, 2.5, 30.0, 0.5));
+        JSpinner heightSpinner = new JSpinner(new SpinnerNumberModel(10.0, 7.0, 16.0, 0.5));
+        styleSpinner(widthSpinner);
+        styleSpinner(depthSpinner);
+        styleSpinner(heightSpinner);
+
+        JLabel codeCalcLbl = new JLabel();
+        codeCalcLbl.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        codeCalcLbl.setForeground(new Color(52, 211, 153));
+
+        Runnable updateCalc = () -> {
+            double htFt = ((Number) heightSpinner.getValue()).doubleValue();
+            double dFt = ((Number) depthSpinner.getValue()).doubleValue();
+            int risers = (int) Math.round((htFt * 12.0) / 7.0);
+            if (risers < 12) risers = 12;
+            double riserInches = (htFt * 12.0) / risers;
+            double treadInches = (dFt * 12.0) / Math.max(8, risers / 2);
+            codeCalcLbl.setText(String.format("<html><b>Riser:</b> %.2f\" (%d steps) &nbsp;|&nbsp; <b>Going/Tread:</b> %.1f\"<br><span style='color:#38bdf8'>✓ Meets IRC/NBC Building Code (&le;7.75\" Riser)</span></html>",
+                    riserInches, risers, treadInches));
+        };
+        updateCalc.run();
+        heightSpinner.addChangeListener(e -> updateCalc.run());
+        depthSpinner.addChangeListener(e -> updateCalc.run());
+
+        JPanel leftPanel = new JPanel(new GridBagLayout());
+        leftPanel.setOpaque(false);
+        leftPanel.setBorder(new EmptyBorder(16, 20, 16, 20));
+        GridBagConstraints g = new GridBagConstraints();
+        g.insets = new Insets(6, 6, 6, 6);
+        g.fill = GridBagConstraints.HORIZONTAL;
+
+        g.gridx = 0; g.gridy = 0;
+        JLabel tLbl = new JLabel("STAIRCASE TYPE:");
+        tLbl.setFont(new Font("Consolas", Font.BOLD, 11));
+        tLbl.setForeground(new Color(148, 163, 184));
+        leftPanel.add(tLbl, g);
+
+        g.gridx = 1;
+        leftPanel.add(typeCombo, g);
+
+        g.gridx = 0; g.gridy = 1;
+        JLabel wLbl = new JLabel("TOTAL WIDTH (FT):");
+        wLbl.setFont(new Font("Consolas", Font.BOLD, 11));
+        wLbl.setForeground(new Color(148, 163, 184));
+        leftPanel.add(wLbl, g);
+
+        g.gridx = 1;
+        leftPanel.add(widthSpinner, g);
+
+        g.gridx = 0; g.gridy = 2;
+        JLabel dLbl = new JLabel("LENGTH / DEPTH (FT):");
+        dLbl.setFont(new Font("Consolas", Font.BOLD, 11));
+        dLbl.setForeground(new Color(148, 163, 184));
+        leftPanel.add(dLbl, g);
+
+        g.gridx = 1;
+        leftPanel.add(depthSpinner, g);
+
+        g.gridx = 0; g.gridy = 3;
+        JLabel hLbl = new JLabel("FLOOR HEIGHT (FT):");
+        hLbl.setFont(new Font("Consolas", Font.BOLD, 11));
+        hLbl.setForeground(new Color(148, 163, 184));
+        leftPanel.add(hLbl, g);
+
+        g.gridx = 1;
+        leftPanel.add(heightSpinner, g);
+
+        g.gridx = 0; g.gridy = 4; g.gridwidth = 2;
+        leftPanel.add(codeCalcLbl, g);
+
+        JPanel previewPanel = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics gr) {
+                super.paintComponent(gr);
+                Graphics2D g2 = (Graphics2D) gr.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+                int pw = getWidth(), ph = getHeight();
+                g2.setColor(new Color(11, 19, 36));
+                g2.fillRect(0, 0, pw, ph);
+
+                double wFt = ((Number) widthSpinner.getValue()).doubleValue();
+                double dFt = ((Number) depthSpinner.getValue()).doubleValue();
+                int selIdx = typeCombo.getSelectedIndex();
+                String selType = types[Math.max(0, Math.min(types.length - 1, selIdx))];
+
+                double margin = 30.0;
+                double scale = Math.min((pw - margin * 2) / (wFt * FT_PX), (ph - margin * 2) / (dFt * FT_PX));
+                int drawW = (int)(wFt * FT_PX * scale);
+                int drawH = (int)(dFt * FT_PX * scale);
+                int ox = (pw - drawW) / 2;
+                int oy = (ph - drawH) / 2;
+
+                AffineTransform old = g2.getTransform();
+                g2.translate(ox, oy);
+                renderArchitecturalStaircase(g2, selType, drawW, drawH, false, scale, true);
+                g2.setTransform(old);
+
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, 10));
+                FontMetrics fm = g2.getFontMetrics();
+                String wStr = String.format("%.1f'", wFt);
+                g2.drawString(wStr, ox + (drawW - fm.stringWidth(wStr)) / 2, oy - 8);
+                String dStr = String.format("%.1f'", dFt);
+                g2.drawString(dStr, ox + drawW + 6, oy + drawH / 2);
+
+                g2.dispose();
+            }
+        };
+        previewPanel.setPreferredSize(new Dimension(280, 280));
+        previewPanel.setBorder(BorderFactory.createLineBorder(new Color(51, 65, 85)));
+
+        typeCombo.addActionListener(e -> {
+            int idx = typeCombo.getSelectedIndex();
+            if (idx == 0) { widthSpinner.setValue(3.5); depthSpinner.setValue(12.0); }
+            else if (idx == 1) { widthSpinner.setValue(7.0); depthSpinner.setValue(10.0); }
+            else if (idx == 2) { widthSpinner.setValue(7.0); depthSpinner.setValue(10.0); }
+            else if (idx == 3) { widthSpinner.setValue(8.0); depthSpinner.setValue(12.0); }
+            else if (idx == 4) { widthSpinner.setValue(6.0); depthSpinner.setValue(6.0); }
+            else if (idx == 5) { widthSpinner.setValue(10.0); depthSpinner.setValue(14.0); }
+            updateCalc.run();
+            previewPanel.repaint();
+        });
+        widthSpinner.addChangeListener(e -> previewPanel.repaint());
+        depthSpinner.addChangeListener(e -> previewPanel.repaint());
+
+        JPanel center = new JPanel(new BorderLayout());
+        center.setOpaque(false);
+        center.add(leftPanel, BorderLayout.CENTER);
+        center.add(previewPanel, BorderLayout.EAST);
+        dlg.add(center, BorderLayout.CENTER);
+
+        JPanel botBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
+        botBar.setBackground(new Color(24, 33, 53));
+        botBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(51, 65, 85)));
+
+        ModernButton cancelBtn = new ModernButton("Cancel", new Color(30, 41, 59), Color.WHITE, new Color(51, 65, 85));
+        cancelBtn.addActionListener(e -> dlg.dispose());
+
+        ModernButton insertBtn = new ModernButton(isEditing ? "Apply Changes" : "Insert Staircase",
+                new Color(168, 85, 247), Color.WHITE, new Color(147, 51, 234));
+        insertBtn.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        insertBtn.addActionListener(e -> {
+            saveUndoState();
+            double wFt = ((Number) widthSpinner.getValue()).doubleValue();
+            double dFt = ((Number) depthSpinner.getValue()).doubleValue();
+            int selIdx = typeCombo.getSelectedIndex();
+            String selType = types[Math.max(0, Math.min(types.length - 1, selIdx))];
+            String selName = typeNames[Math.max(0, Math.min(types.length - 1, selIdx))];
+
+            if (isEditing) {
+                existingStair.type = selType;
+                existingStair.name = selName;
+                existingStair.w = wFt * FT_PX;
+                existingStair.h = dFt * FT_PX;
+            } else {
+                int viewW = viewportPanel.getWidth();
+                int viewH = viewportPanel.getHeight();
+                Point2D.Double centerWorld = viewportPanel.screenToWorld(viewW / 2, viewH / 2);
+                CADElement newStair = new CADElement(selType, selName,
+                        centerWorld.x - (wFt * FT_PX) / 2.0,
+                        centerWorld.y - (dFt * FT_PX) / 2.0,
+                        wFt * FT_PX, dFt * FT_PX);
+                elements.add(newStair);
+                clearSelection();
+                addToSelection(newStair);
+            }
+            markProjectDirty(true);
+            viewportPanel.repaint();
+            dlg.dispose();
+            viewportPanel.showToastNotification((isEditing ? "Updated " : "Inserted ") + selName);
+        });
+
+        botBar.add(cancelBtn);
+        botBar.add(insertBtn);
+        dlg.add(botBar, BorderLayout.SOUTH);
+
+        dlg.pack();
+        dlg.setLocationRelativeTo(this);
+        dlg.setVisible(true);
+    }
+
+    private void renderArchitecturalStaircase(Graphics2D g2, String type, int sw, int sh,
+                                              boolean isMonochrome, double scale, boolean isDark) {
+        Color bg = isDark ? new Color(15, 23, 42) : Color.WHITE;
+        Color borderCol = isMonochrome ? Color.BLACK : (isDark ? new Color(56, 189, 248) : new Color(15, 23, 42));
+        Color treadCol = isMonochrome ? Color.DARK_GRAY : (isDark ? new Color(148, 163, 184) : new Color(71, 85, 105));
+        Color arrowCol = isMonochrome ? Color.BLACK : (isDark ? new Color(245, 158, 11) : new Color(2, 132, 199));
+        Color handrailCol = isMonochrome ? Color.BLACK : (isDark ? new Color(52, 211, 153) : new Color(14, 116, 144));
+        Color landingCol = isMonochrome ? new Color(245, 245, 245) : (isDark ? new Color(30, 41, 59) : new Color(241, 245, 249));
+
+        g2.setColor(bg);
+        g2.fillRect(0, 0, sw, sh);
+        g2.setColor(borderCol);
+        g2.setStroke(new BasicStroke((float) Math.max(1.5, 2.0 / scale)));
+        g2.drawRect(0, 0, sw, sh);
+
+        float sThin = (float) Math.max(0.8, 1.0 / scale);
+        float sMed = (float) Math.max(1.2, 1.5 / scale);
+        float sHeavy = (float) Math.max(1.8, 2.2 / scale);
+
+        if ("stair-spiral".equals(type)) {
+            int r = Math.min(sw, sh) / 2;
+            int cx = sw / 2, cy = sh / 2;
+            int centerR = Math.max(6, (int)(r * 0.2));
+
+            g2.setColor(borderCol);
+            g2.setStroke(new BasicStroke(sHeavy));
+            g2.drawOval(cx - r + 2, cy - r + 2, (r - 2) * 2, (r - 2) * 2);
+
+            g2.setColor(landingCol);
+            g2.fillOval(cx - centerR, cy - centerR, centerR * 2, centerR * 2);
+            g2.setColor(borderCol);
+            g2.setStroke(new BasicStroke(sMed));
+            g2.drawOval(cx - centerR, cy - centerR, centerR * 2, centerR * 2);
+
+            int numSpokes = 16;
+            g2.setColor(treadCol);
+            g2.setStroke(new BasicStroke(sThin));
+            for (int i = 0; i < numSpokes; i++) {
+                double angle = (2.0 * Math.PI / numSpokes) * i;
+                int x1 = cx + (int)(Math.cos(angle) * centerR);
+                int y1 = cy + (int)(Math.sin(angle) * centerR);
+                int x2 = cx + (int)(Math.cos(angle) * (r - 2));
+                int y2 = cy + (int)(Math.sin(angle) * (r - 2));
+                g2.drawLine(x1, y1, x2, y2);
+            }
+
+            int walkR = (centerR + r) / 2;
+            g2.setColor(arrowCol);
+            g2.setStroke(new BasicStroke(sMed));
+            g2.drawArc(cx - walkR, cy - walkR, walkR * 2, walkR * 2, 20, 270);
+            int sx = cx + (int)(Math.cos(Math.toRadians(20)) * walkR);
+            int sy = cy - (int)(Math.sin(Math.toRadians(20)) * walkR);
+            g2.fillOval(sx - 3, sy - 3, 6, 6);
+            int ex = cx + (int)(Math.cos(Math.toRadians(290)) * walkR);
+            int ey = cy - (int)(Math.sin(Math.toRadians(290)) * walkR);
+            g2.fillPolygon(new int[]{ex - 4, ex + 4, ex}, new int[]{ey - 6, ey - 6, ey + 2}, 3);
+
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(9, (int)(10 * scale))));
+            g2.drawString("UP \u21bb", cx - 14, cy + centerR + 14);
+
+        } else if ("stair-dogleg".equals(type)) {
+            int landingH = Math.max(16, (int)(sh * 0.30));
+            int midX = sw / 2;
+
+            g2.setColor(landingCol);
+            g2.fillRect(0, 0, sw, landingH);
+            g2.setColor(borderCol);
+            g2.setStroke(new BasicStroke(sMed));
+            g2.drawLine(0, landingH, sw, landingH);
+
+            g2.setStroke(new BasicStroke(sHeavy));
+            g2.drawLine(midX, landingH, midX, sh);
+
+            int numTreads = 8;
+            int flightH = sh - landingH;
+            g2.setColor(treadCol);
+            g2.setStroke(new BasicStroke(sThin));
+            for (int i = 1; i <= numTreads; i++) {
+                int ty = landingH + (flightH * i) / numTreads;
+                g2.drawLine(0, ty, midX, ty);
+                g2.drawLine(midX, ty, sw, ty);
+            }
+
+            int wLeft = midX / 2;
+            int wRight = midX + midX / 2;
+            int wLandY = landingH / 2;
+            g2.setColor(arrowCol);
+            g2.setStroke(new BasicStroke(sMed));
+            g2.drawLine(wLeft, sh - 10, wLeft, wLandY);
+            g2.drawArc(wLeft, wLandY - (wRight - wLeft) / 2, wRight - wLeft, wRight - wLeft, 0, 180);
+            g2.drawLine(wRight, wLandY, wRight, sh - 10);
+
+            g2.fillOval(wLeft - 3, sh - 12, 6, 6);
+            g2.fillPolygon(new int[]{wRight - 4, wRight + 4, wRight}, new int[]{sh - 14, sh - 14, sh - 6}, 3);
+
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(9, (int)(10 * scale))));
+            g2.drawString("UP \u2191", wLeft - 12, sh - 16);
+            g2.drawString("LANDING", midX - 22, landingH / 2 + 4);
+
+        } else if ("stair-lshape".equals(type)) {
+            int landW = Math.max(18, (int)(sw * 0.45));
+            int landH = Math.max(18, (int)(sh * 0.40));
+
+            g2.setColor(landingCol);
+            g2.fillRect(sw - landW, 0, landW, landH);
+            g2.setColor(borderCol);
+            g2.setStroke(new BasicStroke(sMed));
+            g2.drawRect(sw - landW, 0, landW, landH);
+
+            int treads1 = 7;
+            g2.setColor(treadCol);
+            g2.setStroke(new BasicStroke(sThin));
+            for (int i = 1; i <= treads1; i++) {
+                int ty = landH + ((sh - landH) * i) / treads1;
+                g2.drawLine(0, ty, sw - landW, ty);
+            }
+
+            int treads2 = 5;
+            for (int i = 1; i < treads2; i++) {
+                int tx = ((sw - landW) * i) / treads2;
+                g2.drawLine(tx, 0, tx, landH);
+            }
+
+            g2.setColor(borderCol);
+            g2.setStroke(new BasicStroke(sHeavy));
+            g2.drawLine(sw - landW, landH, sw - landW, sh);
+            g2.drawLine(0, landH, sw - landW, landH);
+
+            int wX1 = (sw - landW) / 2;
+            int wY2 = landH / 2;
+            g2.setColor(arrowCol);
+            g2.setStroke(new BasicStroke(sMed));
+            g2.drawLine(wX1, sh - 10, wX1, wY2);
+            g2.drawLine(wX1, wY2, 10, wY2);
+            g2.fillOval(wX1 - 3, sh - 12, 6, 6);
+            g2.fillPolygon(new int[]{14, 14, 6}, new int[]{wY2 - 4, wY2 + 4, wY2}, 3);
+
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * scale))));
+            g2.drawString("UP \u2191", wX1 - 10, sh - 16);
+            g2.drawString("LANDING", sw - landW + 4, landH / 2 + 4);
+
+        } else if ("stair-openwell".equals(type)) {
+            int landingH = Math.max(16, (int)(sh * 0.28));
+            int fW = (int)(sw * 0.38);
+            int wellW = sw - fW * 2;
+
+            g2.setColor(landingCol);
+            g2.fillRect(0, 0, sw, landingH);
+            g2.setColor(borderCol);
+            g2.setStroke(new BasicStroke(sMed));
+            g2.drawLine(0, landingH, sw, landingH);
+
+            g2.setColor(bg);
+            g2.fillRect(fW, landingH, wellW, sh - landingH);
+            g2.setColor(handrailCol);
+            g2.setStroke(new BasicStroke(sHeavy));
+            g2.drawRect(fW, landingH, wellW, sh - landingH);
+
+            int treads = 8;
+            int flightH = sh - landingH;
+            g2.setColor(treadCol);
+            g2.setStroke(new BasicStroke(sThin));
+            for (int i = 1; i <= treads; i++) {
+                int ty = landingH + (flightH * i) / treads;
+                g2.drawLine(0, ty, fW, ty);
+                g2.drawLine(sw - fW, ty, sw, ty);
+            }
+
+            int wLeft = fW / 2;
+            int wRight = sw - fW / 2;
+            int wLandY = landingH / 2;
+            g2.setColor(arrowCol);
+            g2.setStroke(new BasicStroke(sMed));
+            g2.drawLine(wLeft, sh - 10, wLeft, wLandY);
+            g2.drawLine(wLeft, wLandY, wRight, wLandY);
+            g2.drawLine(wRight, wLandY, wRight, sh - 10);
+            g2.fillOval(wLeft - 3, sh - 12, 6, 6);
+            g2.fillPolygon(new int[]{wRight - 4, wRight + 4, wRight}, new int[]{sh - 14, sh - 14, sh - 6}, 3);
+
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * scale))));
+            g2.drawString("WELL", fW + 4, landingH + (sh - landingH) / 2);
+            g2.drawString("UP \u2191", wLeft - 12, sh - 16);
+
+        } else if ("stair-bifurcated".equals(type)) {
+            int landingY = (int)(sh * 0.40);
+            int landingH = (int)(sh * 0.22);
+            int mainFlightW = (int)(sw * 0.55);
+            int sideFlightW = (int)(sw * 0.30);
+
+            g2.setColor(landingCol);
+            g2.fillRect(0, landingY, sw, landingH);
+            g2.setColor(borderCol);
+            g2.setStroke(new BasicStroke(sMed));
+            g2.drawRect(0, landingY, sw, landingH);
+
+            int mainX1 = (sw - mainFlightW) / 2;
+            int mainX2 = mainX1 + mainFlightW;
+            g2.setColor(borderCol);
+            g2.setStroke(new BasicStroke(sHeavy));
+            g2.drawLine(mainX1, landingY + landingH, mainX1, sh);
+            g2.drawLine(mainX2, landingY + landingH, mainX2, sh);
+
+            int treadsMain = 6;
+            g2.setColor(treadCol);
+            g2.setStroke(new BasicStroke(sThin));
+            for (int i = 1; i <= treadsMain; i++) {
+                int ty = landingY + landingH + ((sh - (landingY + landingH)) * i) / treadsMain;
+                g2.drawLine(mainX1, ty, mainX2, ty);
+            }
+
+            int treadsUp = 5;
+            for (int i = 1; i <= treadsUp; i++) {
+                int ty = (landingY * i) / treadsUp;
+                g2.drawLine(0, ty, sideFlightW, ty);
+                g2.drawLine(sw - sideFlightW, ty, sw, ty);
+            }
+
+            g2.setColor(borderCol);
+            g2.setStroke(new BasicStroke(sHeavy));
+            g2.drawLine(sideFlightW, 0, sideFlightW, landingY);
+            g2.drawLine(sw - sideFlightW, 0, sw - sideFlightW, landingY);
+
+            int midX = sw / 2;
+            int landMidY = landingY + landingH / 2;
+            g2.setColor(arrowCol);
+            g2.setStroke(new BasicStroke(sMed));
+            g2.drawLine(midX, sh - 10, midX, landMidY);
+            g2.drawLine(midX, landMidY, sideFlightW / 2, landMidY);
+            g2.drawLine(sideFlightW / 2, landMidY, sideFlightW / 2, 10);
+            g2.drawLine(midX, landMidY, sw - sideFlightW / 2, landMidY);
+            g2.drawLine(sw - sideFlightW / 2, landMidY, sw - sideFlightW / 2, 10);
+
+            g2.fillOval(midX - 3, sh - 12, 6, 6);
+            g2.fillPolygon(new int[]{sideFlightW / 2 - 4, sideFlightW / 2 + 4, sideFlightW / 2}, new int[]{14, 14, 6}, 3);
+            g2.fillPolygon(new int[]{sw - sideFlightW / 2 - 4, sw - sideFlightW / 2 + 4, sw - sideFlightW / 2}, new int[]{14, 14, 6}, 3);
+
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(9, (int)(10 * scale))));
+            g2.drawString("GRAND STAIR", midX - 32, landingY + landingH / 2 + 4);
+
+        } else {
+            int treads = 12;
+            int cutStep = 7;
+            g2.setColor(treadCol);
+
+            for (int t = 1; t < treads; t++) {
+                int ty = (sh * t) / treads;
+                if (t <= cutStep) {
+                    g2.setStroke(new BasicStroke(sThin));
+                    g2.drawLine(0, ty, sw, ty);
+                } else {
+                    g2.setStroke(new BasicStroke(sThin, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, new float[]{4, 3}, 0));
+                    g2.drawLine(0, ty, sw, ty);
+                }
+            }
+
+            int cutY = (sh * cutStep) / treads + (sh / (treads * 2));
+            g2.setColor(isDark ? new Color(248, 113, 113) : new Color(220, 38, 38));
+            g2.setStroke(new BasicStroke(sMed));
+            int midX = sw / 2;
+            g2.drawLine(0, cutY, midX - 10, cutY);
+            g2.drawLine(midX - 10, cutY, midX - 4, cutY - 7);
+            g2.drawLine(midX - 4, cutY - 7, midX + 4, cutY + 7);
+            g2.drawLine(midX + 4, cutY + 7, midX + 10, cutY);
+            g2.drawLine(midX + 10, cutY, sw, cutY);
+
+            g2.setColor(arrowCol);
+            g2.setStroke(new BasicStroke(sMed));
+            g2.drawLine(sw / 2, sh - 10, sw / 2, 12);
+            g2.fillOval(sw / 2 - 3, sh - 12, 6, 6);
+            g2.fillPolygon(new int[]{sw / 2 - 4, sw / 2 + 4, sw / 2}, new int[]{16, 16, 8}, 3);
+
+            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(9, (int)(10 * scale))));
+            g2.drawString("UP \u2191", sw / 2 - 12, sh - 18);
+        }
+    }
+
     // ─── AutoCAD-Style Live Architectural Elevation Viewport ───
     public class CADElevationViewportPanel extends JPanel {
         private String currentView = "Front Facade (South)";
@@ -12072,6 +12788,20 @@ public class HousePlanCADApp extends JFrame {
         private double zoom = 1.0;
         private Point lastMouse = null;
         private Point mousePos = new Point(-1, -1);
+
+        public String getCurrentView() {
+            return currentView;
+        }
+
+        public void setCurrentView(String view) {
+            this.currentView = view;
+            if (viewCombo != null && !view.equals(viewCombo.getSelectedItem())) {
+                viewCombo.setSelectedItem(view);
+            }
+            zoomToFit();
+            repaint();
+            if (viewportPanel != null) viewportPanel.repaint();
+        }
 
         public CADElevationViewportPanel() {
             setLayout(new BorderLayout());
@@ -12108,6 +12838,7 @@ public class HousePlanCADApp extends JFrame {
                 currentView = (String) viewCombo.getSelectedItem();
                 zoomToFit();
                 repaint();
+                if (viewportPanel != null) viewportPanel.repaint();
             });
             leftGroup.add(viewCombo);
 
@@ -15781,20 +16512,7 @@ public class HousePlanCADApp extends JFrame {
             }
 
         } else if (type.startsWith("stair")) {
-            g2.setColor(Color.WHITE); g2.fillRect(0, 0, sw, sh);
-            g2.setColor(structCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(0, 0, sw, sh);
-            int treads = type.equals("stair-dogleg") ? 8 : 10;
-            g2.setStroke(new BasicStroke(sHair));
-            for (int t = 1; t < treads; t++) {
-                int ty = (sh / treads) * t;
-                g2.drawLine(0, ty, sw, ty);
-            }
-            if (type.equals("stair-dogleg")) {
-                g2.setStroke(new BasicStroke(sMed));
-                g2.drawLine(0, sh / 2, sw, sh / 2);
-            }
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * scale))));
-            g2.drawString("UP \u2191", sw / 2 - 12, sh - 4);
+            renderArchitecturalStaircase(g2, type, sw, sh, isMonochrome, scale, false);
 
         // ─── ELECTRICAL (AutoCAD Standard Symbols) ───
         } else if (type.equals("ceiling-fan")) {
