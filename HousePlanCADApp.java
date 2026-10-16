@@ -962,7 +962,7 @@ public class HousePlanCADApp extends JFrame {
     private javax.swing.Timer autoSaveTimer = null;
     private JLabel headerProjectTitleLbl = null;
     private JLabel headerDirtyIndicator = null;
-    public static final String APP_VERSION = "1.2.1";
+    public static final String APP_VERSION = "2.2.3";
     public static final String UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/thyagarajsalome/HDE-Studio_Java-Project/main/version.json";
     private ModernButton headerUpdateBtn = null;
     private UpdateInfo availableUpdate = null;

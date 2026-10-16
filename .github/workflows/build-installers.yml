@@ -37,11 +37,25 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      - name: Determine Version
+        id: get_version
+        run: |
+          RAW_TAG="${GITHUB_REF_NAME}"
+          VERSION="${RAW_TAG#v}"
+          if [ -z "$VERSION" ] || [ "$VERSION" = "main" ]; then
+            VERSION="2.2.3"
+          fi
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "Version is ${VERSION}"
+        shell: bash
+
       - name: Compile Java Application
         run: |
+          mkdir -p bin dist output
           javac -encoding UTF-8 -d bin HousePlanCADApp.java
           cp -r assets bin/ || true
-          jar cvfe dist/HDE-Studio.jar HousePlanCADApp -C bin .
+          jar cvfe dist/HDE-Studio.jar cadstudio.HousePlanCADApp -C bin .
+          cp dist/HDE-Studio.jar output/HDE-Studio.jar
         shell: bash
 
       # --- WINDOWS PACKAGING ---
@@ -49,43 +63,39 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: |
           jpackage --type exe \
-            --name "HDE-Studio-Setup-v2.1" \
-            --app-version "2.1.0" \
+            --name "HDE-Studio-Setup-v${VERSION}" \
+            --app-version "${VERSION}" \
             --vendor "HDE Studio CAD Technologies" \
             --description "HDE Studio Architectural CAD Software" \
             --icon "hde_studio.ico" \
             --input dist/ \
             --main-jar HDE-Studio.jar \
-            --main-class HousePlanCADApp \
+            --main-class cadstudio.HousePlanCADApp \
             --win-shortcut \
             --win-menu \
             --win-dir-chooser \
             --dest output/
           
-          # Ensure exact name matches /download URL
-          cp output/*.exe output/HDE-Studio-Setup-v2.1.exe || true
-          
           # Also package portable zip for Windows
-          mkdir -p output/HDE-Studio-v2.1-Windows-Portable
-          cp dist/HDE-Studio.jar output/HDE-Studio-v2.1-Windows-Portable/
-          cp -r assets output/HDE-Studio-v2.1-Windows-Portable/ || true
-          cp hde_studio.ico output/HDE-Studio-v2.1-Windows-Portable/ || true
-          powershell -Command "Compress-Archive -Path output/HDE-Studio-v2.1-Windows-Portable -DestinationPath output/HDE-Studio-v2.1-Windows-Portable.zip -Force"
+          mkdir -p output/HDE-Studio-v${VERSION}-Windows-Portable
+          cp dist/HDE-Studio.jar output/HDE-Studio-v${VERSION}-Windows-Portable/
+          cp -r assets output/HDE-Studio-v${VERSION}-Windows-Portable/ || true
+          cp hde_studio.ico output/HDE-Studio-v${VERSION}-Windows-Portable/ || true
+          powershell -Command "Compress-Archive -Path output/HDE-Studio-v${VERSION}-Windows-Portable -DestinationPath output/HDE-Studio-v${VERSION}-Windows-Portable.zip -Force"
         shell: bash
 
       # --- MACOS PACKAGING ---
       - name: Build macOS DMG Installer (jpackage)
         if: matrix.os == 'macos-latest'
         run: |
-          # Convert icon if icns exists or package standard dmg
           jpackage --type dmg \
             --name "HDE-Studio" \
-            --app-version "2.1.0" \
+            --app-version "${VERSION}" \
             --vendor "HDE Studio CAD Technologies" \
             --description "HDE Studio Architectural CAD Software" \
             --input dist/ \
             --main-jar HDE-Studio.jar \
-            --main-class HousePlanCADApp \
+            --main-class cadstudio.HousePlanCADApp \
             --mac-package-name "HDE Studio" \
             --dest output/
           cp output/*.dmg output/HDE-Studio.dmg || true
@@ -98,13 +108,13 @@ jobs:
           sudo apt-get update && sudo apt-get install -y fakeroot zip
           jpackage --type deb \
             --name "hde-studio" \
-            --app-version "2.1.0" \
+            --app-version "${VERSION}" \
             --vendor "HDE Studio CAD Technologies" \
             --description "HDE Studio Architectural CAD Software" \
             --icon "hde_studio.png" \
             --input dist/ \
             --main-jar HDE-Studio.jar \
-            --main-class HousePlanCADApp \
+            --main-class cadstudio.HousePlanCADApp \
             --linux-shortcut \
             --linux-menu-group "Graphics;Engineering;" \
             --dest output/
@@ -115,8 +125,8 @@ jobs:
           cp -r assets output/hde-studio-linux-portable/ || true
           echo -e '#!/usr/bin/env bash\nDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\njava -jar "$DIR/HDE-Studio.jar" "$@"' > output/hde-studio-linux-portable/hde-studio.sh
           chmod +x output/hde-studio-linux-portable/hde-studio.sh
-          tar -czvf output/HDE-Studio-v2.1-Linux-Portable.tar.gz -C output hde-studio-linux-portable
-          cd output && zip -r HDE-Studio-v2.1-Linux-Portable.zip hde-studio-linux-portable
+          tar -czvf output/HDE-Studio-v${VERSION}-Linux-Portable.tar.gz -C output hde-studio-linux-portable
+          cd output && zip -r HDE-Studio-v${VERSION}-Linux-Portable.zip hde-studio-linux-portable
         shell: bash
 
       - name: Upload Installer Artifact

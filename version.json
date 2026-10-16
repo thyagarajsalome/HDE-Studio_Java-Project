@@ -1,5 +1,5 @@
 {
-  "version": "1.2.1",
-  "downloadUrl": "https://github.com/thyagarajsalome/HDE-Studio_Java-Project/releases/download/v1.2.1/HDE-Studio.jar",
-  "releaseNotes": "• Fixed missing rectangular glyphs (tofu boxes) across buttons, stage stepper, and status HUD\n• Improved Undo/Redo button clarity and sizing\n• Parametric Room Builder & Column Grid UI polish\n• Added automatic in-app update engine"
+  "version": "2.2.3",
+  "downloadUrl": "https://github.com/thyagarajsalome/HDE-Studio_Java-Project/releases/download/v2.2.3/HDE-Studio.jar",
+  "releaseNotes": "• Fixed wall corner and edge joints in architectural PDF export (sharp 90° corners & clean T-junctions)\n• Standardized crisp 7pt text for all CAD blocks and furniture room sets in PDF print\n• Synchronized version alignment across GitHub Releases and in-app updater (v2.2.3)\n• AutoCAD-style continuous line rendering and print stability"
 }
