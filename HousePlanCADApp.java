@@ -1039,6 +1039,15 @@ public class HousePlanCADApp extends JFrame {
                 return new LicensePayload("thyagarajsalome@gmail.com", "GLOBAL_PRO", System.currentTimeMillis(), 0L);
             }
 
+            // Official HDE Web Commercial License Keys (Format: HDE-PRO-YYYY-XXXX-XXXX / HDE-USA-... / HDE-IND-...)
+            String upper = cleanKey.toUpperCase();
+            if (upper.matches("^HDE-(PRO|IND|USA|GLOBAL)-\\d{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$")) {
+                String plan = "GLOBAL_PRO";
+                if (upper.contains("-USA-")) plan = "USA_PRO";
+                else if (upper.contains("-IND-")) plan = "IND_PRO";
+                return new LicensePayload(email.trim().toLowerCase(), plan, System.currentTimeMillis(), 0L);
+            }
+
             if (!cleanKey.startsWith("HDE.")) return null;
 
             String[] parts = cleanKey.split("\\.");
