@@ -772,9 +772,9 @@ public class HousePlanCADApp extends JFrame {
         headerProjectTitleLbl.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true),
                 BorderFactory.createEmptyBorder(2, 6, 2, 6)));
-        headerDirtyIndicator = new JLabel("●");
+        headerDirtyIndicator = new JLabel("SAVED");
         headerDirtyIndicator.setFont(new Font("Segoe UI", Font.BOLD, 10));
-        headerDirtyIndicator.setForeground(new Color(100, 116, 139));
+        headerDirtyIndicator.setForeground(new Color(52, 211, 153));
         headerDirtyIndicator.setToolTipText("Project Saved");
         brandPanel.add(Box.createHorizontalStrut(4));
         brandPanel.add(headerProjectTitleLbl);
@@ -805,7 +805,7 @@ public class HousePlanCADApp extends JFrame {
         openFileBtn.setToolTipText("Open Drawing File (.hde) (Ctrl+O)");
         openFileBtn.addActionListener(e -> showOpenFileDialog());
 
-        ModernButton saveBtn = new ModernButton("💾 Save", new Color(14, 116, 144), Color.WHITE, new Color(56, 189, 248));
+        ModernButton saveBtn = new ModernButton("Save", new Color(14, 116, 144), Color.WHITE, new Color(56, 189, 248));
         saveBtn.setFont(new Font("Segoe UI", Font.BOLD, 11));
         saveBtn.setToolTipText("Quick Save Drawing (Ctrl+S)");
         saveBtn.addActionListener(e -> saveCurrentFile(false));
@@ -822,15 +822,15 @@ public class HousePlanCADApp extends JFrame {
         actionPanel.add(new JSeparator(JSeparator.VERTICAL));
 
         // Undo/Redo buttons
-        undoBtn = new ModernButton("↶", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
-        undoBtn.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        undoBtn.setPreferredSize(new Dimension(28, 26));
+        undoBtn = new ModernButton("Undo", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
+        undoBtn.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        undoBtn.setPreferredSize(new Dimension(48, 26));
         undoBtn.setToolTipText("Undo (Ctrl+Z)");
         undoBtn.addActionListener(e -> undo());
 
-        redoBtn = new ModernButton("↷", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
-        redoBtn.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        redoBtn.setPreferredSize(new Dimension(28, 26));
+        redoBtn = new ModernButton("Redo", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
+        redoBtn.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        redoBtn.setPreferredSize(new Dimension(48, 26));
         redoBtn.setToolTipText("Redo (Ctrl+Y)");
         redoBtn.addActionListener(e -> redo());
 
@@ -861,7 +861,7 @@ public class HousePlanCADApp extends JFrame {
         exportBtn.setToolTipText("Export architectural drawing as A4 or A3 PDF");
         exportBtn.addActionListener(e -> showExportDialog());
 
-        ModernButton licenseBtn = new ModernButton("🔑 License", new Color(24, 33, 53), new Color(52, 211, 153), new Color(16, 185, 129));
+        ModernButton licenseBtn = new ModernButton("License", new Color(24, 33, 53), new Color(52, 211, 153), new Color(16, 185, 129));
         licenseBtn.setFont(new Font("Segoe UI", Font.BOLD, 11));
         licenseBtn.setToolTipText("HDE Studio Commercial License Status & Device Activation");
         licenseBtn.addActionListener(e -> showActivationDialog(false));
@@ -876,10 +876,10 @@ public class HousePlanCADApp extends JFrame {
         clearBtn.setToolTipText("Clear all drawings with prompt");
         clearBtn.addActionListener(e -> newDrawingWithPrompt());
 
-        headerThemeBtn = new ModernToggle("☀️ White Canvas [F6]", false,
+        headerThemeBtn = new ModernToggle("White Canvas [F6]", false,
                 new Color(251, 191, 36), new Color(245, 158, 11), new Color(69, 26, 3));
         headerThemeBtn.setFont(new Font("Segoe UI", Font.BOLD, 11));
-        headerThemeBtn.setPreferredSize(new Dimension(150, 28));
+        headerThemeBtn.setPreferredSize(new Dimension(145, 28));
         headerThemeBtn.setToolTipText("Toggle Canvas Theme (F6): Switch between Pure White Drafting Paper and Dark Blueprint");
         headerThemeBtn.addActionListener(e -> setLightTheme(headerThemeBtn.isSelected()));
 
@@ -944,11 +944,11 @@ public class HousePlanCADApp extends JFrame {
         autoJoinBtn.setToolTipText("Automatically weld all wall corners and T-junctions");
         autoJoinBtn.addActionListener(e -> { saveUndoState(); autoJoinAllWalls(); });
 
-        ModernButton roomBuilderBtn = new ModernButton("⊞ Builder", new Color(30, 41, 59), new Color(52, 211, 153), new Color(16, 185, 129));
+        ModernButton roomBuilderBtn = new ModernButton("Builder", new Color(30, 41, 59), new Color(52, 211, 153), new Color(16, 185, 129));
         roomBuilderBtn.setToolTipText("Parametric Room Generator: Generate room walls, openings, tags, and dimensions (Ctrl+Shift+R)");
         roomBuilderBtn.addActionListener(e -> showParametricRoomDialog());
 
-        ModernButton columnGridBtn = new ModernButton("▦ Columns", new Color(30, 41, 59), new Color(251, 191, 36), new Color(245, 158, 11));
+        ModernButton columnGridBtn = new ModernButton("Columns", new Color(30, 41, 59), new Color(251, 191, 36), new Color(245, 158, 11));
         columnGridBtn.setToolTipText("Structural Column Grid Generator: Auto-place RCC columns at wall corners and spans (Ctrl+Shift+G)");
         columnGridBtn.addActionListener(e -> showStructuralGridDialog());
 
@@ -968,7 +968,7 @@ public class HousePlanCADApp extends JFrame {
 
         JPanel rightTools = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 3));
         rightTools.setOpaque(false);
-        toolbarThemeBtn = new ModernToggle("☀️ White Canvas [F6]", false,
+        toolbarThemeBtn = new ModernToggle("White Canvas [F6]", false,
                 new Color(251, 191, 36), new Color(245, 158, 11), new Color(69, 26, 3));
         toolbarThemeBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
         toolbarThemeBtn.setToolTipText("Toggle Canvas Theme (F6): Switch between Pure White Drafting Paper and Dark Blueprint");
@@ -1094,7 +1094,7 @@ public class HousePlanCADApp extends JFrame {
         JPanel rightControls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 2));
         rightControls.setOpaque(false);
 
-        stageFreezeBtn = new ModernButton("🔓 Lock", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
+        stageFreezeBtn = new ModernButton("Freeze Stage", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
         stageFreezeBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
         stageFreezeBtn.setToolTipText("Freeze / Lock all objects created in this stage to prevent accidental movement");
         stageFreezeBtn.addActionListener(e -> {
@@ -1104,12 +1104,13 @@ public class HousePlanCADApp extends JFrame {
             viewportPanel.repaint();
         });
 
-        ModernButton prevBtn = new ModernButton("◀", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
+        ModernButton prevBtn = new ModernButton("<", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
         prevBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        prevBtn.setPreferredSize(new Dimension(28, 22));
         prevBtn.setToolTipText("Previous Stage");
         prevBtn.addActionListener(e -> navigateStage(-1));
 
-        ModernButton nextBtn = new ModernButton("Next ▶", new Color(13, 148, 136), Color.WHITE, new Color(45, 212, 191));
+        ModernButton nextBtn = new ModernButton("Next >", new Color(13, 148, 136), Color.WHITE, new Color(45, 212, 191));
         nextBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
         nextBtn.setToolTipText("Next Stage");
         nextBtn.addActionListener(e -> navigateStage(1));
@@ -1165,7 +1166,7 @@ public class HousePlanCADApp extends JFrame {
             boolean isCur = (s == currentStage);
             boolean isLocked = Boolean.TRUE.equals(stageLocked.get(s));
 
-            String prefix = isLocked ? "🔒 " : (isCur ? "► " : "");
+            String prefix = isLocked ? "[Locked] " : (isCur ? "> " : "");
             btn.setText(prefix + s.title);
 
             if (isCur) {
@@ -1187,13 +1188,13 @@ public class HousePlanCADApp extends JFrame {
         if (stageFreezeBtn != null) {
             boolean curLocked = Boolean.TRUE.equals(stageLocked.get(currentStage));
             if (curLocked) {
-                stageFreezeBtn.setText("🔒 Locked");
+                stageFreezeBtn.setText("Locked");
                 stageFreezeBtn.bg = new Color(120, 53, 15);
                 stageFreezeBtn.fg = new Color(254, 240, 138);
                 stageFreezeBtn.border = new Color(245, 158, 11);
                 stageFreezeBtn.setToolTipText("Stage objects are locked. Click to unlock objects in this stage");
             } else {
-                stageFreezeBtn.setText("❄ Freeze");
+                stageFreezeBtn.setText("Freeze Stage");
                 stageFreezeBtn.bg = new Color(24, 33, 53);
                 stageFreezeBtn.fg = new Color(148, 163, 184);
                 stageFreezeBtn.border = new Color(51, 65, 85);
@@ -1389,7 +1390,7 @@ public class HousePlanCADApp extends JFrame {
         dimToolsLbl.setBorder(new EmptyBorder(4, 4, 6, 4));
         tagsDimsPanel.add(dimToolsLbl);
 
-        ModernButton linearDimBtn = new ModernButton("📏 Point-to-Point Dimension", new Color(24, 33, 53), new Color(56, 189, 248), new Color(14, 116, 144));
+        ModernButton linearDimBtn = new ModernButton("Point-to-Point Dimension", new Color(24, 33, 53), new Color(56, 189, 248), new Color(14, 116, 144));
         linearDimBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
         linearDimBtn.setMaximumSize(new Dimension(252, 30));
         linearDimBtn.setHorizontalAlignment(SwingConstants.LEFT);
@@ -1402,7 +1403,7 @@ public class HousePlanCADApp extends JFrame {
         tagsDimsPanel.add(linearDimBtn);
         tagsDimsPanel.add(Box.createVerticalStrut(4));
 
-        ModernButton autoDimBtn = new ModernButton("⚡ Auto-Dimension All Walls", new Color(24, 33, 53), new Color(52, 211, 153), new Color(16, 185, 129));
+        ModernButton autoDimBtn = new ModernButton("Auto-Dimension All Walls", new Color(24, 33, 53), new Color(52, 211, 153), new Color(16, 185, 129));
         autoDimBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
         autoDimBtn.setMaximumSize(new Dimension(252, 30));
         autoDimBtn.setHorizontalAlignment(SwingConstants.LEFT);
@@ -1411,7 +1412,7 @@ public class HousePlanCADApp extends JFrame {
         tagsDimsPanel.add(autoDimBtn);
         tagsDimsPanel.add(Box.createVerticalStrut(4));
 
-        ModernButton clearDimBtn = new ModernButton("✕ Clear All Dimensions", new Color(40, 20, 20), new Color(248, 113, 113), new Color(153, 27, 27));
+        ModernButton clearDimBtn = new ModernButton("Clear All Dimensions", new Color(40, 20, 20), new Color(248, 113, 113), new Color(153, 27, 27));
         clearDimBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
         clearDimBtn.setMaximumSize(new Dimension(252, 28));
         clearDimBtn.setHorizontalAlignment(SwingConstants.LEFT);
@@ -1530,11 +1531,11 @@ public class HousePlanCADApp extends JFrame {
         DefaultComboBoxModel<String> model;
         if (currentRegion == RegionProfile.INDIA) {
             model = new DefaultComboBoxModel<>(new String[]{
-                    "Presets ▼", "30' × 40' Plan",
+                    "Presets v", "30' × 40' Plan",
                     "25' × 40' Plan", "20' × 30' Plan"});
         } else {
             model = new DefaultComboBoxModel<>(new String[]{
-                    "Presets ▼", "36' × 48' Ranch",
+                    "Presets v", "36' × 48' Ranch",
                     "30' × 42' Craftsman", "24' × 36' Cottage"});
         }
         presetsCombo.setModel(model);
@@ -1558,7 +1559,7 @@ public class HousePlanCADApp extends JFrame {
 
         if (viewportPanel != null) {
             String spec = (profile == RegionProfile.INDIA) ? "9\"/4.5\" Brickwork & Vastu" : "2x6/2x4 Wood Studs & IRC";
-            viewportPanel.showToastNotification("✓ Active Market: " + profile.getDisplayName() + " (" + spec + ")");
+            viewportPanel.showToastNotification("[OK] Active Market: " + profile.getDisplayName() + " (" + spec + ")");
             viewportPanel.repaint();
         }
     }
@@ -1802,7 +1803,7 @@ public class HousePlanCADApp extends JFrame {
         headerPanel.add(titleBlock, BorderLayout.WEST);
 
         if (!isFirstRun) {
-            JLabel closeLbl = new JLabel(" ✕ ");
+            JLabel closeLbl = new JLabel(" X ");
             closeLbl.setFont(new Font("Segoe UI", Font.BOLD, 16));
             closeLbl.setForeground(new Color(148, 163, 184));
             closeLbl.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -1834,14 +1835,14 @@ public class HousePlanCADApp extends JFrame {
             cardIndia.setBorder(BorderFactory.createCompoundBorder(
                     BorderFactory.createLineBorder(isInd ? new Color(56, 189, 248) : new Color(51, 65, 85), isInd ? 2 : 1, true),
                     new EmptyBorder(16, 18, 16, 18)));
-            indiaCheck.setText(isInd ? "● ACTIVE STANDARD" : "○ SELECT");
+            indiaCheck.setText(isInd ? "[ACTIVE STANDARD]" : "SELECT");
             indiaCheck.setForeground(isInd ? new Color(56, 189, 248) : new Color(100, 116, 139));
 
             cardUSA.setBackground(!isInd ? new Color(24, 33, 53) : new Color(17, 24, 39));
             cardUSA.setBorder(BorderFactory.createCompoundBorder(
                     BorderFactory.createLineBorder(!isInd ? new Color(56, 189, 248) : new Color(51, 65, 85), !isInd ? 2 : 1, true),
                     new EmptyBorder(16, 18, 16, 18)));
-            usaCheck.setText(!isInd ? "● ACTIVE STANDARD" : "○ SELECT");
+            usaCheck.setText(!isInd ? "[ACTIVE STANDARD]" : "SELECT");
             usaCheck.setForeground(!isInd ? new Color(56, 189, 248) : new Color(100, 116, 139));
 
             cardIndia.repaint();
@@ -1914,7 +1915,7 @@ public class HousePlanCADApp extends JFrame {
         JPanel footerPanel = new JPanel(new BorderLayout());
         footerPanel.setOpaque(false);
 
-        JLabel footNote = new JLabel("💡 You can switch standards anytime from the top bar.");
+        JLabel footNote = new JLabel("Tip: You can switch standards anytime from the top bar.");
         footNote.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         footNote.setForeground(new Color(148, 163, 184));
         footerPanel.add(footNote, BorderLayout.WEST);
@@ -1986,7 +1987,7 @@ public class HousePlanCADApp extends JFrame {
         titleBlock.add(sub);
         headerPanel.add(titleBlock, BorderLayout.WEST);
 
-        JLabel closeLbl = new JLabel(" ✕ ");
+        JLabel closeLbl = new JLabel(" X ");
         closeLbl.setFont(new Font("Segoe UI", Font.BOLD, 16));
         closeLbl.setForeground(new Color(148, 163, 184));
         closeLbl.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -2015,8 +2016,8 @@ public class HousePlanCADApp extends JFrame {
         statusCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, 65));
         statusCard.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel statusIcon = new JLabel("🔒 ");
-        statusIcon.setFont(new Font("Segoe UI", Font.BOLD, 22));
+        JLabel statusIcon = new JLabel("[LOCKED] ");
+        statusIcon.setFont(new Font("Segoe UI", Font.BOLD, 13));
         statusIcon.setForeground(new Color(245, 158, 11));
         statusCard.add(statusIcon, BorderLayout.WEST);
 
@@ -2106,7 +2107,7 @@ public class HousePlanCADApp extends JFrame {
         JPanel footerPanel = new JPanel(new BorderLayout());
         footerPanel.setOpaque(false);
 
-        JLabel buyLink = new JLabel("<html><a href='#' style='color:#38bdf8; text-decoration:none;'>🌐 Need a license? Purchase on HDE Web App</a></html>");
+        JLabel buyLink = new JLabel("<html><a href='#' style='color:#38bdf8; text-decoration:none;'>Need a license? Purchase on HDE Web App</a></html>");
         buyLink.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         buyLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         buyLink.addMouseListener(new MouseAdapter() {
@@ -2217,7 +2218,7 @@ public class HousePlanCADApp extends JFrame {
         titleBlock.add(sub);
         headerPanel.add(titleBlock, BorderLayout.WEST);
 
-        JLabel closeLbl = new JLabel(" ✕ ");
+        JLabel closeLbl = new JLabel(" X ");
         closeLbl.setFont(new Font("Segoe UI", Font.BOLD, 16));
         closeLbl.setForeground(new Color(148, 163, 184));
         closeLbl.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -2247,8 +2248,8 @@ public class HousePlanCADApp extends JFrame {
         statusCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, 65));
         statusCard.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel statusIcon = new JLabel(active ? "✓ " : "🔒 ");
-        statusIcon.setFont(new Font("Segoe UI", Font.BOLD, 22));
+        JLabel statusIcon = new JLabel(active ? "[OK] " : "[LOCKED] ");
+        statusIcon.setFont(new Font("Segoe UI", Font.BOLD, 13));
         statusIcon.setForeground(active ? new Color(52, 211, 153) : new Color(245, 158, 11));
         statusCard.add(statusIcon, BorderLayout.WEST);
 
@@ -2328,7 +2329,7 @@ public class HousePlanCADApp extends JFrame {
         JPanel footerPanel = new JPanel(new BorderLayout());
         footerPanel.setOpaque(false);
 
-        JLabel buyLink = new JLabel("<html><a href='#' style='color:#38bdf8; text-decoration:none;'>🌐 Need a license? Purchase on HDE Web App</a></html>");
+        JLabel buyLink = new JLabel("<html><a href='#' style='color:#38bdf8; text-decoration:none;'>Need a license? Purchase on HDE Web App</a></html>");
         buyLink.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         buyLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         buyLink.addMouseListener(new MouseAdapter() {
@@ -2455,7 +2456,7 @@ public class HousePlanCADApp extends JFrame {
     }
 
     private void addHatchPatternItem(JPanel container, String title, String patternType) {
-        ModernButton btn = new ModernButton("▧ " + title, new Color(24, 33, 53), new Color(245, 158, 11), new Color(51, 65, 85));
+        ModernButton btn = new ModernButton(title, new Color(24, 33, 53), new Color(245, 158, 11), new Color(51, 65, 85));
         btn.setAlignmentX(Component.LEFT_ALIGNMENT);
         btn.setMaximumSize(new Dimension(252, 30));
         btn.setHorizontalAlignment(SwingConstants.LEFT);
@@ -2468,7 +2469,7 @@ public class HousePlanCADApp extends JFrame {
             viewportPanel.repaint();
             showModernDialog(this,
                     "HDE Studio Hatches - " + title,
-                    "▧ HDE Studio Hatches Activated",
+                    "HDE Studio Hatches Activated",
                     "<b>Pattern:</b> " + title + "\n\n"
                     + "• <b>Left-Click</b> perimeter corners around the room.\n"
                     + "• <b>Double-Click</b> or press <b>Enter</b> to close and apply hatch.\n"
@@ -2525,7 +2526,7 @@ public class HousePlanCADApp extends JFrame {
         toggleStrip.setBorder(BorderFactory.createMatteBorder(0, 1, 0, 0, new Color(30, 41, 59)));
         toggleStrip.setPreferredSize(new Dimension(22, 600));
 
-        inspectorToggleBtn = new ModernButton("◀", new Color(24, 33, 53), new Color(56, 189, 248), new Color(51, 65, 85));
+        inspectorToggleBtn = new ModernButton("<", new Color(24, 33, 53), new Color(56, 189, 248), new Color(51, 65, 85));
         inspectorToggleBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
         inspectorToggleBtn.setToolTipText("Toggle Inspector (Auto-opens on object selection)");
         inspectorToggleBtn.setPreferredSize(new Dimension(18, 56));
@@ -2567,8 +2568,8 @@ public class HousePlanCADApp extends JFrame {
         propEmptyPanel.setOpaque(false);
         JLabel emptyLbl = new JLabel("<html><center><b style='color:#38bdf8'>Selection Mode</b><br><br>"
                 + "<span style='color:#cbd5e1'>Click objects to select.<br>"
-                + "Drag L→R for <b style='color:#60a5fa'>Window Select</b><br>"
-                + "Drag R→L for <b style='color:#4ade80'>Crossing Select</b><br>"
+                + "Drag L-to-R for <b style='color:#60a5fa'>Window Select</b><br>"
+                + "Drag R-to-L for <b style='color:#4ade80'>Crossing Select</b><br>"
                 + "Hold <b>Shift</b> to add/remove</span><br><br>"
                 + "<span style='color:#94a3b8'>• <b>R</b> = Rotate 90°<br>"
                 + "• <b>F / V</b> = Flip H / V<br>"
@@ -2589,7 +2590,7 @@ public class HousePlanCADApp extends JFrame {
         propMultiPanel.add(multiSelectLabel);
         propMultiPanel.add(Box.createVerticalStrut(16));
 
-        ModernButton rotAllBtn = new ModernButton("⟳ Rotate All 90°", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
+        ModernButton rotAllBtn = new ModernButton("Rotate All 90°", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
         rotAllBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
         rotAllBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
         rotAllBtn.addActionListener(e -> rotateSelected(90));
@@ -2600,15 +2601,15 @@ public class HousePlanCADApp extends JFrame {
         multiOrderRow.setOpaque(false);
         multiOrderRow.setAlignmentX(Component.LEFT_ALIGNMENT);
         multiOrderRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
-        ModernButton multiFrontBtn = new ModernButton("⤒ Bring to Front", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
-        ModernButton multiBackBtn = new ModernButton("⤓ Send to Back", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
+        ModernButton multiFrontBtn = new ModernButton("Bring to Front", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
+        ModernButton multiBackBtn = new ModernButton("Send to Back", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
         multiFrontBtn.addActionListener(e -> bringToFront());
         multiBackBtn.addActionListener(e -> sendToBack());
         multiOrderRow.add(multiFrontBtn); multiOrderRow.add(multiBackBtn);
         propMultiPanel.add(multiOrderRow);
         propMultiPanel.add(Box.createVerticalStrut(6));
 
-        ModernButton delAllBtn = new ModernButton("✕ Delete All Selected", new Color(127, 29, 29), new Color(254, 205, 211), new Color(244, 63, 94));
+        ModernButton delAllBtn = new ModernButton("Delete All Selected", new Color(127, 29, 29), new Color(254, 205, 211), new Color(244, 63, 94));
         delAllBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
         delAllBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
         delAllBtn.addActionListener(e -> deleteSelected());
@@ -2630,11 +2631,11 @@ public class HousePlanCADApp extends JFrame {
         propLockBanner.setAlignmentX(Component.LEFT_ALIGNMENT);
         propLockBanner.setVisible(false);
 
-        propLockLabel = new JLabel("🔒 Stage is Frozen (Locked)");
+        propLockLabel = new JLabel("[LOCKED] Stage is Frozen");
         propLockLabel.setFont(new Font("Segoe UI", Font.BOLD, 10));
         propLockLabel.setForeground(new Color(251, 191, 36));
 
-        propUnfreezeBtn = new ModernButton("🔓 Unfreeze Stage to Edit", new Color(180, 83, 9), Color.WHITE, new Color(245, 158, 11));
+        propUnfreezeBtn = new ModernButton("Unfreeze Stage to Edit", new Color(180, 83, 9), Color.WHITE, new Color(245, 158, 11));
         propUnfreezeBtn.setPreferredSize(new Dimension(140, 24));
         propUnfreezeBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
 
@@ -2655,7 +2656,7 @@ public class HousePlanCADApp extends JFrame {
         addFormField(propContentPanel, "WIDTH (FT):", propWidthField);
         addFormField(propContentPanel, "DEPTH (FT):", propHeightField);
 
-        JLabel sizeHintLbl = new JLabel("<html><span style='color:#38bdf8'><b>📐 Custom Size:</b></span> <span style='color:#cbd5e1'>Edit Width or Depth to custom fit any room.</span></html>");
+        JLabel sizeHintLbl = new JLabel("<html><span style='color:#38bdf8'><b>Custom Size:</b></span> <span style='color:#cbd5e1'>Edit Width or Depth to custom fit any room.</span></html>");
         sizeHintLbl.setFont(new Font("Segoe UI", Font.PLAIN, 10));
         sizeHintLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
         propContentPanel.add(sizeHintLbl);
@@ -2676,9 +2677,9 @@ public class HousePlanCADApp extends JFrame {
         actionRow.setOpaque(false);
         actionRow.setAlignmentX(Component.LEFT_ALIGNMENT);
         actionRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
-        ModernButton rot90Btn = new ModernButton("⟳ 90°", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
-        ModernButton flipHBtn = new ModernButton("⇄ Flip", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
-        ModernButton flipVBtn = new ModernButton("⇅ Flip", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
+        ModernButton rot90Btn = new ModernButton("Rotate 90°", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
+        ModernButton flipHBtn = new ModernButton("Flip H", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
+        ModernButton flipVBtn = new ModernButton("Flip V", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
         rot90Btn.addActionListener(e -> rotateSelected(90));
         flipHBtn.addActionListener(e -> flipSelectedH());
         flipVBtn.addActionListener(e -> flipSelectedV());
@@ -2697,10 +2698,10 @@ public class HousePlanCADApp extends JFrame {
         orderRow.setOpaque(false);
         orderRow.setAlignmentX(Component.LEFT_ALIGNMENT);
         orderRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
-        ModernButton frontBtn = new ModernButton("⤒ Front", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
-        ModernButton backBtn = new ModernButton("⤓ Back", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
-        ModernButton fwdBtn = new ModernButton("↑ Fwd", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
-        ModernButton bwdBtn = new ModernButton("↓ Bwd", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
+        ModernButton frontBtn = new ModernButton("To Front", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
+        ModernButton backBtn = new ModernButton("To Back", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
+        ModernButton fwdBtn = new ModernButton("Fwd", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
+        ModernButton bwdBtn = new ModernButton("Bwd", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
         frontBtn.setToolTipText("Bring to Front (Ctrl+Shift+])");
         backBtn.setToolTipText("Send to Back (Ctrl+Shift+[)");
         fwdBtn.setToolTipText("Bring Forward (Ctrl+])");
@@ -2744,7 +2745,7 @@ public class HousePlanCADApp extends JFrame {
             inspectorMainPanel.setVisible(expanded);
         }
         if (inspectorToggleBtn != null) {
-            inspectorToggleBtn.setText(expanded ? "▶" : "◀");
+            inspectorToggleBtn.setText(expanded ? ">" : "<");
             inspectorToggleBtn.setToolTipText(expanded ? "Collapse Inspector Sidebar" : "Expand Inspector Sidebar");
         }
         if (inspectorContainerPanel != null) {
@@ -2871,7 +2872,7 @@ public class HousePlanCADApp extends JFrame {
 
             if (isLocked && objStage != null) {
                 propLockBanner.setVisible(true);
-                propLockLabel.setText("🔒 " + objStage.title + " is Frozen");
+                propLockLabel.setText("[LOCKED] " + objStage.title + " is Frozen");
                 for (java.awt.event.ActionListener al : propUnfreezeBtn.getActionListeners()) propUnfreezeBtn.removeActionListener(al);
                 propUnfreezeBtn.addActionListener(e -> {
                     stageLocked.put(objStage, false);
@@ -2885,7 +2886,7 @@ public class HousePlanCADApp extends JFrame {
 
             if (primarySelected instanceof Wall) {
                 Wall w = (Wall) primarySelected;
-                propTypeBadge.setText(isLocked ? "🔒 " + (int)w.thicknessInches + "\" WALL (FROZEN)" : w.thicknessInches + "\" WALL");
+                propTypeBadge.setText(isLocked ? "[LOCKED] " + (int)w.thicknessInches + "\" WALL (FROZEN)" : w.thicknessInches + "\" WALL");
                 propTypeBadge.setForeground(isLocked ? new Color(251, 191, 36) : new Color(56, 189, 248));
                 propNameField.setText("Wall (" + (int)w.thicknessInches + "\")");
                 propWidthField.setText(String.format("%.2f", w.getLength() / FT_PX));
@@ -2896,7 +2897,7 @@ public class HousePlanCADApp extends JFrame {
                 propRotSlider.setEnabled(false);
             } else if (primarySelected instanceof CADDimension) {
                 CADDimension d = (CADDimension) primarySelected;
-                propTypeBadge.setText(isLocked ? "🔒 DIMENSION (FROZEN)" : "DIMENSION");
+                propTypeBadge.setText(isLocked ? "[LOCKED] DIMENSION (FROZEN)" : "DIMENSION");
                 propTypeBadge.setForeground(isLocked ? new Color(251, 191, 36) : new Color(56, 189, 248));
                 propNameField.setText("Linear Dimension");
                 double dist = Point2D.distance(d.x1, d.y1, d.x2, d.y2);
@@ -2918,7 +2919,7 @@ public class HousePlanCADApp extends JFrame {
                 } else if (elem.type.startsWith("set-")) {
                     typeStr = "ROOM SET (CUSTOM)";
                 }
-                propTypeBadge.setText(isLocked ? "🔒 " + typeStr + " (FROZEN)" : typeStr);
+                propTypeBadge.setText(isLocked ? "[LOCKED] " + typeStr + " (FROZEN)" : typeStr);
                 propTypeBadge.setForeground(isLocked ? new Color(251, 191, 36) : new Color(56, 189, 248));
                 propNameField.setText(elem.name);
                 propWidthField.setText(String.format("%.2f", elem.w / FT_PX));
@@ -2998,13 +2999,13 @@ public class HousePlanCADApp extends JFrame {
             checkAllCollisions(); viewportPanel.repaint();
         });
 
-        themeToggleBtn = new ModernToggle("☀️ Light [F6]", false,
+        themeToggleBtn = new ModernToggle("White Canvas [F6]", false,
                 new Color(251, 191, 36), new Color(245, 158, 11), new Color(69, 26, 3));
         themeToggleBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
         themeToggleBtn.setToolTipText("Canvas Theme (F6): Switch between Pure White Drafting Paper and Dark Blueprint");
         themeToggleBtn.addActionListener(e -> setLightTheme(themeToggleBtn.isSelected()));
 
-        ModernButton zoomOutBtn = new ModernButton("−", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
+        ModernButton zoomOutBtn = new ModernButton("-", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
         zoomOutBtn.setPreferredSize(new Dimension(26, 22));
         ModernButton zoomInBtn = new ModernButton("+", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
         zoomInBtn.setPreferredSize(new Dimension(26, 22));
@@ -3042,13 +3043,13 @@ public class HousePlanCADApp extends JFrame {
             toolbarThemeBtn.setSelected(light);
         }
         if (themeToggleBtn != null) {
-            themeToggleBtn.setText(light ? "🌙 Blueprint [F6]" : "☀️ Light [F6]");
+            themeToggleBtn.setText(light ? "Dark Blueprint [F6]" : "White Canvas [F6]");
         }
         if (headerThemeBtn != null) {
-            headerThemeBtn.setText(light ? "🌙 Blueprint [F6]" : "☀️ White Canvas [F6]");
+            headerThemeBtn.setText(light ? "Dark Blueprint [F6]" : "White Canvas [F6]");
         }
         if (toolbarThemeBtn != null) {
-            toolbarThemeBtn.setText(light ? "🌙 Blueprint [F6]" : "☀️ White Canvas [F6]");
+            toolbarThemeBtn.setText(light ? "Dark Blueprint [F6]" : "White Canvas [F6]");
         }
         if (viewportPanel != null) {
             viewportPanel.setBackground(light ? Color.WHITE : new Color(17, 24, 39));
@@ -3456,7 +3457,7 @@ public class HousePlanCADApp extends JFrame {
         }
         if (hadLocked && toDelete.isEmpty()) {
             if (statusCursorLabel != null) {
-                statusCursorLabel.setText(" 🔒 CANNOT DELETE: Object is frozen in a locked stage. Unfreeze stage to delete. ");
+                statusCursorLabel.setText(" [LOCKED] Cannot Delete: Object is frozen in a locked stage. Unfreeze stage to delete. ");
             }
             return;
         }
@@ -3804,7 +3805,7 @@ public class HousePlanCADApp extends JFrame {
         }
         if (statusCollisionLabel != null) {
             if (collisionCount > 0) {
-                statusCollisionLabel.setText(" ⚠ " + collisionCount + " COLLISION ");
+                statusCollisionLabel.setText(" [!] " + collisionCount + " COLLISION ");
                 statusCollisionLabel.setForeground(new Color(244, 63, 94));
             } else {
                 statusCollisionLabel.setText(" CLEAR ");
@@ -3937,7 +3938,7 @@ public class HousePlanCADApp extends JFrame {
             dimP2 = null;
             dimStep = 0;
             if (statusCursorLabel != null) {
-                statusCursorLabel.setText(" 📏 DIMENSION: Click first extension point (Point 1) · ESC to cancel ");
+                statusCursorLabel.setText(" [DIMENSION] Click first extension point (Point 1) | ESC to cancel ");
             }
             repaint();
         }
@@ -3962,7 +3963,7 @@ public class HousePlanCADApp extends JFrame {
             sectionPt1 = null;
             sectionStep = 0;
             if (statusCursorLabel != null) {
-                statusCursorLabel.setText(" ⌖ SECTION TAG: Click start point of cutting plane (A) · ESC to cancel ");
+                statusCursorLabel.setText(" [SECTION TAG] Click start point of cutting plane (A) | ESC to cancel ");
             }
             repaint();
         }
@@ -4096,7 +4097,7 @@ public class HousePlanCADApp extends JFrame {
                             dimP1 = pt;
                             dimStep = 1;
                             if (statusCursorLabel != null) {
-                                statusCursorLabel.setText(" 📏 DIMENSION: Click second extension point (Point 2) · ESC to cancel ");
+                                statusCursorLabel.setText(" [DIMENSION] Click second extension point (Point 2) | ESC to cancel ");
                             }
                             repaint();
                             return;
@@ -4105,7 +4106,7 @@ public class HousePlanCADApp extends JFrame {
                             dimP2 = pt;
                             dimStep = 2;
                             if (statusCursorLabel != null) {
-                                statusCursorLabel.setText(" 📏 DIMENSION: Move mouse to set offset and click to place · ESC to cancel ");
+                                statusCursorLabel.setText(" [DIMENSION] Move mouse to set offset and click to place | ESC to cancel ");
                             }
                             repaint();
                             return;
@@ -4144,7 +4145,7 @@ public class HousePlanCADApp extends JFrame {
                             sectionPt1 = pt;
                             sectionStep = 1;
                             if (statusCursorLabel != null) {
-                                statusCursorLabel.setText(" ⌖ SECTION TAG: Click end point of cutting plane (A') · ESC to cancel ");
+                                statusCursorLabel.setText(" [SECTION TAG] Click end point of cutting plane (A') | ESC to cancel ");
                             }
                             repaint();
                             return;
@@ -4275,7 +4276,7 @@ public class HousePlanCADApp extends JFrame {
                             if (isLocked) {
                                 if (statusCursorLabel != null) {
                                     ProjectStage st = getObjectStage(hit);
-                                    statusCursorLabel.setText(" 🔒 SELECTED: " + getObjectName(hit) + " (FROZEN in " + (st != null ? st.title : "Locked Stage") + ") · Movement prevented ");
+                                    statusCursorLabel.setText(" [LOCKED] Selected: " + getObjectName(hit) + " (FROZEN in " + (st != null ? st.title : "Locked Stage") + ") | Movement prevented ");
                                 }
                             } else {
                                 // Prepare for dragging unlocked objects
@@ -4283,7 +4284,7 @@ public class HousePlanCADApp extends JFrame {
                                 isDragging = true;
                                 lastDragWorld = new Point2D.Double(mouseWorld.x, mouseWorld.y);
                                 if (candidates.size() > 1 && statusCursorLabel != null) {
-                                    statusCursorLabel.setText(" Selected: " + getObjectName(hit) + " · (" + (cycleHitIndex + 1) + "/" + candidates.size() + ") Click again to cycle overlapping objects ");
+                                    statusCursorLabel.setText(" Selected: " + getObjectName(hit) + " | (" + (cycleHitIndex + 1) + "/" + candidates.size() + ") Click again to cycle overlapping objects ");
                                 }
                             }
                         } else {
@@ -4356,7 +4357,7 @@ public class HousePlanCADApp extends JFrame {
                         }
                         if (anyLocked) {
                             if (statusCursorLabel != null) {
-                                statusCursorLabel.setText(" 🔒 OBJECT IS FROZEN · Accidental movement prevented. Unfreeze stage in Properties to edit. ");
+                                statusCursorLabel.setText(" [LOCKED] OBJECT IS FROZEN | Accidental movement prevented. Unfreeze stage in Properties to edit. ");
                             }
                             return;
                         }
@@ -5122,7 +5123,7 @@ public class HousePlanCADApp extends JFrame {
                         g2.setStroke(new BasicStroke(2.0f));
                     }
                     g2.draw(createWallSegmentPath(p1, p2, thickS));
-                    String label = formatImperial(selW.getLength()) + " (" + (int)selW.thicknessInches + "\")" + (isLocked ? " 🔒 FROZEN" : "");
+                    String label = formatImperial(selW.getLength()) + " (" + (int)selW.thicknessInches + "\")" + (isLocked ? " [LOCKED]" : "");
                     drawCADDimension(g2, p1.x, p1.y, p2.x, p2.y, label, 24, true);
                     drawGrip(g2, p1.x, p1.y, isLocked);
                     drawGrip(g2, p2.x, p2.y, isLocked);
@@ -10475,7 +10476,7 @@ public class HousePlanCADApp extends JFrame {
     public void markProjectDirty(boolean dirty) {
         this.isProjectDirty = dirty;
         if (headerDirtyIndicator != null) {
-            headerDirtyIndicator.setText(dirty ? "● MODIFIED" : "● SAVED");
+            headerDirtyIndicator.setText(dirty ? "* MODIFIED" : "SAVED");
             headerDirtyIndicator.setForeground(dirty ? new Color(251, 191, 36) : new Color(52, 211, 153));
         }
         if (headerProjectTitleLbl != null) {
@@ -10509,8 +10510,8 @@ public class HousePlanCADApp extends JFrame {
         // Top Header with clean cyan badge
         JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         top.setOpaque(false);
-        JLabel iconLbl = new JLabel("ⓘ");
-        iconLbl.setFont(new Font("Segoe UI", Font.BOLD, 18));
+        JLabel iconLbl = new JLabel("[i]");
+        iconLbl.setFont(new Font("Segoe UI", Font.BOLD, 15));
         iconLbl.setForeground(new Color(56, 189, 248));
         JLabel headLbl = new JLabel(heading);
         headLbl.setFont(new Font("Segoe UI", Font.BOLD, 15));
@@ -10561,7 +10562,7 @@ public class HousePlanCADApp extends JFrame {
                         loadProjectFromFile(recovery);
                         this.activeProjectFile = null;
                         markProjectDirty(true);
-                        if (viewportPanel != null) viewportPanel.showToastNotification("✓ Unsaved drawing session recovered!");
+                        if (viewportPanel != null) viewportPanel.showToastNotification("[OK] Unsaved drawing session recovered!");
                     } else {
                         recovery.delete();
                     }
@@ -10611,12 +10612,12 @@ public class HousePlanCADApp extends JFrame {
                 lastSavedDirectory = sel.getParentFile();
                 String baseName = sel.getName().substring(0, sel.getName().lastIndexOf('.'));
                 saveProjectToSpecificFile(sel, baseName, activeProjectClient, activeProjectFacing, activePlotWidthFt, activePlotDepthFt, true);
-                if (viewportPanel != null) viewportPanel.showToastNotification("✓ Drawing Saved: " + sel.getName());
+                if (viewportPanel != null) viewportPanel.showToastNotification("[OK] Drawing Saved: " + sel.getName());
             }
         } else {
             saveProjectToSpecificFile(activeProjectFile, activeProjectName, activeProjectClient, activeProjectFacing,
                     activePlotWidthFt, activePlotDepthFt, true);
-            if (viewportPanel != null) viewportPanel.showToastNotification("✓ Drawing Saved: " + activeProjectFile.getName());
+            if (viewportPanel != null) viewportPanel.showToastNotification("[OK] Drawing Saved: " + activeProjectFile.getName());
         }
     }
 
@@ -10642,7 +10643,7 @@ public class HousePlanCADApp extends JFrame {
             File sel = chooser.getSelectedFile();
             lastSavedDirectory = sel.getParentFile();
             loadProjectFromFile(sel);
-            if (viewportPanel != null) viewportPanel.showToastNotification("✓ Drawing Loaded: " + sel.getName());
+            if (viewportPanel != null) viewportPanel.showToastNotification("[OK] Drawing Loaded: " + sel.getName());
         }
     }
 
@@ -11071,7 +11072,7 @@ public class HousePlanCADApp extends JFrame {
         ModernButton cancelBtn = new ModernButton("Cancel", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
         cancelBtn.addActionListener(e -> dlg.dispose());
 
-        ModernButton createBtn = new ModernButton("✓ Create Project", new Color(2, 132, 199), Color.WHITE, new Color(56, 189, 248));
+        ModernButton createBtn = new ModernButton("Create Project", new Color(2, 132, 199), Color.WHITE, new Color(56, 189, 248));
         createBtn.addActionListener(e -> {
             String pName = nameFld.getText().trim();
             if (pName.isEmpty()) pName = "Untitled Project";
@@ -11127,7 +11128,7 @@ public class HousePlanCADApp extends JFrame {
     }
 
     public void showProjectManagerDialog() {
-        JDialog dlg = new JDialog(this, "📁 Local Project Database & Revision Manager", true);
+        JDialog dlg = new JDialog(this, "Local Project Database & Revision Manager", true);
         dlg.setLayout(new BorderLayout());
         dlg.getContentPane().setBackground(new Color(15, 23, 42));
         dlg.setSize(960, 640);
@@ -11154,7 +11155,7 @@ public class HousePlanCADApp extends JFrame {
         searchField.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true),
                 new EmptyBorder(4, 8, 4, 8)));
-        leftHeader.add(new JLabel("  🔍"));
+        leftHeader.add(new JLabel("  Search:"));
         leftHeader.add(searchField);
         topBar.add(leftHeader, BorderLayout.WEST);
 
@@ -11376,7 +11377,7 @@ public class HousePlanCADApp extends JFrame {
             }
         });
 
-        ModernButton delBtn = new ModernButton("🗑", new Color(24, 33, 53), new Color(244, 63, 94), new Color(159, 18, 57));
+        ModernButton delBtn = new ModernButton("Delete", new Color(24, 33, 53), new Color(244, 63, 94), new Color(159, 18, 57));
         delBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
         delBtn.setToolTipText("Delete project file permanently");
         delBtn.addActionListener(e -> {
@@ -11406,7 +11407,7 @@ public class HousePlanCADApp extends JFrame {
      * auto door opening, auto window, room tag, and exterior dimensions.
      */
     public void showParametricRoomDialog() {
-        JDialog dlg = new JDialog(this, "⊞ Parametric Room Builder — Fast Drafting", true);
+        JDialog dlg = new JDialog(this, "Parametric Room Builder — Fast Drafting", true);
         dlg.setLayout(new BorderLayout());
         dlg.getContentPane().setBackground(new Color(15, 23, 42));
 
@@ -11420,7 +11421,7 @@ public class HousePlanCADApp extends JFrame {
         g.insets = new Insets(6, 6, 6, 6);
 
         // Header Title
-        JLabel titleLbl = new JLabel("⊞ PARAMETRIC ROOM BUILDER");
+        JLabel titleLbl = new JLabel("PARAMETRIC ROOM BUILDER");
         titleLbl.setFont(new Font("Segoe UI", Font.BOLD, 15));
         titleLbl.setForeground(Color.WHITE);
         g.gridx = 0; g.gridy = 0; g.gridwidth = 2;
@@ -11541,7 +11542,7 @@ public class HousePlanCADApp extends JFrame {
         ModernButton cancelBtn = new ModernButton("Cancel", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
         cancelBtn.addActionListener(e -> dlg.dispose());
 
-        ModernButton insertBtn = new ModernButton("✓ Build Room on Plan", new Color(13, 148, 136), Color.WHITE, new Color(45, 212, 191));
+        ModernButton insertBtn = new ModernButton("Build Room on Plan", new Color(13, 148, 136), Color.WHITE, new Color(45, 212, 191));
         insertBtn.setPreferredSize(new Dimension(170, 32));
         insertBtn.addActionListener(e -> {
             try {
@@ -11689,7 +11690,7 @@ public class HousePlanCADApp extends JFrame {
      * (e.g. 10' to 15' structural bay spans) according to standard RCC construction practice.
      */
     public void showStructuralGridDialog() {
-        JDialog dlg = new JDialog(this, "▦ Structural Column Grid Generator", true);
+        JDialog dlg = new JDialog(this, "Structural Column Grid Generator", true);
         dlg.setLayout(new BorderLayout());
         dlg.getContentPane().setBackground(new Color(15, 23, 42));
 
@@ -11703,7 +11704,7 @@ public class HousePlanCADApp extends JFrame {
         g.insets = new Insets(6, 6, 6, 6);
 
         // Header
-        JLabel titleLbl = new JLabel("▦ STRUCTURAL COLUMN GRID GENERATOR");
+        JLabel titleLbl = new JLabel("STRUCTURAL COLUMN GRID GENERATOR");
         titleLbl.setFont(new Font("Segoe UI", Font.BOLD, 15));
         titleLbl.setForeground(Color.WHITE);
         g.gridx = 0; g.gridy = 0; g.gridwidth = 2;
@@ -11769,7 +11770,7 @@ public class HousePlanCADApp extends JFrame {
         ModernButton cancelBtn = new ModernButton("Cancel", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
         cancelBtn.addActionListener(e -> dlg.dispose());
 
-        ModernButton runBtn = new ModernButton("⚡ Auto-Place Columns", new Color(2, 132, 199), Color.WHITE, new Color(56, 189, 248));
+        ModernButton runBtn = new ModernButton("Auto-Place Columns", new Color(2, 132, 199), Color.WHITE, new Color(56, 189, 248));
         runBtn.setPreferredSize(new Dimension(170, 32));
         runBtn.addActionListener(e -> {
             try {
@@ -12003,7 +12004,7 @@ public class HousePlanCADApp extends JFrame {
             return;
         }
 
-        JDialog dlg = new JDialog(this, "⌖ Architectural Sectional Elevation — " + sectionTag.name, true);
+        JDialog dlg = new JDialog(this, "Architectural Sectional Elevation — " + sectionTag.name, true);
         dlg.setLayout(new BorderLayout());
         dlg.getContentPane().setBackground(new Color(15, 23, 42));
 
@@ -12012,7 +12013,7 @@ public class HousePlanCADApp extends JFrame {
         topBar.setBackground(new Color(24, 33, 53));
         topBar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(51, 65, 85)));
 
-        JLabel titleLbl = new JLabel("⌖ SECTION: " + sectionTag.name);
+        JLabel titleLbl = new JLabel("SECTION: " + sectionTag.name);
         titleLbl.setFont(new Font("Segoe UI", Font.BOLD, 13));
         titleLbl.setForeground(new Color(245, 158, 11)); // Amber
         topBar.add(titleLbl);
@@ -12635,7 +12636,7 @@ public class HousePlanCADApp extends JFrame {
      * Interactive Step-by-Step Architectural CAD Tutorials, Modules, and Keyboard Shortcuts.
      */
     public void showLearnStudioDialog() {
-        JDialog dlg = new JDialog(this, "📖 Learn HDE Studio — Interactive Tutorials & Architectural Guide", true);
+        JDialog dlg = new JDialog(this, "Learn HDE Studio — Interactive Tutorials & Architectural Guide", true);
         dlg.setLayout(new BorderLayout());
         dlg.getContentPane().setBackground(new Color(15, 23, 42));
         dlg.setSize(1080, 750);
@@ -12768,14 +12769,14 @@ public class HousePlanCADApp extends JFrame {
             "pdf"
         };
         String[] imageCaptions = {
-            "📷 Workspace & Drafting Toolbar Overview (workspace.webp)",
-            "📷 Precision Wall Drafting & Real-Time Dimensions HUD (wall drafting.webp)",
-            "📷 Architectural Doors & Windows with Smart Wall-Cuts (Doors and windows.webp)",
-            "📷 CAD Block Library & 8 Specialized Room Sets (cad blocks.webp)",
-            "📷 Floor Finishes, Vitrified Tiling & Hatching Patterns (flooring.webp)",
-            "📷 Point-to-Point Dimensions & Auto-Calculated Room Tags (Dimension.webp)",
-            "📷 CAD Layers Management & Properties Ribbon (Layers.webp)",
-            "📷 Architectural Vector PDF & Blueprint Export (pdf.webp)"
+            "Workspace & Drafting Toolbar Overview (workspace.webp)",
+            "Precision Wall Drafting & Real-Time Dimensions HUD (wall drafting.webp)",
+            "Architectural Doors & Windows with Smart Wall-Cuts (Doors and windows.webp)",
+            "CAD Block Library & 8 Specialized Room Sets (cad blocks.webp)",
+            "Floor Finishes, Vitrified Tiling & Hatching Patterns (flooring.webp)",
+            "Point-to-Point Dimensions & Auto-Calculated Room Tags (Dimension.webp)",
+            "CAD Layers Management & Properties Ribbon (Layers.webp)",
+            "Architectural Vector PDF & Blueprint Export (pdf.webp)"
         };
 
         // Listener to switch image and tutorial content
@@ -12810,7 +12811,7 @@ public class HousePlanCADApp extends JFrame {
         footer.setOpaque(false);
         footer.setBorder(new EmptyBorder(10, 20, 16, 20));
 
-        ModernButton openGuideBtn = new ModernButton("📄 Open Full Documentation (Markdown)", new Color(30, 41, 59), new Color(56, 189, 248), new Color(14, 116, 144));
+        ModernButton openGuideBtn = new ModernButton("Open Full Documentation (Markdown)", new Color(30, 41, 59), new Color(56, 189, 248), new Color(14, 116, 144));
         openGuideBtn.setToolTipText("Open the complete Learn HDE Studio documentation file");
         openGuideBtn.addActionListener(e -> {
             try {
@@ -12884,7 +12885,7 @@ public class HousePlanCADApp extends JFrame {
         switch (idx) {
             case 0:
                 return "<html><head>" + baseCss + "</head><body>"
-                        + "<h2>1. 🚀 Quick Start & Workspace Tour</h2>"
+                        + "<h2>1. Quick Start & Workspace Tour</h2>"
                         + "<p>Welcome to <b>HDE Studio</b>, the professional 2D architectural CAD software designed for drafting residential house plans, room layouts, and construction drawings.</p>"
                         + "<div class='card'>"
                         + "<h3>Workspace Layout Overview</h3>"
@@ -12912,7 +12913,7 @@ public class HousePlanCADApp extends JFrame {
 
             case 1:
                 return "<html><head>" + baseCss + "</head><body>"
-                        + "<h2>2. 🧱 Precision Wall Drafting & Structural Elements</h2>"
+                        + "<h2>2. Precision Wall Drafting & Structural Elements</h2>"
                         + "<p>Learn how to sketch accurate load-bearing exterior walls, partition walls, and generate complete rooms.</p>"
                         + "<div class='card'>"
                         + "<h3>Step-by-Step: Drawing Walls from Scratch</h3>"
@@ -12925,17 +12926,17 @@ public class HousePlanCADApp extends JFrame {
                         + "</ol>"
                         + "</div>"
                         + "<div class='card'>"
-                        + "<h3>⊞ Parametric Room Builder (Ctrl+Shift+R)</h3>"
+                        + "<h3>Parametric Room Builder (Ctrl+Shift+R)</h3>"
                         + "<p>Generate complete four-wall enclosed rooms in 1 click:</p>"
                         + "<ul>"
-                        + "<li>Click <b>⊞ Room Builder</b>, enter Width (e.g. <code>14'</code>), Height (e.g. <code>12'</code>), and choose wall thickness.</li>"
+                        + "<li>Click <b>Room Builder</b>, enter Width (e.g. <code>14'</code>), Height (e.g. <code>12'</code>), and choose wall thickness.</li>"
                         + "<li>Enable auto-door, auto-window, or dimension tags, then click <b>Generate Room</b> to place on canvas.</li>"
                         + "</ul>"
                         + "</div>"
                         + "<div class='card'>"
-                        + "<h3>▦ Structural Column Grid & Auto-Join</h3>"
+                        + "<h3>Structural Column Grid & Auto-Join</h3>"
                         + "<ul>"
-                        + "<li>Click <b>▦ Column Grid</b> (Ctrl+Shift+G) to place reinforced RCC column pillars (9\"x9\" or 9\"x12\") at all wall junctions.</li>"
+                        + "<li>Click <b>Column Grid</b> (Ctrl+Shift+G) to place reinforced RCC column pillars (9\"x9\" or 9\"x12\") at all wall junctions.</li>"
                         + "<li>Click <b>Auto-Join</b> to automatically weld overlapping wall segments and clean up T-junctions.</li>"
                         + "</ul>"
                         + "</div>"
@@ -12943,7 +12944,7 @@ public class HousePlanCADApp extends JFrame {
 
             case 2:
                 return "<html><head>" + baseCss + "</head><body>"
-                        + "<h2>3. 🚪 Doors, Windows & Wall Openings</h2>"
+                        + "<h2>3. Doors, Windows & Wall Openings</h2>"
                         + "<p>HDE Studio features smart wall-cutting: doors and windows automatically detect walls, cut openings, and snap flush.</p>"
                         + "<div class='card'>"
                         + "<h3>Inserting Doors</h3>"
@@ -12966,20 +12967,20 @@ public class HousePlanCADApp extends JFrame {
 
             case 3:
                 return "<html><head>" + baseCss + "</head><body>"
-                        + "<h2>4. 🛋️ CAD Block Library & 8 Room Sets</h2>"
+                        + "<h2>4. CAD Block Library & 8 Room Sets</h2>"
                         + "<p>Populate your architectural plans with realistic, pre-dimensioned furniture suites and CAD symbols.</p>"
                         + "<div class='card'>"
                         + "<h3>The 8 Specialized Room Set Categories</h3>"
                         + "<p>Click <b>Room Sets</b> in the sidebar to access dedicated category tabs:</p>"
                         + "<ul>"
-                        + "<li><b>🛋️ Living Room Sets:</b> Grand 20'x16', Sectional 14'x12', Compact 12'x10', Square Lounge 14'x14'.</li>"
-                        + "<li><b>🛏️ Bedroom Sets:</b> Grand Master 16'x14', Master 14'x12', Standard 12'x11', Single 10'x10', Twin 14'x11'.</li>"
-                        + "<li><b>🍳 Kitchen Sets:</b> Chef Island 14'x12', U-Shape 12'x11', L-Shape 12'x10', Galley 12'x8', Linear 10'x7'.</li>"
-                        + "<li><b>🍽️ Dining Room Sets:</b> 8-Seater Formal 16'x11', 6-Seater 12'x10', Round 11'x11', Breakfast Nook 9'x8'.</li>"
-                        + "<li><b>🚪 Guest Room Sets:</b> Deluxe Suite 13'x11', Sofa-Bed Studio 12'x10', Compact 10'x9'.</li>"
-                        + "<li><b>🧸 Children Room Sets:</b> Bunk Bed & Play 12'x10', Single Kid 11'x9', Nursery Suite 11'x10'.</li>"
-                        + "<li><b>📚 Study / Home Office Sets:</b> Executive 14'x12', Dual Workstation 13'x10', Library 12'x11', Alcove 9'x7'.</li>"
-                        + "<li><b>🚿 Bathroom Sets:</b> Master Spa 12'x9', Linear 3-Fixture 10'x6', Corner Shower 8'x7', Powder 6'x4.5'.</li>"
+                        + "<li><b>Living Room Sets:</b> Grand 20'x16', Sectional 14'x12', Compact 12'x10', Square Lounge 14'x14'.</li>"
+                        + "<li><b>Bedroom Sets:</b> Grand Master 16'x14', Master 14'x12', Standard 12'x11', Single 10'x10', Twin 14'x11'.</li>"
+                        + "<li><b>Kitchen Sets:</b> Chef Island 14'x12', U-Shape 12'x11', L-Shape 12'x10', Galley 12'x8', Linear 10'x7'.</li>"
+                        + "<li><b>Dining Room Sets:</b> 8-Seater Formal 16'x11', 6-Seater 12'x10', Round 11'x11', Breakfast Nook 9'x8'.</li>"
+                        + "<li><b>Guest Room Sets:</b> Deluxe Suite 13'x11', Sofa-Bed Studio 12'x10', Compact 10'x9'.</li>"
+                        + "<li><b>Children Room Sets:</b> Bunk Bed & Play 12'x10', Single Kid 11'x9', Nursery Suite 11'x10'.</li>"
+                        + "<li><b>Study / Home Office Sets:</b> Executive 14'x12', Dual Workstation 13'x10', Library 12'x11', Alcove 9'x7'.</li>"
+                        + "<li><b>Bathroom Sets:</b> Master Spa 12'x9', Linear 3-Fixture 10'x6', Corner Shower 8'x7', Powder 6'x4.5'.</li>"
                         + "</ul>"
                         + "</div>"
                         + "<div class='card'>"
@@ -12995,7 +12996,7 @@ public class HousePlanCADApp extends JFrame {
 
             case 4:
                 return "<html><head>" + baseCss + "</head><body>"
-                        + "<h2>5. 🎨 Floor Finishes & Tile Hatching</h2>"
+                        + "<h2>5. Floor Finishes & Tile Hatching</h2>"
                         + "<p>Add realistic architectural surface textures, tiling patterns, and floor finishes to any room.</p>"
                         + "<div class='card'>"
                         + "<h3>Rectangular Floor Zone (Floor / Tiles [T])</h3>"
@@ -13019,7 +13020,7 @@ public class HousePlanCADApp extends JFrame {
 
             case 5:
                 return "<html><head>" + baseCss + "</head><body>"
-                        + "<h2>6. 📏 Dimensions & Room Area Tags</h2>"
+                        + "<h2>6. Dimensions & Room Area Tags</h2>"
                         + "<p>Dimensioning and space labeling are essential for architectural approvals and client presentations.</p>"
                         + "<div class='card'>"
                         + "<h3>Point-to-Point Linear Dimensions</h3>"
@@ -13047,7 +13048,7 @@ public class HousePlanCADApp extends JFrame {
 
             case 6:
                 return "<html><head>" + baseCss + "</head><body>"
-                        + "<h2>7. 🗂️ Layers, Properties & Revisions</h2>"
+                        + "<h2>7. Layers, Properties & Revisions</h2>"
                         + "<p>Manage architectural layers, project files, and revision history.</p>"
                         + "<div class='card'>"
                         + "<h3>CAD Layer Separation</h3>"
@@ -13060,13 +13061,13 @@ public class HousePlanCADApp extends JFrame {
                         + "<li><b>A-ANNO:</b> Linear dimensions, room tags, and text callouts.</li>"
                         + "<li><b>E-LITE:</b> Electrical fixtures, ceiling fans, switchboards.</li>"
                         + "</ul>"
-                        + "<p>Toggle the eye icon (👁️) to hide furniture when generating structural-only or electrical plans.</p>"
+                        + "<p>Toggle layer visibility to hide furniture when generating structural-only or electrical plans.</p>"
                         + "</div>"
                         + "<div class='card'>"
                         + "<h3>Project Database & Save Hub</h3>"
                         + "<ul>"
-                        + "<li><b>Save:</b> Click <b>💾 Save</b> or press <span class='kbd'>Ctrl + S</span>.</li>"
-                        + "<li><b>Projects Hub:</b> Click <b>📁 Projects</b> (<span class='kbd'>Ctrl + O</span>) to view revisions, thumbnails, and load past drawings.</li>"
+                        + "<li><b>Save:</b> Click <b>Save</b> or press <span class='kbd'>Ctrl + S</span>.</li>"
+                        + "<li><b>Projects Hub:</b> Click <b>Projects</b> (<span class='kbd'>Ctrl + O</span>) to view revisions, thumbnails, and load past drawings.</li>"
                         + "<li><b>Undo / Redo:</b> Full multi-step undo (<span class='kbd'>Ctrl + Z</span>) and redo (<span class='kbd'>Ctrl + Y</span>).</li>"
                         + "</ul>"
                         + "</div>"
@@ -13074,7 +13075,7 @@ public class HousePlanCADApp extends JFrame {
 
             case 7:
                 return "<html><head>" + baseCss + "</head><body>"
-                        + "<h2>8. 🖨️ PDF & Blueprint Vector Export</h2>"
+                        + "<h2>8. PDF & Blueprint Vector Export</h2>"
                         + "<p>Generate high-resolution, print-ready architectural vector PDF sheets and blueprint PNG images.</p>"
                         + "<div class='card'>"
                         + "<h3>Exporting Vector PDF Step-by-Step</h3>"
