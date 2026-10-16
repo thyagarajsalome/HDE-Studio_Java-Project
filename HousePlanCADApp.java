@@ -455,6 +455,9 @@ public class HousePlanCADApp extends JFrame {
 
     // UI Components
     private CADViewportPanel viewportPanel;
+    private CADElevationViewportPanel elevationViewportPanel;
+    private JSplitPane mainCenterSplit;
+    private ModernToggle splitElevationBtn;
     private JLabel statusCursorLabel, statusCollisionLabel, statusSelectionLabel;
     private ModernToggle orthoBtn, gridBtn, snapBtn, snapCursorBtn, collisionBtn, themeToggleBtn, headerThemeBtn, toolbarThemeBtn;
     private ButtonGroup toolButtonGroup;
@@ -688,7 +691,15 @@ public class HousePlanCADApp extends JFrame {
         getContentPane().add(topContainer, BorderLayout.NORTH);
 
         viewportPanel = new CADViewportPanel();
-        getContentPane().add(viewportPanel, BorderLayout.CENTER);
+        elevationViewportPanel = new CADElevationViewportPanel();
+        elevationViewportPanel.setVisible(false);
+
+        mainCenterSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, viewportPanel, elevationViewportPanel);
+        mainCenterSplit.setResizeWeight(0.55);
+        mainCenterSplit.setDividerSize(0);
+        mainCenterSplit.setBorder(null);
+        mainCenterSplit.setContinuousLayout(true);
+        getContentPane().add(mainCenterSplit, BorderLayout.CENTER);
 
         getContentPane().add(createCatalogSidebar(), BorderLayout.WEST);
         getContentPane().add(createInspectorSidebar(), BorderLayout.EAST);
@@ -989,6 +1000,14 @@ public class HousePlanCADApp extends JFrame {
 
         JPanel rightTools = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 3));
         rightTools.setOpaque(false);
+
+        splitElevationBtn = new ModernToggle("Live Elevation [F5]", false,
+                new Color(16, 185, 129), new Color(52, 211, 153), new Color(6, 78, 59));
+        splitElevationBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        splitElevationBtn.setToolTipText("Toggle AutoCAD Split-View (F5): Live Synchronized 2D Plan & Vertical Elevation Facade");
+        splitElevationBtn.addActionListener(e -> setSplitElevationView(splitElevationBtn.isSelected()));
+        rightTools.add(splitElevationBtn);
+
         toolbarThemeBtn = new ModernToggle("White Canvas [F6]", false,
                 new Color(251, 191, 36), new Color(245, 158, 11), new Color(69, 26, 3));
         toolbarThemeBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
@@ -3159,7 +3178,11 @@ public class HousePlanCADApp extends JFrame {
             if (e.getID() != KeyEvent.KEY_PRESSED) return false;
             boolean isTyping = (KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() instanceof javax.swing.text.JTextComponent);
 
-            if (e.getKeyCode() == KeyEvent.VK_F6) {
+            if (e.getKeyCode() == KeyEvent.VK_F5 || (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_E)) {
+                boolean next = splitElevationBtn != null ? !splitElevationBtn.isSelected() : true;
+                setSplitElevationView(next);
+                return true;
+            } else if (e.getKeyCode() == KeyEvent.VK_F6) {
                 setLightTheme(!lightThemeEnabled);
                 return true;
             } else if (e.getKeyCode() == KeyEvent.VK_F7) {
@@ -10503,6 +10526,9 @@ public class HousePlanCADApp extends JFrame {
         if (headerProjectTitleLbl != null) {
             headerProjectTitleLbl.setText(activeProjectName);
         }
+        if (elevationViewportPanel != null && elevationViewportPanel.isVisible()) {
+            elevationViewportPanel.repaint();
+        }
         String fileName = (activeProjectFile != null) ? activeProjectFile.getName() : "Untitled";
         setTitle("HDE Studio — Architectural 2D CAD — [" + activeProjectName + (dirty ? " *" : "") + "] (" + fileName + ")");
     }
@@ -12001,6 +12027,498 @@ public class HousePlanCADApp extends JFrame {
             if (Point2D.distance(p.x, p.y, x, y) < tol) return;
         }
         list.add(new Point2D.Double(x, y));
+    }
+
+    public void setSplitElevationView(boolean enable) {
+        if (splitElevationBtn != null && splitElevationBtn.isSelected() != enable) {
+            splitElevationBtn.setSelected(enable);
+        }
+        if (elevationViewportPanel != null) {
+            elevationViewportPanel.setVisible(enable);
+            if (mainCenterSplit != null) {
+                mainCenterSplit.setDividerSize(enable ? 6 : 0);
+                if (enable) {
+                    mainCenterSplit.setDividerLocation(0.55);
+                    elevationViewportPanel.zoomToFit();
+                    elevationViewportPanel.repaint();
+                }
+                mainCenterSplit.revalidate();
+            }
+        }
+        if (viewportPanel != null) {
+            viewportPanel.showToastNotification(enable ? "Split View: 2D Floor Plan + Live Elevation Active" : "Floor Plan Full Canvas");
+            viewportPanel.repaint();
+        }
+    }
+
+    // ─── AutoCAD-Style Live Architectural Elevation Viewport ───
+    public class CADElevationViewportPanel extends JPanel {
+        private String currentView = "Front Facade (South)";
+        private double ceilingHeightFt = 10.0;
+        private boolean showDatums = true;
+        private boolean showDimensions = true;
+        private JComboBox<String> viewCombo;
+        private JComboBox<String> heightCombo;
+        private JCheckBox datumBox, dimBox;
+        private JPanel canvasPanel;
+
+        // Viewport camera (Pan & Zoom)
+        private double panX = 0.0;
+        private double panY = 0.0;
+        private double zoom = 1.0;
+        private Point lastMouse = null;
+        private Point mousePos = new Point(-1, -1);
+
+        public CADElevationViewportPanel() {
+            setLayout(new BorderLayout());
+            setBackground(new Color(15, 23, 42)); // Slate #0f172a
+            setBorder(BorderFactory.createMatteBorder(0, 1, 0, 0, new Color(51, 65, 85)));
+
+            // Top Header Control Bar
+            JPanel topBar = new JPanel(new BorderLayout());
+            topBar.setBackground(new Color(24, 33, 53));
+            topBar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(51, 65, 85)));
+            topBar.setPreferredSize(new Dimension(500, 34));
+
+            JPanel leftGroup = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 3));
+            leftGroup.setOpaque(false);
+
+            JLabel titleBadge = new JLabel("LIVE ELEVATION");
+            titleBadge.setFont(new Font("Consolas", Font.BOLD, 10));
+            titleBadge.setForeground(new Color(52, 211, 153));
+            titleBadge.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(new Color(52, 211, 153, 160), 1, true),
+                    new EmptyBorder(1, 4, 1, 4)));
+            leftGroup.add(titleBadge);
+
+            viewCombo = new JComboBox<>(new String[]{
+                    "Front Facade (South)",
+                    "Rear Facade (North)",
+                    "Left Elevation (West)",
+                    "Right Elevation (East)",
+                    "Section Cut A-A"
+            });
+            styleComboBox(viewCombo);
+            viewCombo.setPreferredSize(new Dimension(150, 24));
+            viewCombo.addActionListener(e -> {
+                currentView = (String) viewCombo.getSelectedItem();
+                zoomToFit();
+                repaint();
+            });
+            leftGroup.add(viewCombo);
+
+            heightCombo = new JComboBox<>(new String[]{"10'-0\" Ceil", "9'-0\" Ceil", "11'-0\" Ceil"});
+            styleComboBox(heightCombo);
+            heightCombo.setPreferredSize(new Dimension(90, 24));
+            heightCombo.addActionListener(e -> {
+                int idx = heightCombo.getSelectedIndex();
+                ceilingHeightFt = (idx == 0 ? 10.0 : (idx == 1 ? 9.0 : 11.0));
+                repaint();
+            });
+            leftGroup.add(heightCombo);
+
+            datumBox = new JCheckBox("Datums", true);
+            datumBox.setOpaque(false);
+            datumBox.setForeground(new Color(203, 213, 225));
+            datumBox.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+            datumBox.addActionListener(e -> { showDatums = datumBox.isSelected(); repaint(); });
+            leftGroup.add(datumBox);
+
+            dimBox = new JCheckBox("Dims", true);
+            dimBox.setOpaque(false);
+            dimBox.setForeground(new Color(203, 213, 225));
+            dimBox.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+            dimBox.addActionListener(e -> { showDimensions = dimBox.isSelected(); repaint(); });
+            leftGroup.add(dimBox);
+
+            topBar.add(leftGroup, BorderLayout.CENTER);
+
+            JPanel rightGroup = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 3));
+            rightGroup.setOpaque(false);
+
+            ModernButton fitBtn = new ModernButton("Fit", new Color(30, 41, 59), new Color(148, 163, 184), new Color(51, 65, 85));
+            fitBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+            fitBtn.setPreferredSize(new Dimension(42, 24));
+            fitBtn.addActionListener(e -> zoomToFit());
+            rightGroup.add(fitBtn);
+
+            ModernButton exportBtn = new ModernButton("Export", new Color(14, 116, 144), Color.WHITE, new Color(56, 189, 248));
+            exportBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+            exportBtn.setPreferredSize(new Dimension(65, 24));
+            exportBtn.addActionListener(e -> exportElevationImage());
+            rightGroup.add(exportBtn);
+
+            ModernButton closeBtn = new ModernButton("X", new Color(127, 29, 29), new Color(254, 205, 211), new Color(244, 63, 94));
+            closeBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+            closeBtn.setPreferredSize(new Dimension(28, 24));
+            closeBtn.setToolTipText("Close Live Elevation (F5)");
+            closeBtn.addActionListener(e -> setSplitElevationView(false));
+            rightGroup.add(closeBtn);
+
+            topBar.add(rightGroup, BorderLayout.EAST);
+            add(topBar, BorderLayout.NORTH);
+
+            // Canvas
+            canvasPanel = new JPanel() {
+                @Override
+                protected void paintComponent(Graphics g) {
+                    super.paintComponent(g);
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                    g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+
+                    renderElevationView(g2, getWidth(), getHeight(), false);
+                    drawAutoCADCrosshair(g2, getWidth(), getHeight());
+                    g2.dispose();
+                }
+            };
+            canvasPanel.setBackground(new Color(11, 15, 25));
+
+            MouseAdapter ma = new MouseAdapter() {
+                @Override
+                public void mousePressed(MouseEvent e) {
+                    lastMouse = e.getPoint();
+                }
+                @Override
+                public void mouseDragged(MouseEvent e) {
+                    if (lastMouse != null && (SwingUtilities.isMiddleMouseButton(e) || SwingUtilities.isRightMouseButton(e) || e.isShiftDown())) {
+                        panX += (e.getX() - lastMouse.x);
+                        panY += (e.getY() - lastMouse.y);
+                        lastMouse = e.getPoint();
+                        canvasPanel.repaint();
+                    }
+                }
+                @Override
+                public void mouseMoved(MouseEvent e) {
+                    mousePos = e.getPoint();
+                    canvasPanel.repaint();
+                }
+                @Override
+                public void mouseWheelMoved(MouseWheelEvent e) {
+                    double factor = (e.getPreciseWheelRotation() < 0) ? 1.15 : (1.0 / 1.15);
+                    zoom = Math.max(0.2, Math.min(5.0, zoom * factor));
+                    canvasPanel.repaint();
+                }
+            };
+            canvasPanel.addMouseListener(ma);
+            canvasPanel.addMouseMotionListener(ma);
+            canvasPanel.addMouseWheelListener(ma);
+
+            add(canvasPanel, BorderLayout.CENTER);
+        }
+
+        public void zoomToFit() {
+            panX = 0;
+            panY = 0;
+            zoom = 1.0;
+            if (canvasPanel != null) canvasPanel.repaint();
+        }
+
+        private void exportElevationImage() {
+            JFileChooser fc = new JFileChooser();
+            String name = currentView.replaceAll("[^a-zA-Z0-9_-]", "_") + ".png";
+            fc.setSelectedFile(new File(name));
+            if (fc.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+                File f = fc.getSelectedFile();
+                if (!f.getName().toLowerCase().endsWith(".png")) f = new File(f.getParentFile(), f.getName() + ".png");
+                try {
+                    BufferedImage img = new BufferedImage(1920, 1080, BufferedImage.TYPE_INT_ARGB);
+                    Graphics2D g2 = img.createGraphics();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                    renderElevationView(g2, 1920, 1080, true);
+                    g2.dispose();
+                    ImageIO.write(img, "png", f);
+                    JOptionPane.showMessageDialog(this, "Elevation export saved:\n" + f.getAbsolutePath(), "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(this, "Failed to export elevation: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }
+
+        private void drawAutoCADCrosshair(Graphics2D g2, int w, int h) {
+            if (mousePos == null || mousePos.x < 0 || mousePos.y < 0) return;
+            int mx = mousePos.x, my = mousePos.y;
+
+            // Thin crosshairs across viewport
+            g2.setColor(new Color(56, 189, 248, 100)); // Cyan subtle
+            g2.setStroke(new BasicStroke(1.0f));
+            g2.drawLine(0, my, w, my);
+            g2.drawLine(mx, 0, mx, h);
+
+            // Center aperture pickbox (8x8)
+            g2.setColor(new Color(56, 189, 248, 200));
+            g2.drawRect(mx - 4, my - 4, 8, 8);
+
+            // Coordinate HUD pill near cursor
+            String coordText = String.format("X: %d | Y: %d", mx, my);
+            g2.setFont(new Font("Consolas", Font.BOLD, 10));
+            FontMetrics fm = g2.getFontMetrics();
+            int tw = fm.stringWidth(coordText);
+            int bx = Math.min(w - tw - 16, mx + 12);
+            int by = Math.max(20, my - 8);
+
+            g2.setColor(new Color(15, 23, 42, 220));
+            g2.fillRoundRect(bx - 4, by - 12, tw + 8, 16, 4, 4);
+            g2.setColor(new Color(56, 189, 248, 180));
+            g2.drawRoundRect(bx - 4, by - 12, tw + 8, 16, 4, 4);
+            g2.setColor(Color.WHITE);
+            g2.drawString(coordText, bx, by);
+        }
+
+        private void renderElevationView(Graphics2D g2, int w, int h, boolean isExport) {
+            Color bg = isExport ? Color.WHITE : (lightThemeEnabled ? new Color(248, 250, 252) : new Color(11, 15, 25));
+            g2.setColor(bg);
+            g2.fillRect(0, 0, w, h);
+
+            if (walls.isEmpty()) {
+                g2.setColor(new Color(100, 116, 139));
+                g2.setFont(new Font("Segoe UI", Font.BOLD, 13));
+                String msg = "Draw walls or place a room on the floor plan to see live elevation.";
+                FontMetrics fm = g2.getFontMetrics();
+                g2.drawString(msg, (w - fm.stringWidth(msg)) / 2, h / 2);
+                return;
+            }
+
+            if (currentView.startsWith("Section")) {
+                CADElement secTag = null;
+                for (CADElement el : elements) {
+                    if ("section".equals(el.type)) { secTag = el; break; }
+                }
+                if (secTag != null) {
+                    renderSectionalElevationCut(g2, w, h, secTag, ceilingHeightFt, showDatums, true, isExport);
+                    return;
+                }
+            }
+
+            int viewMode = 0; // 0: South/Front, 1: North/Rear, 2: West/Left, 3: East/Right
+            if (currentView.contains("North") || currentView.contains("Rear")) viewMode = 1;
+            else if (currentView.contains("West") || currentView.contains("Left")) viewMode = 2;
+            else if (currentView.contains("East") || currentView.contains("Right")) viewMode = 3;
+
+            renderProjectedFacadeElevation(g2, w, h, viewMode, ceilingHeightFt, showDatums, showDimensions, isExport);
+        }
+
+        private void renderProjectedFacadeElevation(Graphics2D g2, int canvasW, int canvasH, int viewMode,
+                                                    double ceilHtFt, boolean datums, boolean dims, boolean isExport) {
+            // Find plan extent
+            double minX = Double.MAX_VALUE, maxX = -Double.MAX_VALUE;
+            double minY = Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
+            for (Wall w : walls) {
+                minX = Math.min(minX, Math.min(w.x1, w.x2));
+                maxX = Math.max(maxX, Math.max(w.x1, w.x2));
+                minY = Math.min(minY, Math.min(w.y1, w.y2));
+                maxY = Math.max(maxY, Math.max(w.y1, w.y2));
+            }
+
+            boolean isXAxis = (viewMode == 0 || viewMode == 1);
+            double facadeLenPx = isXAxis ? (maxX - minX) : (maxY - minY);
+            double facadeLenFt = Math.max(10.0, facadeLenPx / FT_PX);
+
+            // Architectural heights
+            double glFt = 0.0;
+            double plinthFt = 1.5;
+            double ceilFt = plinthFt + ceilHtFt;
+            double slabFt = ceilFt + 0.5;
+            double parapetFt = slabFt + 3.0;
+            double fndFt = 2.5;
+            double totalHtFt = parapetFt + fndFt + 1.0;
+
+            int leftPad = 80;
+            int rightPad = 80;
+            int topPad = 60;
+            int botPad = 60;
+
+            int drawW = canvasW - leftPad - rightPad;
+            int drawH = canvasH - topPad - botPad;
+            if (drawW <= 40 || drawH <= 40) return;
+
+            double baseScale = Math.min(drawW / facadeLenFt, drawH / totalHtFt);
+            double scale = baseScale * zoom;
+
+            int originX = leftPad + (int)((drawW - facadeLenFt * scale) / 2.0) + (int)panX;
+            int glY = canvasH - botPad - (int)(fndFt * scale) + (int)panY;
+
+            int plinthY = glY - (int)(plinthFt * scale);
+            int ceilY = glY - (int)(ceilFt * scale);
+            int slabY = glY - (int)(slabFt * scale);
+            int parapetY = glY - (int)(parapetFt * scale);
+            int fndY = glY + (int)(fndFt * scale);
+
+            int bldgW = (int)(facadeLenFt * scale);
+
+            // 1. Earth & Foundation
+            g2.setColor(isExport ? new Color(241, 245, 249) : new Color(24, 33, 53));
+            g2.fillRect(originX - 30, glY, bldgW + 60, fndY - glY);
+
+            // Ground Line (GL)
+            g2.setColor(new Color(34, 197, 94)); // Emerald Ground Line
+            g2.setStroke(new BasicStroke(2.5f));
+            g2.drawLine(originX - 50, glY, originX + bldgW + 50, glY);
+
+            // 2. Plinth Beam
+            g2.setColor(isExport ? new Color(226, 232, 240) : new Color(30, 41, 59));
+            g2.fillRect(originX, plinthY, bldgW, glY - plinthY);
+            g2.setColor(new Color(100, 116, 139));
+            g2.setStroke(new BasicStroke(1.5f));
+            g2.drawRect(originX, plinthY, bldgW, glY - plinthY);
+
+            // 3. Main Facade Wall Mass
+            g2.setColor(isExport ? new Color(248, 250, 252) : new Color(15, 23, 42));
+            g2.fillRect(originX, ceilY, bldgW, plinthY - ceilY);
+
+            // Subtle modern texture grooves
+            g2.setColor(isExport ? new Color(226, 232, 240) : new Color(30, 41, 59));
+            g2.setStroke(new BasicStroke(1.0f));
+            int grooveStep = (int)(2.0 * scale); // 2-ft grooves
+            for (int gy = ceilY + grooveStep; gy < plinthY; gy += grooveStep) {
+                g2.drawLine(originX, gy, originX + bldgW, gy);
+            }
+
+            g2.setColor(isExport ? new Color(15, 23, 42) : new Color(56, 189, 248)); // Cyan boundary
+            g2.setStroke(new BasicStroke(2.0f));
+            g2.drawRect(originX, ceilY, bldgW, plinthY - ceilY);
+
+            // 4. Doors & Windows projection
+            for (CADElement el : elements) {
+                boolean isDoor = "door".equals(el.type);
+                boolean isWin = el.type != null && el.type.contains("window");
+                if (!isDoor && !isWin) continue;
+
+                // Compute plan position along chosen facade projection axis
+                double elPlanPos = isXAxis ? (el.x + el.w / 2.0 - minX) : (el.y + el.h / 2.0 - minY);
+                if (viewMode == 1) elPlanPos = (maxX - (el.x + el.w / 2.0)); // North inverted
+                if (viewMode == 3) elPlanPos = (maxY - (el.y + el.h / 2.0)); // East inverted
+
+                double elWidthFt = isXAxis ? (el.w / FT_PX) : (el.h / FT_PX);
+                if (elWidthFt < 1.0) elWidthFt = 3.0; // Standard default
+
+                int elX = originX + (int)((elPlanPos / FT_PX - elWidthFt / 2.0) * scale);
+                int elW = Math.max(12, (int)(elWidthFt * scale));
+
+                if (isDoor) {
+                    double doorHtFt = 7.0;
+                    int dTopY = plinthY - (int)(doorHtFt * scale);
+                    int dH = plinthY - dTopY;
+
+                    // Door Casing
+                    g2.setColor(new Color(51, 65, 85));
+                    g2.fillRect(elX - 2, dTopY - 2, elW + 4, dH + 2);
+
+                    // Door Leaf (Warm Mahogany / Modern Slate)
+                    g2.setColor(isExport ? new Color(120, 53, 15) : new Color(30, 41, 59));
+                    g2.fillRect(elX, dTopY, elW, dH);
+                    g2.setColor(new Color(245, 158, 11)); // Amber trim
+                    g2.setStroke(new BasicStroke(1.2f));
+                    g2.drawRect(elX, dTopY, elW, dH);
+
+                    // 4-Panel detailing
+                    int pMidX = elX + elW / 2;
+                    int pMidY = dTopY + dH / 2;
+                    g2.drawRect(elX + 3, dTopY + 4, elW / 2 - 5, dH / 2 - 8);
+                    g2.drawRect(pMidX + 2, dTopY + 4, elW / 2 - 5, dH / 2 - 8);
+                    g2.drawRect(elX + 3, pMidY + 4, elW / 2 - 5, dH / 2 - 8);
+                    g2.drawRect(pMidX + 2, pMidY + 4, elW / 2 - 5, dH / 2 - 8);
+
+                    // Door Knob (Brass)
+                    g2.setColor(new Color(251, 191, 36));
+                    g2.fillOval(elX + elW - 8, dTopY + (int)(dH * 0.55), 4, 4);
+
+                } else if (isWin) {
+                    double sillFt = 3.5;
+                    double winHtFt = 4.0;
+                    int wSillY = plinthY - (int)(sillFt * scale);
+                    int wTopY = wSillY - (int)(winHtFt * scale);
+                    int wH = wSillY - wTopY;
+
+                    // Weather shade / Chajja (Slab overhang)
+                    g2.setColor(new Color(100, 116, 139));
+                    g2.fillRect(elX - 6, wTopY - 5, elW + 12, 5);
+
+                    // Window Frame
+                    g2.setColor(new Color(30, 41, 59));
+                    g2.fillRect(elX, wTopY, elW, wH);
+
+                    // Glass Pane (Sky Blue Reflection)
+                    g2.setColor(new Color(2, 132, 199));
+                    g2.fillRect(elX + 3, wTopY + 3, elW - 6, wH - 6);
+
+                    // Center Mullion
+                    g2.setColor(Color.WHITE);
+                    g2.setStroke(new BasicStroke(1.0f));
+                    g2.drawLine(elX + elW / 2, wTopY + 3, elX + elW / 2, wSillY - 3);
+                    g2.drawRect(elX, wTopY, elW, wH);
+
+                    // Concrete Sill
+                    g2.setColor(new Color(148, 163, 184));
+                    g2.fillRect(elX - 3, wSillY, elW + 6, 4);
+                }
+            }
+
+            // 5. RCC Ceiling Slab (6" RCC)
+            g2.setColor(isExport ? new Color(203, 213, 225) : new Color(30, 41, 59));
+            g2.fillRect(originX - 6, slabY, bldgW + 12, ceilY - slabY);
+            g2.setColor(new Color(148, 163, 184));
+            g2.drawRect(originX - 6, slabY, bldgW + 12, ceilY - slabY);
+
+            // 6. Terrace Parapet Wall
+            g2.setColor(isExport ? new Color(241, 245, 249) : new Color(15, 23, 42));
+            g2.fillRect(originX, parapetY, bldgW, slabY - parapetY);
+            g2.setColor(new Color(56, 189, 248));
+            g2.drawRect(originX, parapetY, bldgW, slabY - parapetY);
+
+            // Parapet Coping Band
+            g2.setColor(new Color(148, 163, 184));
+            g2.fillRect(originX - 4, parapetY - 4, bldgW + 8, 4);
+
+            // 7. Architectural Datums & Level Tags
+            if (datums) {
+                drawDatumTag(g2, originX - 40, parapetY, String.format("+%.1f' TOP OF PARAPET", parapetFt), isExport);
+                drawDatumTag(g2, originX - 40, slabY, String.format("+%.1f' ROOF SLAB", slabFt), isExport);
+                drawDatumTag(g2, originX - 40, ceilY, String.format("+%.1f' CEILING", ceilFt), isExport);
+                drawDatumTag(g2, originX - 40, plinthY, String.format("+%.1f' PLINTH", plinthFt), isExport);
+                drawDatumTag(g2, originX - 40, glY, "±0.0' GROUND LEVEL", isExport);
+            }
+
+            // 8. Dimensions
+            if (dims) {
+                g2.setColor(new Color(56, 189, 248));
+                g2.setFont(new Font("Consolas", Font.BOLD, 10));
+                // Horizontal width
+                int dimY = glY + 25;
+                g2.drawLine(originX, dimY, originX + bldgW, dimY);
+                g2.drawLine(originX, dimY - 4, originX, dimY + 4);
+                g2.drawLine(originX + bldgW, dimY - 4, originX + bldgW, dimY + 4);
+                String wText = formatImperial(facadeLenPx);
+                FontMetrics fm = g2.getFontMetrics();
+                g2.drawString(wText, originX + (bldgW - fm.stringWidth(wText)) / 2, dimY - 4);
+            }
+
+            // View Label Badge at bottom center
+            g2.setColor(isExport ? Color.BLACK : Color.WHITE);
+            g2.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            String titleText = currentView.toUpperCase() + " — 1:100 SCALE";
+            FontMetrics fm = g2.getFontMetrics();
+            g2.drawString(titleText, originX + (bldgW - fm.stringWidth(titleText)) / 2, glY + 50);
+        }
+
+        private void drawDatumTag(Graphics2D g2, int x, int y, String label, boolean isExport) {
+            g2.setColor(new Color(245, 158, 11)); // Amber level indicator
+            g2.setStroke(new BasicStroke(1.2f));
+            Polygon poly = new Polygon();
+            poly.addPoint(x, y);
+            poly.addPoint(x - 8, y - 5);
+            poly.addPoint(x - 8, y + 5);
+            g2.fill(poly);
+
+            g2.setColor(new Color(148, 163, 184));
+            g2.drawLine(x, y, x + 35, y);
+
+            g2.setFont(new Font("Consolas", Font.BOLD, 9));
+            g2.setColor(isExport ? Color.DARK_GRAY : new Color(203, 213, 225));
+            g2.drawString(label, x - 130, y + 3);
+        }
     }
 
     /**
