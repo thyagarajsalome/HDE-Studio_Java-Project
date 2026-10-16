@@ -12,6 +12,7 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.util.*;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import javax.imageio.*;
 import javax.imageio.stream.*;
 
@@ -69,7 +70,7 @@ public class HousePlanCADApp extends JFrame {
                 int textW = (text != null && !text.isEmpty()) ? fm.stringWidth(text) : 0;
                 int gap = (textW > 0) ? 6 : 0;
                 int totalW = icon.getIconWidth() + gap + textW;
-                int startX = (getWidth() - totalW) / 2;
+                int startX = (getHorizontalAlignment() == SwingConstants.LEFT) ? 8 : (getWidth() - totalW) / 2;
                 int iconY = (getHeight() - icon.getIconHeight()) / 2;
                 icon.paintIcon(this, g2, startX, iconY);
                 if (textW > 0) {
@@ -77,7 +78,8 @@ public class HousePlanCADApp extends JFrame {
                             (getHeight() + fm.getAscent() - fm.getDescent()) / 2);
                 }
             } else if (text != null && !text.isEmpty()) {
-                g2.drawString(text, (getWidth() - fm.stringWidth(text)) / 2,
+                int startX = (getHorizontalAlignment() == SwingConstants.LEFT) ? 8 : (getWidth() - fm.stringWidth(text)) / 2;
+                g2.drawString(text, startX,
                         (getHeight() + fm.getAscent() - fm.getDescent()) / 2);
             }
             g2.dispose();
@@ -105,7 +107,7 @@ public class HousePlanCADApp extends JFrame {
             setFocusPainted(false); setBorderPainted(false);
             setContentAreaFilled(false); setOpaque(false);
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            setBorder(new EmptyBorder(5, 10, 5, 10));
+            setBorder(new EmptyBorder(5, 9, 5, 9));
         }
 
         @Override
@@ -121,17 +123,437 @@ public class HousePlanCADApp extends JFrame {
             g2.setColor(curBorder);
             g2.setStroke(new BasicStroke(isSel ? 1.5f : 1.0f));
             g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 6, 6);
-            int textXOffset = 0;
-            if (isSel) {
-                g2.setColor(activeFg);
-                g2.fillOval(7, getHeight() / 2 - 3, 6, 6);
-                textXOffset = 4;
-            }
-            g2.setColor(curFg); g2.setFont(getFont());
+
+            Icon icon = getIcon();
+            String text = getText();
+            g2.setFont(getFont());
             FontMetrics fm = g2.getFontMetrics();
-            g2.drawString(getText(), (getWidth() - fm.stringWidth(getText())) / 2 + textXOffset,
-                    (getHeight() + fm.getAscent() - fm.getDescent()) / 2);
+
+            if (icon != null) {
+                int textW = (text != null && !text.isEmpty()) ? fm.stringWidth(text) : 0;
+                int gap = (textW > 0) ? 5 : 0;
+                int totalW = icon.getIconWidth() + gap + textW;
+                int startX = (getHorizontalAlignment() == SwingConstants.LEFT) ? 7 : (getWidth() - totalW) / 2;
+                int iconY = (getHeight() - icon.getIconHeight()) / 2;
+                icon.paintIcon(this, g2, startX, iconY);
+                if (textW > 0) {
+                    g2.setColor(curFg);
+                    g2.drawString(text, startX + icon.getIconWidth() + gap,
+                            (getHeight() + fm.getAscent() - fm.getDescent()) / 2);
+                }
+            } else {
+                int textXOffset = 0;
+                if (isSel) {
+                    g2.setColor(activeFg);
+                    g2.fillOval(7, getHeight() / 2 - 3, 6, 6);
+                    textXOffset = 4;
+                }
+                g2.setColor(curFg);
+                if (text != null && !text.isEmpty()) {
+                    g2.drawString(text, (getWidth() - fm.stringWidth(getText())) / 2 + textXOffset,
+                            (getHeight() + fm.getAscent() - fm.getDescent()) / 2);
+                }
+            }
             g2.dispose();
+        }
+    }
+
+    // --- High-Performance AutoCAD-Inspired Vector Icon Factory ---
+
+    public static class CADIconFactory {
+        private static final Map<String, Icon> CACHE = new ConcurrentHashMap<>();
+
+        private static Icon getIcon(String key, java.util.function.Consumer<Graphics2D> painter) {
+            return CACHE.computeIfAbsent(key, k -> {
+                int size = 16;
+                BufferedImage img = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+                Graphics2D g2 = img.createGraphics();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+                g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+                painter.accept(g2);
+                g2.dispose();
+                return new ImageIcon(img);
+            });
+        }
+
+        public static Icon getSelectIcon() {
+            return getIcon("select", g -> {
+                // AutoCAD Selection Cursor with Arrow and Pickbox
+                g.setColor(new Color(248, 250, 252));
+                Path2D.Double arrow = new Path2D.Double();
+                arrow.moveTo(2, 1);
+                arrow.lineTo(2, 12);
+                arrow.lineTo(5, 9);
+                arrow.lineTo(8, 14);
+                arrow.lineTo(10, 13);
+                arrow.lineTo(7, 8);
+                arrow.lineTo(11, 8);
+                arrow.closePath();
+                g.fill(arrow);
+                g.setColor(new Color(15, 23, 42));
+                g.setStroke(new BasicStroke(1.0f));
+                g.draw(arrow);
+                // Mini pickbox near arrow tip
+                g.setColor(new Color(56, 189, 248));
+                g.drawRect(8, 2, 5, 5);
+            });
+        }
+
+        public static Icon getWallIcon() {
+            return getIcon("wall", g -> {
+                // AutoCAD 3D Isometric Wall Block
+                // Top face (tan/stone)
+                Path2D.Double top = new Path2D.Double();
+                top.moveTo(2, 6); top.lineTo(8, 2); top.lineTo(14, 5); top.lineTo(8, 9); top.closePath();
+                g.setColor(new Color(253, 230, 138));
+                g.fill(top);
+                g.setColor(new Color(217, 119, 6));
+                g.setStroke(new BasicStroke(0.8f));
+                g.draw(top);
+
+                // Left face (brick/terracotta)
+                Path2D.Double left = new Path2D.Double();
+                left.moveTo(2, 6); left.lineTo(8, 9); left.lineTo(8, 15); left.lineTo(2, 12); left.closePath();
+                g.setColor(new Color(234, 88, 12));
+                g.fill(left);
+                // Mortar lines on left face
+                g.setColor(new Color(154, 52, 18));
+                g.drawLine(2, 8, 8, 11);
+                g.drawLine(2, 10, 8, 13);
+                g.drawLine(5, 7, 5, 10);
+                g.drawLine(5, 12, 5, 14);
+
+                // Right face (shaded brick)
+                Path2D.Double right = new Path2D.Double();
+                right.moveTo(8, 9); right.lineTo(14, 5); right.lineTo(14, 11); right.lineTo(8, 15); right.closePath();
+                g.setColor(new Color(194, 65, 12));
+                g.fill(right);
+                // Mortar lines on right face
+                g.setColor(new Color(124, 45, 18));
+                g.drawLine(8, 11, 14, 7);
+                g.drawLine(8, 13, 14, 9);
+                g.drawLine(11, 6, 11, 8);
+                g.drawLine(11, 10, 11, 12);
+
+                // Crisp outline
+                g.setColor(new Color(15, 23, 42));
+                g.setStroke(new BasicStroke(1.0f));
+                g.draw(top); g.draw(left); g.draw(right);
+            });
+        }
+
+        public static Icon getDoorIcon() {
+            return getIcon("door", g -> {
+                // Architectural CAD Single Swing Door
+                g.setColor(new Color(100, 116, 139));
+                g.fillRect(1, 2, 3, 3);
+                g.fillRect(12, 12, 3, 3);
+                g.setColor(new Color(71, 85, 105));
+                g.drawLine(2, 1, 2, 14);
+
+                // Door leaf swinging open
+                g.setColor(new Color(245, 158, 11)); // Amber wood leaf
+                g.fillRoundRect(2, 3, 3, 11, 1, 1);
+                g.setColor(new Color(180, 83, 9));
+                g.setStroke(new BasicStroke(0.8f));
+                g.drawRoundRect(2, 3, 3, 11, 1, 1);
+                // Door brass handle
+                g.setColor(new Color(254, 240, 138));
+                g.fillRect(4, 5, 2, 2);
+
+                // Swing arc 90-degrees (smooth dashed/cyan arc)
+                g.setColor(new Color(56, 189, 248));
+                float[] dash = {2f, 2f};
+                g.setStroke(new BasicStroke(1.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, dash, 0.0f));
+                g.drawArc(-7, 3, 20, 20, 0, 90);
+            });
+        }
+
+        public static Icon getWindowIcon() {
+            return getIcon("window", g -> {
+                // AutoCAD 4-Pane Casement Window
+                g.setColor(new Color(71, 85, 105));
+                g.drawRect(1, 2, 13, 11);
+                g.setColor(new Color(203, 213, 225));
+                g.drawLine(0, 1, 15, 1);   // Top header
+                g.drawLine(0, 14, 15, 14); // Bottom sill
+
+                // 4 Glass panes
+                g.setColor(new Color(56, 189, 248));
+                g.fillRect(3, 4, 4, 3);
+                g.fillRect(9, 4, 4, 3);
+                g.fillRect(3, 9, 4, 3);
+                g.fillRect(9, 9, 4, 3);
+
+                // White cross mullions
+                g.setColor(Color.WHITE);
+                g.setStroke(new BasicStroke(1.0f));
+                g.drawLine(8, 3, 8, 13);
+                g.drawLine(2, 8, 14, 8);
+
+                // Glass glint reflection
+                g.setColor(new Color(255, 255, 255, 160));
+                g.drawLine(4, 4, 6, 4);
+                g.drawLine(10, 9, 12, 9);
+            });
+        }
+
+        public static Icon getRoomIcon() {
+            return getIcon("room", g -> {
+                // AutoCAD Space / Room Zone Tool
+                g.setColor(new Color(14, 116, 144, 70));
+                g.fillRect(2, 2, 12, 12);
+                g.setColor(new Color(56, 189, 248));
+                float[] dash = {3f, 2f};
+                g.setStroke(new BasicStroke(1.2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, dash, 0.0f));
+                g.drawRect(2, 2, 12, 12);
+                // Center room tag diamond
+                g.setColor(new Color(251, 191, 36));
+                Polygon poly = new Polygon(new int[]{8, 11, 8, 5}, new int[]{5, 8, 11, 8}, 4);
+                g.fill(poly);
+            });
+        }
+
+        public static Icon getBuilderIcon() {
+            return getIcon("builder", g -> {
+                // Parametric Building / House Generator
+                Path2D.Double roof = new Path2D.Double();
+                roof.moveTo(8, 1); roof.lineTo(1, 6); roof.lineTo(15, 6); roof.closePath();
+                g.setColor(new Color(16, 185, 129));
+                g.fill(roof);
+                g.setColor(new Color(52, 211, 153));
+                g.fillRect(3, 6, 10, 8);
+                g.setColor(new Color(6, 78, 59));
+                g.fillRect(5, 9, 3, 5);
+                g.setColor(new Color(254, 240, 138));
+                g.fillRect(9, 8, 3, 3);
+                g.setColor(new Color(6, 78, 59));
+                g.setStroke(new BasicStroke(0.9f));
+                g.draw(roof);
+                g.drawRect(3, 6, 10, 8);
+            });
+        }
+
+        public static Icon getColumnGridIcon() {
+            return getIcon("columns", g -> {
+                // AutoCAD Structural Column Grid Tool
+                g.setColor(new Color(100, 116, 139));
+                g.setStroke(new BasicStroke(1.0f));
+                g.drawLine(1, 8, 14, 8);
+                g.drawLine(8, 1, 8, 14);
+                float[] dash = {2f, 2f};
+                g.setStroke(new BasicStroke(0.8f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, dash, 0.0f));
+                g.drawRect(2, 2, 12, 12);
+                // Structural Column at intersection
+                g.setColor(new Color(245, 158, 11)); // Amber RCC column
+                g.fillRect(5, 5, 6, 6);
+                g.setColor(new Color(15, 23, 42));
+                g.setStroke(new BasicStroke(1.0f));
+                g.drawRect(5, 5, 6, 6);
+                g.drawLine(5, 5, 11, 11);
+                g.drawLine(5, 11, 11, 5);
+            });
+        }
+
+        public static Icon getStairsIcon() {
+            return getIcon("stairs", g -> {
+                // AutoCAD Isometric Staircase Tool
+                // Step 1
+                g.setColor(new Color(226, 232, 240));
+                g.fillRect(2, 11, 4, 3);
+                g.setColor(new Color(147, 51, 234));
+                g.fillRect(2, 13, 4, 2);
+
+                // Step 2
+                g.setColor(new Color(226, 232, 240));
+                g.fillRect(5, 7, 5, 4);
+                g.setColor(new Color(126, 34, 206));
+                g.fillRect(5, 10, 5, 2);
+
+                // Step 3
+                g.setColor(new Color(226, 232, 240));
+                g.fillRect(9, 3, 5, 4);
+                g.setColor(new Color(107, 33, 168));
+                g.fillRect(9, 6, 5, 2);
+
+                // Ascending Arrow (UP direction)
+                g.setColor(new Color(56, 189, 248));
+                g.setStroke(new BasicStroke(1.2f));
+                g.drawLine(3, 9, 13, 2);
+                g.drawLine(13, 2, 10, 2);
+                g.drawLine(13, 2, 13, 5);
+            });
+        }
+
+        public static Icon getFloorIcon() {
+            return getIcon("floor", g -> {
+                // Architectural Flooring 2x2 Tiles
+                g.setColor(new Color(14, 165, 233));
+                g.fillRect(2, 2, 5, 5);
+                g.fillRect(8, 8, 5, 5);
+                g.setColor(new Color(56, 189, 248));
+                g.fillRect(8, 2, 5, 5);
+                g.fillRect(2, 8, 5, 5);
+                g.setColor(new Color(15, 23, 42));
+                g.setStroke(new BasicStroke(1.0f));
+                g.drawRect(2, 2, 11, 11);
+                g.drawLine(7, 2, 7, 13);
+                g.drawLine(2, 7, 13, 7);
+            });
+        }
+
+        public static Icon getHatchIcon() {
+            return getIcon("hatch", g -> {
+                // Architectural Hatch Swatch (ANSI 45-degree diagonal)
+                g.setColor(new Color(30, 41, 59));
+                g.fillRoundRect(2, 2, 12, 12, 2, 2);
+                g.setColor(new Color(244, 63, 94));
+                g.setStroke(new BasicStroke(1.2f));
+                Shape oldClip = g.getClip();
+                g.clipRect(2, 2, 12, 12);
+                for (int d = -6; d <= 20; d += 4) {
+                    g.drawLine(d, 15, d + 15, 0);
+                }
+                g.setClip(oldClip);
+                g.setColor(new Color(226, 232, 240));
+                g.setStroke(new BasicStroke(1.0f));
+                g.drawRoundRect(2, 2, 12, 12, 2, 2);
+            });
+        }
+
+        public static Icon getDimensionIcon() {
+            return getIcon("dimension", g -> {
+                // Architectural Dimension Line with Extension Lines & Ticks
+                g.setColor(new Color(148, 163, 184));
+                g.setStroke(new BasicStroke(1.0f));
+                g.drawLine(2, 2, 2, 14);
+                g.drawLine(13, 2, 13, 14);
+                g.setColor(new Color(56, 189, 248));
+                g.drawLine(2, 8, 13, 8);
+                g.setStroke(new BasicStroke(1.5f));
+                g.drawLine(1, 10, 4, 6);
+                g.drawLine(12, 10, 15, 6);
+                g.fillRect(6, 6, 4, 4);
+            });
+        }
+
+        public static Icon getJoinIcon() {
+            return getIcon("join", g -> {
+                // Wall Corner Auto-Join / Weld Icon
+                g.setColor(new Color(71, 85, 105));
+                g.fillRect(2, 5, 10, 4);
+                g.fillRect(8, 5, 4, 9);
+                g.setColor(new Color(56, 189, 248));
+                g.fillOval(7, 4, 5, 5);
+                g.setColor(Color.WHITE);
+                g.fillOval(9, 6, 2, 2);
+            });
+        }
+
+        public static Icon getPanIcon() {
+            return getIcon("pan", g -> {
+                // CAD Pan Hand Icon
+                g.setColor(new Color(226, 232, 240));
+                g.fillRoundRect(4, 6, 8, 7, 3, 3);
+                g.fillRect(4, 3, 2, 5);
+                g.fillRect(6, 2, 2, 6);
+                g.fillRect(8, 3, 2, 5);
+                g.fillRect(10, 5, 2, 4);
+                g.fillRect(2, 8, 3, 3);
+                g.setColor(new Color(15, 23, 42));
+                g.setStroke(new BasicStroke(0.8f));
+                g.drawRoundRect(4, 6, 8, 7, 3, 3);
+                g.drawLine(4, 3, 4, 8);
+                g.drawLine(6, 2, 6, 8);
+                g.drawLine(8, 3, 8, 8);
+            });
+        }
+
+        // --- Category Tab Icons ---
+        public static Icon getRoomSetsIcon() {
+            return getIcon("cat_roomsets", g -> {
+                g.setColor(new Color(56, 189, 248));
+                Path2D.Double p = new Path2D.Double();
+                p.moveTo(8, 2); p.lineTo(2, 7); p.lineTo(14, 7); p.closePath();
+                g.fill(p);
+                g.fillRect(4, 7, 8, 7);
+                g.setColor(new Color(15, 23, 42));
+                g.fillRect(6, 10, 4, 4);
+            });
+        }
+
+        public static Icon getKitchenIcon() {
+            return getIcon("cat_kitchen", g -> {
+                // Kitchen Cooktop Stove with 2 Burner Rings
+                g.setColor(new Color(51, 65, 85));
+                g.fillRoundRect(2, 3, 12, 10, 2, 2);
+                g.setColor(new Color(245, 158, 11));
+                g.setStroke(new BasicStroke(1.2f));
+                g.drawOval(4, 5, 3, 3);
+                g.drawOval(9, 5, 3, 3);
+                g.setColor(new Color(226, 232, 240));
+                g.fillRect(5, 10, 2, 2);
+                g.fillRect(9, 10, 2, 2);
+            });
+        }
+
+        public static Icon getBathIcon() {
+            return getIcon("cat_bath", g -> {
+                // Bathtub with Water & Fixture
+                g.setColor(new Color(6, 182, 212));
+                g.fillRoundRect(2, 6, 12, 7, 3, 3);
+                g.setColor(new Color(207, 250, 254));
+                g.fillRect(4, 7, 8, 3);
+                g.setColor(new Color(226, 232, 240));
+                g.setStroke(new BasicStroke(1.0f));
+                g.drawLine(4, 6, 4, 3);
+                g.drawLine(4, 3, 6, 3);
+            });
+        }
+
+        public static Icon getLivingIcon() {
+            return getIcon("cat_living", g -> {
+                // Living Room Sofa / Armchair
+                g.setColor(new Color(168, 85, 247));
+                g.fillRoundRect(2, 5, 12, 8, 2, 2);
+                g.setColor(new Color(147, 51, 234));
+                g.fillRect(2, 5, 3, 8);
+                g.fillRect(11, 5, 3, 8);
+                g.setColor(new Color(243, 232, 255));
+                g.fillRect(5, 7, 6, 5);
+            });
+        }
+
+        public static Icon getElecIcon() {
+            return getIcon("cat_elec", g -> {
+                // Electrical Lightning Flash Bolt
+                g.setColor(new Color(251, 191, 36));
+                Path2D.Double bolt = new Path2D.Double();
+                bolt.moveTo(9, 1);
+                bolt.lineTo(4, 8);
+                bolt.lineTo(8, 8);
+                bolt.lineTo(6, 15);
+                bolt.lineTo(13, 7);
+                bolt.lineTo(9, 7);
+                bolt.closePath();
+                g.fill(bolt);
+                g.setColor(new Color(180, 83, 9));
+                g.setStroke(new BasicStroke(0.7f));
+                g.draw(bolt);
+            });
+        }
+
+        public static Icon getSiteExtIcon() {
+            return getIcon("cat_site", g -> {
+                // Site Landscape Tree Foliage
+                g.setColor(new Color(34, 197, 94));
+                g.fillOval(3, 2, 10, 10);
+                g.setColor(new Color(22, 163, 74));
+                g.fillOval(5, 3, 6, 6);
+                g.setColor(new Color(120, 53, 15));
+                g.fillRect(7, 11, 2, 4);
+            });
         }
     }
 
@@ -949,16 +1371,54 @@ public class HousePlanCADApp extends JFrame {
 
         toolButtonGroup = new ButtonGroup();
         ModernToggle selectBtn = createToolToggle("Select [S]", ToolMode.SELECT, toolButtonGroup, true);
+        selectBtn.setIcon(CADIconFactory.getSelectIcon());
+        selectBtn.setToolTipText("AutoCAD Select & Modify Tool (S): Grip edit, move, rotate, delete elements");
+
         ModernToggle wallBtn = createToolToggle("Wall [W]", ToolMode.DRAW_WALL, toolButtonGroup, false);
+        wallBtn.setIcon(CADIconFactory.getWallIcon());
+        wallBtn.setToolTipText("Architectural Wall Tool (W): Click and drag to draw exterior and interior walls");
+
+        ModernButton doorBtn = new ModernButton("Door", new Color(24, 33, 53), new Color(251, 146, 60), new Color(234, 88, 12));
+        doorBtn.setIcon(CADIconFactory.getDoorIcon());
+        doorBtn.setToolTipText("Doors & Openings (AutoCAD Build Panel): Browse door blocks or insert doors");
+        doorBtn.addActionListener(e -> {
+            if (catalogCardLayout != null && catalogContentCards != null) {
+                catalogCardLayout.show(catalogContentCards, "DOORS");
+                ModernToggle tab = catalogTabs.get("DOORS");
+                if (tab != null) tab.setSelected(true);
+            }
+        });
+
+        ModernButton windowBtn = new ModernButton("Window", new Color(24, 33, 53), new Color(56, 189, 248), new Color(14, 116, 144));
+        windowBtn.setIcon(CADIconFactory.getWindowIcon());
+        windowBtn.setToolTipText("Windows & Glazing (AutoCAD Build Panel): Browse window blocks or insert windows");
+        windowBtn.addActionListener(e -> {
+            if (catalogCardLayout != null && catalogContentCards != null) {
+                catalogCardLayout.show(catalogContentCards, "WINDOWS");
+                ModernToggle tab = catalogTabs.get("WINDOWS");
+                if (tab != null) tab.setSelected(true);
+            }
+        });
+
         ModernToggle roomBtn = createToolToggle("Room", ToolMode.ROOM_BOX, toolButtonGroup, false);
+        roomBtn.setIcon(CADIconFactory.getRoomIcon());
+        roomBtn.setToolTipText("Room Space Box: Drag rectangular room boundary with auto-generated walls");
+
         ModernToggle floorBtn = createToolToggle("Floor [T]", ToolMode.FLOOR_ZONE, toolButtonGroup, false);
+        floorBtn.setIcon(CADIconFactory.getFloorIcon());
         floorBtn.setToolTipText("Drag rectangle across any room to apply floor finishes or tile hatching");
+
         ModernToggle hatchBtn = createToolToggle("Hatch [P]", ToolMode.HATCH_POLYGON, toolButtonGroup, false);
+        hatchBtn.setIcon(CADIconFactory.getHatchIcon());
         hatchBtn.setToolTipText("HDE Studio Hatches: Click perimeter corners around any room to fill with active hatch/tile pattern");
+
         ModernToggle dimBtn = createToolToggle("Dim", ToolMode.MEASURE, toolButtonGroup, false);
+        dimBtn.setIcon(CADIconFactory.getDimensionIcon());
         dimBtn.setToolTipText("Point-to-Point Linear Dimension: Click Point 1, Click Point 2, drag mouse for offset");
 
         ModernToggle panBtn = createToolToggle("Pan [H]", ToolMode.PAN, toolButtonGroup, false);
+        panBtn.setIcon(CADIconFactory.getPanIcon());
+        panBtn.setToolTipText("Pan Tool (H): Click and drag to pan across the CAD canvas");
 
         wallThickCombo = new JComboBox<>();
         wallThickCombo.setPreferredSize(new Dimension(95, 26));
@@ -986,23 +1446,29 @@ public class HousePlanCADApp extends JFrame {
         });
 
         ModernButton autoJoinBtn = new ModernButton("Join", new Color(24, 33, 53), new Color(56, 189, 248), new Color(14, 116, 144));
+        autoJoinBtn.setIcon(CADIconFactory.getJoinIcon());
         autoJoinBtn.setToolTipText("Automatically weld all wall corners and T-junctions");
         autoJoinBtn.addActionListener(e -> { saveUndoState(); autoJoinAllWalls(); });
 
         ModernButton roomBuilderBtn = new ModernButton("Builder", new Color(30, 41, 59), new Color(52, 211, 153), new Color(16, 185, 129));
+        roomBuilderBtn.setIcon(CADIconFactory.getBuilderIcon());
         roomBuilderBtn.setToolTipText("Parametric Room Generator: Generate room walls, openings, tags, and dimensions (Ctrl+Shift+R)");
         roomBuilderBtn.addActionListener(e -> showParametricRoomDialog());
 
         ModernButton columnGridBtn = new ModernButton("Columns", new Color(30, 41, 59), new Color(251, 191, 36), new Color(245, 158, 11));
+        columnGridBtn.setIcon(CADIconFactory.getColumnGridIcon());
         columnGridBtn.setToolTipText("Structural Column Grid Generator: Auto-place RCC columns at wall corners and spans (Ctrl+Shift+G)");
         columnGridBtn.addActionListener(e -> showStructuralGridDialog());
 
         ModernButton stairsBtn = new ModernButton("Stairs", new Color(30, 41, 59), new Color(168, 85, 247), new Color(147, 51, 234));
+        stairsBtn.setIcon(CADIconFactory.getStairsIcon());
         stairsBtn.setToolTipText("Architectural Staircase Library & Parametric Generator: Straight, Dog-Leg, L-Shape, Spiral, Open-Well (Ctrl+Shift+T / Alt+S)");
         stairsBtn.addActionListener(e -> showStaircaseDialog(null));
 
         toolsGroup.add(selectBtn);
         toolsGroup.add(wallBtn);
+        toolsGroup.add(doorBtn);
+        toolsGroup.add(windowBtn);
         toolsGroup.add(wallThickCombo);
         toolsGroup.add(wallHatchCombo);
         toolsGroup.add(roomBtn);
@@ -1321,15 +1787,25 @@ public class HousePlanCADApp extends JFrame {
 
         ButtonGroup catGroup = new ButtonGroup();
         ModernToggle setsTab = createCategoryTab("Room Sets", "ROOM_SETS", catalogCardLayout, catalogContentCards, catGroup, true);
+        setsTab.setIcon(CADIconFactory.getRoomSetsIcon());
         ModernToggle floorTab = createCategoryTab("Flooring", "FLOORING", catalogCardLayout, catalogContentCards, catGroup, false);
+        floorTab.setIcon(CADIconFactory.getFloorIcon());
         ModernToggle doorsTab = createCategoryTab("Doors", "DOORS", catalogCardLayout, catalogContentCards, catGroup, false);
+        doorsTab.setIcon(CADIconFactory.getDoorIcon());
         ModernToggle windowsTab = createCategoryTab("Windows", "WINDOWS", catalogCardLayout, catalogContentCards, catGroup, false);
+        windowsTab.setIcon(CADIconFactory.getWindowIcon());
         ModernToggle kitchenTab = createCategoryTab("Kitchen", "KITCHEN", catalogCardLayout, catalogContentCards, catGroup, false);
+        kitchenTab.setIcon(CADIconFactory.getKitchenIcon());
         ModernToggle bathTab = createCategoryTab("Bath", "BATH", catalogCardLayout, catalogContentCards, catGroup, false);
+        bathTab.setIcon(CADIconFactory.getBathIcon());
         ModernToggle livingTab = createCategoryTab("Living", "LIVING", catalogCardLayout, catalogContentCards, catGroup, false);
+        livingTab.setIcon(CADIconFactory.getLivingIcon());
         ModernToggle dimsTab = createCategoryTab("Dims/Tags", "TAGS_DIMS", catalogCardLayout, catalogContentCards, catGroup, false);
+        dimsTab.setIcon(CADIconFactory.getDimensionIcon());
         ModernToggle elecTab = createCategoryTab("Elect", "ELEC", catalogCardLayout, catalogContentCards, catGroup, false);
+        elecTab.setIcon(CADIconFactory.getElecIcon());
         ModernToggle siteTab = createCategoryTab("Site/Ext", "SITE_EXT", catalogCardLayout, catalogContentCards, catGroup, false);
+        siteTab.setIcon(CADIconFactory.getSiteExtIcon());
 
         catalogTabs.put("ROOM_SETS", setsTab);
         catalogTabs.put("FLOORING", floorTab);
