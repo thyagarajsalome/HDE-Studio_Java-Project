@@ -4932,6 +4932,23 @@ public class HousePlanCADApp extends JFrame {
                         return;
                     }
 
+                    // Right-click context selection (and measure cancel)
+                    if (SwingUtilities.isRightMouseButton(e) && !e.isShiftDown()) {
+                        if (currentTool == ToolMode.MEASURE) {
+                            cancelMeasure();
+                            return;
+                        }
+                        Point2D.Double clickWorld = screenToWorld(e.getX(), e.getY());
+                        Object hit = hitTest(clickWorld.x, clickWorld.y);
+                        if (hit != null && !isSelected(hit)) {
+                            clearSelection();
+                            addToSelection(hit);
+                            updateProperties();
+                            repaint();
+                        }
+                        return;
+                    }
+
                     // AutoCAD-Style Point-to-Point Linear Dimension Tool
                     if (currentTool == ToolMode.MEASURE) {
                         Point2D.Double snapPt = getOsnapPoint(mouseWorld.x, mouseWorld.y);
@@ -5370,6 +5387,14 @@ public class HousePlanCADApp extends JFrame {
                         return;
                     }
 
+                    // Right-click context menu
+                    if (SwingUtilities.isRightMouseButton(e) && !e.isShiftDown()) {
+                        isDragging = false; isRotating = false; isPanning = false; gripWall = null; isDrawing = false; isWindowSelecting = false;
+                        showContextMenu(e);
+                        repaint();
+                        return;
+                    }
+
                     // Finalize drawing
                     if (isDrawing) {
                         isDrawing = false;
@@ -5497,6 +5522,436 @@ public class HousePlanCADApp extends JFrame {
             double snappedCX = w.x1 + ux * t, snappedCY = w.y1 + uy * t;
             el.rotation = Math.toDegrees(Math.atan2(dy, dx));
             el.x = snappedCX - el.w / 2.0; el.y = snappedCY - el.h / 2.0;
+        }
+
+        private JPopupMenu createStyledPopupMenu() {
+            JPopupMenu menu = new JPopupMenu();
+            menu.setBackground(new Color(15, 23, 42));
+            menu.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true),
+                    BorderFactory.createEmptyBorder(4, 4, 4, 4)));
+            return menu;
+        }
+
+        private JMenuItem createHeaderItem(String title) {
+            JMenuItem header = new JMenuItem(title);
+            header.setFont(new Font("Segoe UI", Font.BOLD, 11));
+            header.setForeground(new Color(56, 189, 248));
+            header.setBackground(new Color(24, 33, 53));
+            header.setEnabled(false);
+            header.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+            return header;
+        }
+
+        private JMenuItem createStyledMenuItem(String text, ActionListener al) {
+            JMenuItem item = new JMenuItem(text);
+            item.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+            item.setForeground(Color.WHITE);
+            item.setBackground(new Color(15, 23, 42));
+            item.setOpaque(true);
+            item.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
+            item.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            item.addMouseListener(new MouseAdapter() {
+                @Override public void mouseEntered(MouseEvent e) { item.setBackground(new Color(2, 132, 199)); }
+                @Override public void mouseExited(MouseEvent e) { item.setBackground(new Color(15, 23, 42)); }
+            });
+            item.addActionListener(al);
+            return item;
+        }
+
+        private JMenu createStyledSubMenu(String title) {
+            JMenu menu = new JMenu(title);
+            menu.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+            menu.setForeground(Color.WHITE);
+            menu.setBackground(new Color(15, 23, 42));
+            menu.setOpaque(true);
+            menu.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
+            menu.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            menu.addMouseListener(new MouseAdapter() {
+                @Override public void mouseEntered(MouseEvent e) { menu.setBackground(new Color(2, 132, 199)); }
+                @Override public void mouseExited(MouseEvent e) { menu.setBackground(new Color(15, 23, 42)); }
+            });
+            JPopupMenu pop = menu.getPopupMenu();
+            pop.setBackground(new Color(15, 23, 42));
+            pop.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true),
+                    BorderFactory.createEmptyBorder(4, 4, 4, 4)));
+            return menu;
+        }
+
+        private void addDarkSeparator(JPopupMenu menu) {
+            JSeparator sep = new JSeparator();
+            sep.setForeground(new Color(51, 65, 85));
+            sep.setBackground(new Color(15, 23, 42));
+            menu.add(sep);
+        }
+
+        private void splitWallAt(Wall w, Point2D.Double pt) {
+            double dx = w.x2 - w.x1, dy = w.y2 - w.y1;
+            double lenSq = dx * dx + dy * dy;
+            if (lenSq < 1.0) return;
+            double u = ((pt.x - w.x1) * dx + (pt.y - w.y1) * dy) / lenSq;
+            u = Math.max(0.05, Math.min(0.95, u));
+            double px = w.x1 + u * dx, py = w.y1 + u * dy;
+
+            saveUndoState();
+            int idx = walls.indexOf(w);
+            if (idx >= 0) {
+                Wall w1 = new Wall(w.x1, w.y1, px, py, w.thicknessInches);
+                Wall w2 = new Wall(px, py, w.x2, w.y2, w.thicknessInches);
+                walls.remove(idx);
+                walls.add(idx, w1);
+                walls.add(idx + 1, w2);
+                autoJoinWallEndpoints(w1, (w.thicknessInches / 12.0) * FT_PX * 1.5);
+                autoJoinWallEndpoints(w2, (w.thicknessInches / 12.0) * FT_PX * 1.5);
+                clearSelection();
+                addToSelection(w1); addToSelection(w2);
+                checkAllCollisions(); updateProperties(); repaint();
+                showToastNotification("✂ Wall split into 2 segments at click");
+            }
+        }
+
+        private void insertOpeningOnWall(Wall w, Point2D.Double pt, String type, String name, double widthFt, double heightFt) {
+            saveUndoState();
+            CADElement el = new CADElement(type, name, pt.x, pt.y, widthFt * FT_PX, heightFt * FT_PX);
+            snapElementToWall(el, w, pt);
+            elements.add(el);
+            clearSelection();
+            addToSelection(el);
+            checkAllCollisions();
+            updateProperties();
+            repaint();
+            showToastNotification("Inserted " + name + " onto wall");
+        }
+
+        private void addDimensionForWall(Wall w) {
+            saveUndoState();
+            CADDimension d = new CADDimension(w.x1, w.y1, w.x2, w.y2, 28.0,
+                    DimensionType.ALIGNED, activeDimArrowStyle, activeDimUnitStyle, null);
+            dimensions.add(d);
+            clearSelection();
+            addToSelection(d);
+            updateProperties();
+            repaint();
+            showToastNotification("Added aligned dimension for wall (" + formatImperial(w.getLength()) + ")");
+        }
+
+        private void applyFloorHatchAt(CADElement tag, String pattern) {
+            saveUndoState();
+            CADElement existingFloor = null;
+            double cx = tag.x + tag.w / 2.0, cy = tag.y + tag.h / 2.0;
+            for (CADElement el : elements) {
+                if (el.type.startsWith("floor-") && new Rectangle2D.Double(el.x, el.y, el.w, el.h).contains(cx, cy)) {
+                    existingFloor = el; break;
+                }
+            }
+            if (existingFloor != null) {
+                existingFloor.type = pattern;
+                existingFloor.name = "Floor (" + pattern.replace("floor-", "") + ")";
+            } else {
+                double fw = Math.max(tag.w, 10.0 * FT_PX);
+                double fh = Math.max(tag.h, 10.0 * FT_PX);
+                CADElement floor = new CADElement(pattern, "Floor (" + pattern.replace("floor-", "") + ")",
+                        cx - fw / 2.0, cy - fh / 2.0, fw, fh);
+                elements.add(0, floor);
+            }
+            updateProperties(); repaint();
+            showToastNotification("Applied " + pattern.replace("floor-", "") + " flooring");
+        }
+
+        public void showContextMenu(MouseEvent e) {
+            Point2D.Double clickWorld = screenToWorld(e.getX(), e.getY());
+            Object hit = hitTest(clickWorld.x, clickWorld.y);
+            if (hit != null && !isSelected(hit)) {
+                clearSelection();
+                addToSelection(hit);
+                updateProperties();
+                repaint();
+            }
+
+            JPopupMenu popup = createStyledPopupMenu();
+
+            if (hit instanceof Wall) {
+                Wall w = (Wall) hit;
+                popup.add(createHeaderItem("🧱 Wall (" + (int) w.thicknessInches + "\" Brickwork · " + formatImperial(w.getLength()) + ")"));
+
+                JMenu thickMenu = createStyledSubMenu("📐 Wall Thickness");
+                thickMenu.add(createStyledMenuItem("9\" Exterior Wall (Solid Brick)", ev -> {
+                    saveUndoState(); w.thicknessInches = 9.0;
+                    checkAllCollisions(); updateProperties(); repaint();
+                    showToastNotification("Wall thickness set to 9\" (Exterior)");
+                }));
+                thickMenu.add(createStyledMenuItem("6\" Standard Partition", ev -> {
+                    saveUndoState(); w.thicknessInches = 6.0;
+                    checkAllCollisions(); updateProperties(); repaint();
+                    showToastNotification("Wall thickness set to 6\"");
+                }));
+                thickMenu.add(createStyledMenuItem("4.5\" Interior Partition (Half-Brick)", ev -> {
+                    saveUndoState(); w.thicknessInches = 4.5;
+                    checkAllCollisions(); updateProperties(); repaint();
+                    showToastNotification("Wall thickness set to 4.5\" (Partition)");
+                }));
+                popup.add(thickMenu);
+                addDarkSeparator(popup);
+
+                popup.add(createStyledMenuItem("🚪 Insert Standard Door (3'-0\") Here", ev -> {
+                    insertOpeningOnWall(w, clickWorld, "door", "Single Door 3'-0\"", 3.0, 0.75);
+                }));
+                popup.add(createStyledMenuItem("🚪 Insert Main Door (3'-6\") Here", ev -> {
+                    insertOpeningOnWall(w, clickWorld, "door", "Main Door 3'-6\"", 3.5, 0.75);
+                }));
+                popup.add(createStyledMenuItem("🪟 Insert Window (4'-0\") Here", ev -> {
+                    insertOpeningOnWall(w, clickWorld, "window", "Window 4'-0\"", 4.0, 0.75);
+                }));
+                popup.add(createStyledMenuItem("🪟 Insert Small Window (3'-0\") Here", ev -> {
+                    insertOpeningOnWall(w, clickWorld, "window", "Window 3'-0\"", 3.0, 0.75);
+                }));
+                popup.add(createStyledMenuItem("🔲 Insert Wall Opening (Passage)", ev -> {
+                    insertOpeningOnWall(w, clickWorld, "opening-wall", "Wall Opening 3'-0\"", 3.0, 0.75);
+                }));
+                addDarkSeparator(popup);
+
+                popup.add(createStyledMenuItem("✂ Split Wall into Two Segments", ev -> {
+                    splitWallAt(w, clickWorld);
+                }));
+                popup.add(createStyledMenuItem("📏 Add Aligned Dimension to this Wall", ev -> {
+                    addDimensionForWall(w);
+                }));
+                addDarkSeparator(popup);
+
+                popup.add(createStyledMenuItem("🗑 Delete Wall (Del)", ev -> {
+                    saveUndoState();
+                    walls.remove(w);
+                    clearSelection();
+                    checkAllCollisions(); updateProperties(); repaint();
+                    showToastNotification("Wall deleted");
+                }));
+
+            } else if (hit instanceof CADElement && ((CADElement) hit).isOpening()) {
+                CADElement op = (CADElement) hit;
+                popup.add(createHeaderItem("🚪 " + op.name));
+
+                popup.add(createStyledMenuItem("⇄ Flip Swing Left / Right (H)", ev -> {
+                    saveUndoState(); op.flipH = !op.flipH;
+                    checkAllCollisions(); updateProperties(); repaint();
+                    showToastNotification("Opening flipped horizontally");
+                }));
+                popup.add(createStyledMenuItem("⇅ Flip Inward / Outward (V)", ev -> {
+                    saveUndoState(); op.flipV = !op.flipV;
+                    checkAllCollisions(); updateProperties(); repaint();
+                    showToastNotification("Opening flipped vertically");
+                }));
+                popup.add(createStyledMenuItem("🔄 Rotate 90° (R)", ev -> {
+                    saveUndoState(); op.rotation = (op.rotation + 90) % 360;
+                    checkAllCollisions(); updateProperties(); repaint();
+                    showToastNotification("Rotated 90°");
+                }));
+
+                JMenu sizeMenu = createStyledSubMenu("📐 Resize Opening");
+                sizeMenu.add(createStyledMenuItem("2'-6\" Bath / Toilet Door", ev -> {
+                    saveUndoState(); op.w = 2.5 * FT_PX;
+                    checkAllCollisions(); updateProperties(); repaint();
+                }));
+                sizeMenu.add(createStyledMenuItem("3'-0\" Standard Bedroom Door", ev -> {
+                    saveUndoState(); op.w = 3.0 * FT_PX;
+                    checkAllCollisions(); updateProperties(); repaint();
+                }));
+                sizeMenu.add(createStyledMenuItem("3'-6\" Main Entrance Door", ev -> {
+                    saveUndoState(); op.w = 3.5 * FT_PX;
+                    checkAllCollisions(); updateProperties(); repaint();
+                }));
+                sizeMenu.add(createStyledMenuItem("4'-0\" Large Double Door", ev -> {
+                    saveUndoState(); op.w = 4.0 * FT_PX;
+                    checkAllCollisions(); updateProperties(); repaint();
+                }));
+                sizeMenu.add(createStyledMenuItem("5'-0\" Wide Window", ev -> {
+                    saveUndoState(); op.w = 5.0 * FT_PX;
+                    checkAllCollisions(); updateProperties(); repaint();
+                }));
+                popup.add(sizeMenu);
+                addDarkSeparator(popup);
+
+                popup.add(createStyledMenuItem("🗑 Delete Opening (Del)", ev -> {
+                    saveUndoState();
+                    elements.remove(op);
+                    clearSelection();
+                    checkAllCollisions(); updateProperties(); repaint();
+                    showToastNotification("Opening deleted");
+                }));
+
+            } else if (hit instanceof CADElement && "tag".equals(((CADElement) hit).type)) {
+                CADElement tag = (CADElement) hit;
+                popup.add(createHeaderItem("🏷 Room Tag: " + tag.name.split("\n")[0]));
+
+                popup.add(createStyledMenuItem("✏ Rename Room Label...", ev -> {
+                    String current = tag.name.split("\n")[0];
+                    String input = JOptionPane.showInputDialog(HousePlanCADApp.this, "Enter Room Name / Label:", current);
+                    if (input != null && !input.trim().isEmpty()) {
+                        saveUndoState();
+                        double area = parseRoomAreaFromText(tag.name);
+                        if (area <= 0) area = computeRoomAreaFromWalls(tag.x + tag.w / 2.0, tag.y + tag.h / 2.0);
+                        if (area > 0) {
+                            tag.name = input.trim() + "\n" + String.format("%.0f SQ.FT.", area);
+                        } else {
+                            tag.name = input.trim();
+                        }
+                        updateProperties(); repaint();
+                        showToastNotification("Room renamed to: " + input.trim());
+                    }
+                }));
+
+                popup.add(createStyledMenuItem("📐 Recalculate Room Area (Sq.Ft.)", ev -> {
+                    saveUndoState();
+                    double area = computeRoomAreaFromWalls(tag.x + tag.w / 2.0, tag.y + tag.h / 2.0);
+                    if (area > 0) {
+                        String title = tag.name.split("\n")[0];
+                        tag.name = title + "\n" + String.format("%.0f SQ.FT.", area);
+                        updateProperties(); repaint();
+                        showToastNotification("Calculated Room Area: " + String.format("%.0f SQ.FT.", area));
+                    } else {
+                        showToastNotification("Could not find enclosed walls around this tag");
+                    }
+                }));
+
+                JMenu floorHatchMenu = createStyledSubMenu("🎨 Add / Fill Floor Tiles");
+                floorHatchMenu.add(createStyledMenuItem("Vitrified Tiles (2'×2')", ev -> applyFloorHatchAt(tag, "floor-tiles-2x2")));
+                floorHatchMenu.add(createStyledMenuItem("Ceramic Tiles (1'×1')", ev -> applyFloorHatchAt(tag, "floor-tiles-1x1")));
+                floorHatchMenu.add(createStyledMenuItem("Hardwood Wood Planks", ev -> applyFloorHatchAt(tag, "floor-wood-plank")));
+                floorHatchMenu.add(createStyledMenuItem("Marble Large Tiles (2'×4')", ev -> applyFloorHatchAt(tag, "floor-tiles-2x4")));
+                popup.add(floorHatchMenu);
+                addDarkSeparator(popup);
+
+                popup.add(createStyledMenuItem("🗑 Delete Tag (Del)", ev -> {
+                    saveUndoState();
+                    elements.remove(tag);
+                    clearSelection();
+                    checkAllCollisions(); updateProperties(); repaint();
+                }));
+
+            } else if (hit instanceof CADDimension) {
+                CADDimension d = (CADDimension) hit;
+                popup.add(createHeaderItem("📏 Dimension (" + formatEngineeringDimension(d) + ")"));
+
+                JMenu arrMenu = createStyledSubMenu("► Arrowhead Style (DIMBLK)");
+                arrMenu.add(createStyledMenuItem("► Closed Filled Arrow (AutoCAD)", ev -> {
+                    saveUndoState(); d.arrowStyle = DimensionArrowStyle.CLOSED_FILLED;
+                    activeDimArrowStyle = DimensionArrowStyle.CLOSED_FILLED;
+                    updateProperties(); repaint();
+                }));
+                arrMenu.add(createStyledMenuItem("/ Architectural 45° Tick", ev -> {
+                    saveUndoState(); d.arrowStyle = DimensionArrowStyle.ARCH_TICK;
+                    activeDimArrowStyle = DimensionArrowStyle.ARCH_TICK;
+                    updateProperties(); repaint();
+                }));
+                arrMenu.add(createStyledMenuItem("● Structural Datum Dot", ev -> {
+                    saveUndoState(); d.arrowStyle = DimensionArrowStyle.DOT;
+                    activeDimArrowStyle = DimensionArrowStyle.DOT;
+                    updateProperties(); repaint();
+                }));
+                popup.add(arrMenu);
+
+                JMenu unitMenu = createStyledSubMenu("📏 Units Format (DIMALT)");
+                unitMenu.add(createStyledMenuItem("Dual Units [mm] (e.g. 30'-0\" [9144 mm])", ev -> {
+                    saveUndoState(); d.unitStyle = DimensionUnitStyle.DUAL_UNITS;
+                    updateProperties(); repaint();
+                }));
+                unitMenu.add(createStyledMenuItem("Architectural Feet-Inches (30'-0\")", ev -> {
+                    saveUndoState(); d.unitStyle = DimensionUnitStyle.FEET_INCHES;
+                    updateProperties(); repaint();
+                }));
+                unitMenu.add(createStyledMenuItem("Metric Millimeters (9144 mm)", ev -> {
+                    saveUndoState(); d.unitStyle = DimensionUnitStyle.METRIC_MM;
+                    updateProperties(); repaint();
+                }));
+                popup.add(unitMenu);
+
+                popup.add(createStyledMenuItem("⇄ Flip Dimension Offset Side", ev -> {
+                    saveUndoState(); d.offset = -d.offset;
+                    updateProperties(); repaint();
+                }));
+
+                popup.add(createStyledMenuItem("✎ Edit Text / Note (<>)...", ev -> {
+                    String cur = d.customText != null ? d.customText : "";
+                    String input = JOptionPane.showInputDialog(HousePlanCADApp.this, "Enter custom text (use <> for measured length):", cur);
+                    if (input != null) {
+                        saveUndoState();
+                        d.customText = input.trim().isEmpty() ? null : input.trim();
+                        updateProperties(); repaint();
+                    }
+                }));
+                addDarkSeparator(popup);
+
+                popup.add(createStyledMenuItem("🗑 Delete Dimension (Del)", ev -> {
+                    saveUndoState();
+                    dimensions.remove(d);
+                    clearSelection();
+                    updateProperties(); repaint();
+                }));
+
+            } else if (hit instanceof CADElement) {
+                CADElement el = (CADElement) hit;
+                popup.add(createHeaderItem("🛋 " + el.name));
+
+                popup.add(createStyledMenuItem("🔄 Rotate 90° (R)", ev -> {
+                    saveUndoState(); el.rotation = (el.rotation + 90) % 360;
+                    checkAllCollisions(); updateProperties(); repaint();
+                }));
+                popup.add(createStyledMenuItem("⇄ Flip Horizontal (H)", ev -> {
+                    saveUndoState(); el.flipH = !el.flipH;
+                    checkAllCollisions(); updateProperties(); repaint();
+                }));
+                popup.add(createStyledMenuItem("⇅ Flip Vertical (V)", ev -> {
+                    saveUndoState(); el.flipV = !el.flipV;
+                    checkAllCollisions(); updateProperties(); repaint();
+                }));
+                popup.add(createStyledMenuItem("📋 Duplicate (Ctrl+D)", ev -> {
+                    duplicateSelected();
+                }));
+                addDarkSeparator(popup);
+
+                popup.add(createStyledMenuItem("⬆ Bring to Front (Ctrl+])", ev -> bringToFront()));
+                popup.add(createStyledMenuItem("⬇ Send to Back (Ctrl+[)", ev -> sendToBack()));
+                addDarkSeparator(popup);
+
+                popup.add(createStyledMenuItem("🗑 Delete (Del)", ev -> deleteSelected()));
+
+            } else {
+                // Empty canvas clicked
+                popup.add(createHeaderItem("⚡ Quick Actions"));
+
+                popup.add(createStyledMenuItem("🧱 Draw Wall [W]", ev -> {
+                    currentTool = ToolMode.DRAW_WALL;
+                    selectToolButton(ToolMode.DRAW_WALL);
+                }));
+                popup.add(createStyledMenuItem("🏠 Room Box Builder", ev -> {
+                    currentTool = ToolMode.ROOM_BOX;
+                    selectToolButton(ToolMode.ROOM_BOX);
+                }));
+                popup.add(createStyledMenuItem("🏢 Structural Column Grid Generator...", ev -> {
+                    showStructuralGridDialog();
+                }));
+                popup.add(createStyledMenuItem("📏 Auto-Dimension All Walls", ev -> {
+                    autoGenerateDimensions();
+                }));
+                addDarkSeparator(popup);
+
+                popup.add(createStyledMenuItem("🧹 Clear Selection (Esc)", ev -> {
+                    clearSelection();
+                    updateProperties();
+                    repaint();
+                }));
+                popup.add(createStyledMenuItem("🔍 Zoom to Fit", ev -> {
+                    zoomToFit();
+                }));
+                popup.add(createStyledMenuItem("📄 Export High-Res PDF (Ctrl+P)", ev -> {
+                    showExportDialog();
+                }));
+                popup.add(createStyledMenuItem("⚡ Keyboard Shortcuts & Tips [F2]", ev -> {
+                    showQuickAccessShortcutsDialog();
+                }));
+            }
+
+            popup.show(this, e.getX(), e.getY());
         }
 
         private Point getRotationHandleScreen(CADElement el) {
