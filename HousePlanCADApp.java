@@ -920,10 +920,17 @@ public class HousePlanCADApp extends JFrame {
         headerThemeBtn.setToolTipText("Toggle Canvas Theme (F6): Switch between Pure White Drafting Paper and Dark Blueprint");
         headerThemeBtn.addActionListener(e -> setLightTheme(headerThemeBtn.isSelected()));
 
+        ModernButton quickAccessBtn = new ModernButton("⚡ Quick Access [F2]", new Color(15, 23, 42), new Color(56, 189, 248), new Color(14, 116, 144));
+        quickAccessBtn.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        quickAccessBtn.setPreferredSize(new Dimension(150, 26));
+        quickAccessBtn.setToolTipText("Quick Access & Shortcuts HUD (F2): All Function Keys (F1-F12), drafting hotkeys, and pro tips");
+        quickAccessBtn.addActionListener(e -> showQuickAccessShortcutsDialog());
+
         actionPanel.add(headerThemeBtn);
         actionPanel.add(exportBtn);
         actionPanel.add(licenseBtn);
         actionPanel.add(headerUpdateBtn);
+        actionPanel.add(quickAccessBtn);
         actionPanel.add(learnBtn);
         actionPanel.add(clearBtn);
 
@@ -3098,6 +3105,12 @@ public class HousePlanCADApp extends JFrame {
         zoomInBtn.addActionListener(e -> { zoom = Math.min(4.0, zoom * 1.2); viewportPanel.repaint(); });
         zoomResetBtn.addActionListener(e -> { viewportPanel.zoomToFit(); });
 
+        ModernButton statusShortcutsBtn = new ModernButton("⚡ Shortcuts [F2]", new Color(24, 33, 53), new Color(56, 189, 248), new Color(14, 116, 144));
+        statusShortcutsBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        statusShortcutsBtn.setPreferredSize(new Dimension(115, 22));
+        statusShortcutsBtn.setToolTipText("Open Quick Access & Keyboard Shortcuts HUD (F2)");
+        statusShortcutsBtn.addActionListener(e -> showQuickAccessShortcutsDialog());
+
         trayGroup.add(themeToggleBtn);
         trayGroup.add(gridBtn);
         trayGroup.add(orthoBtn);
@@ -3108,6 +3121,8 @@ public class HousePlanCADApp extends JFrame {
         trayGroup.add(zoomOutBtn);
         trayGroup.add(zoomInBtn);
         trayGroup.add(zoomResetBtn);
+        trayGroup.add(new JSeparator(JSeparator.VERTICAL));
+        trayGroup.add(statusShortcutsBtn);
 
         status.add(trayGroup, BorderLayout.EAST);
         return status;
@@ -3220,7 +3235,10 @@ public class HousePlanCADApp extends JFrame {
             if (e.getID() != KeyEvent.KEY_PRESSED) return false;
             boolean isTyping = (KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() instanceof javax.swing.text.JTextComponent);
 
-            if (e.getKeyCode() == KeyEvent.VK_F5 || (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_E)) {
+            if (e.getKeyCode() == KeyEvent.VK_F2) {
+                showQuickAccessShortcutsDialog();
+                return true;
+            } else if (e.getKeyCode() == KeyEvent.VK_F5 || (e.isControlDown() && e.getKeyCode() == KeyEvent.VK_E)) {
                 boolean next = splitElevationBtn != null ? !splitElevationBtn.isSelected() : true;
                 setSplitElevationView(next);
                 return true;
@@ -3240,6 +3258,12 @@ public class HousePlanCADApp extends JFrame {
             } else if (e.getKeyCode() == KeyEvent.VK_F4) {
                 collisionDetectionEnabled = !collisionDetectionEnabled; collisionBtn.setSelected(collisionDetectionEnabled);
                 checkAllCollisions(); viewportPanel.repaint(); return true;
+            } else if (e.getKeyCode() == KeyEvent.VK_F11) {
+                if (viewportPanel != null) viewportPanel.zoomToFit();
+                return true;
+            } else if (e.getKeyCode() == KeyEvent.VK_F12) {
+                showRegionSelectorDialog(false);
+                return true;
             }
 
             if (!isTyping) {
@@ -14433,6 +14457,409 @@ public class HousePlanCADApp extends JFrame {
         dlg.add(footer, BorderLayout.SOUTH);
 
         dlg.setVisible(true);
+    }
+
+    // =====================================================================
+    // =======  QUICK ACCESS & KEYBOARD SHORTCUTS HUD (F1 - F12 & TIPS)  ====
+    // =====================================================================
+
+    public static class ShortcutHUDItem {
+        public final String keyBadge;
+        public final String actionName;
+        public final String description;
+        public final String category;
+
+        public ShortcutHUDItem(String keyBadge, String actionName, String description, String category) {
+            this.keyBadge = keyBadge;
+            this.actionName = actionName;
+            this.description = description;
+            this.category = category;
+        }
+    }
+
+    private List<ShortcutHUDItem> getShortcutHUDMasterList() {
+        List<ShortcutHUDItem> list = new ArrayList<>();
+
+        // 1. Function Keys (F1 - F12)
+        list.add(new ShortcutHUDItem("F1", "Help & Step-by-Step Tutorials", "Interactive illustrated guide for drafting walls, openings, dimensions, and exports.", "Function Keys"));
+        list.add(new ShortcutHUDItem("F2", "Quick Access & Shortcuts HUD", "Instant cheat sheet popup of all hotkeys, function keys, and pro tips. Press F2 anytime.", "Function Keys"));
+        list.add(new ShortcutHUDItem("F3", "Grid Snap Precision Toggle", "Toggles 1'-0\" / 6\" magnetic snap precision for drawing straight walls and aligning fixtures.", "Function Keys"));
+        list.add(new ShortcutHUDItem("F4", "Live Collision & Overlap Check", "Toggles real-time architectural collision detection and overlap warnings for all elements.", "Function Keys"));
+        list.add(new ShortcutHUDItem("F5 / Ctrl+E", "Live Split Elevation Viewport", "Toggles 2D floor plan + synchronized live multi-facade projection (North, South, East, West facades & datum levels).", "Function Keys"));
+        list.add(new ShortcutHUDItem("F6", "Canvas Theme (Dark / White)", "Switches between Dark Blueprint CAD mode and Pure White Drafting Paper presentation mode.", "Function Keys"));
+        list.add(new ShortcutHUDItem("F7", "CAD Grid Lines Toggle", "Toggles background CAD architectural grid lines visibility on/off.", "Function Keys"));
+        list.add(new ShortcutHUDItem("F8", "Ortho Mode (0° / 90° Lock)", "Locks wall drafting to strict 90-degree horizontal or vertical angles for perfectly plumb walls.", "Function Keys"));
+        list.add(new ShortcutHUDItem("F9", "AutoCAD Crosshair Cursor", "Toggles full-screen architectural crosshair cursor with real-time coordinate guidelines.", "Function Keys"));
+        list.add(new ShortcutHUDItem("F11", "Zoom to Fit Drawing", "Automatically centers and fits the entire house plan and all elements within your screen view.", "Function Keys"));
+        list.add(new ShortcutHUDItem("F12", "Market Standards Selector", "Switches building code standards between India (NBC 9\"/4.5\" & Vastu) and USA (IRC 2x6/2x4 Studs).", "Function Keys"));
+
+        // 2. Drafting & CAD Tools
+        list.add(new ShortcutHUDItem("W", "Wall Drafting Tool", "Click and drag to draft continuous masonry (9\"/4.5\") or wood stud (6.5\"/4.5\") walls.", "Drafting Tools"));
+        list.add(new ShortcutHUDItem("S", "Select & Modify Tool", "Click walls or elements to select, drag, or edit blue grip endpoints.", "Drafting Tools"));
+        list.add(new ShortcutHUDItem("T", "Room Flooring Zone", "Drag a rectangular flooring boundary to apply tile, hardwood, or marble finishes.", "Drafting Tools"));
+        list.add(new ShortcutHUDItem("P", "Perimeter Hatch Polyline", "Click multiple perimeter points to trace custom irregular room floor boundaries. Press Enter to finish.", "Drafting Tools"));
+        list.add(new ShortcutHUDItem("H", "Hand / Pan Tool", "Click and drag anywhere on the canvas to pan your drawing view smoothly.", "Drafting Tools"));
+        list.add(new ShortcutHUDItem("Esc", "Cancel / Deselect", "Cancels active tool, aborts point-to-point dimensioning, or clears current selection.", "Drafting Tools"));
+        list.add(new ShortcutHUDItem("Enter", "Finish Polygon Hatch", "Closes multi-point perimeter outline and generates the selected architectural hatch pattern.", "Drafting Tools"));
+        list.add(new ShortcutHUDItem("Double Click", "Properties Inspector", "Double click any wall or fixture to view and edit its parameters in the Inspector panel.", "Drafting Tools"));
+
+        // 3. Editing & Transforms
+        list.add(new ShortcutHUDItem("R", "Rotate 90° Clockwise", "Rotates selected doors, windows, stairs, or fixtures by 90°. (Always rotate East/West vertical windows!).", "Editing & Transform"));
+        list.add(new ShortcutHUDItem("F", "Flip Horizontal", "Flips selected door swing or fixture horizontally across its center.", "Editing & Transform"));
+        list.add(new ShortcutHUDItem("V", "Flip Vertical (Inward Swing)", "Flips door swing vertically to swing inward into rooms against walls.", "Editing & Transform"));
+        list.add(new ShortcutHUDItem("Del / Backspace", "Delete Selected", "Removes all currently selected walls, doors, windows, dimensions, or furniture.", "Editing & Transform"));
+        list.add(new ShortcutHUDItem("Arrow Keys", "Micro-Nudge (1 Inch)", "Nudges selected items by exactly 1 inch for micro-alignment. Hold Shift for 6-inch steps.", "Editing & Transform"));
+        list.add(new ShortcutHUDItem("Ctrl + D", "Duplicate Elements", "Clones selected elements with automatic architectural spacing offset.", "Editing & Transform"));
+        list.add(new ShortcutHUDItem("Ctrl + A", "Select All", "Selects all elements and walls in the active project.", "Editing & Transform"));
+        list.add(new ShortcutHUDItem("Ctrl + ] / [", "Layer Depth Reorder", "Bring forward or send backward to control stacking order between walls, openings, and floors.", "Editing & Transform"));
+
+        // 4. File & Project Operations
+        list.add(new ShortcutHUDItem("Ctrl + N", "New House Plan", "Starts a fresh drawing project with customizable plot dimensions and facing.", "File & Project"));
+        list.add(new ShortcutHUDItem("Ctrl + O", "Open Project (.hde)", "Opens a saved native HDE Studio architectural CAD drawing file.", "File & Project"));
+        list.add(new ShortcutHUDItem("Ctrl + S", "Quick Save", "Instantly saves the current drawing to your local project database.", "File & Project"));
+        list.add(new ShortcutHUDItem("Ctrl + Shift + S", "Save As...", "Saves drawing under a new project name, folder, or backup drive.", "File & Project"));
+        list.add(new ShortcutHUDItem("Ctrl + Z", "Undo Action", "Reverses your last drafting action, wall placement, or modification.", "File & Project"));
+        list.add(new ShortcutHUDItem("Ctrl + Y", "Redo Action", "Restores your previously undone action.", "File & Project"));
+        list.add(new ShortcutHUDItem("Alt + S / Ctrl+Shift+T", "Staircase Generator", "Launches the architectural Staircase Library: Straight, Dog-Leg, L-Shape, Spiral & Bifurcated.", "File & Project"));
+        list.add(new ShortcutHUDItem("Ctrl + Shift + R", "Parametric Room Suite", "Generates instant 4-wall room assemblies with automated tags.", "File & Project"));
+        list.add(new ShortcutHUDItem("Ctrl + Shift + G", "Structural Grid", "Generates RCC column spacing and structural centerline grid.", "File & Project"));
+
+        // 5. Pro Tips
+        list.add(new ShortcutHUDItem("Door Inward Swings", "Architectural Code Compliance", "Doors must always swing inward against an adjacent wall. Select any door and press [V] or [F] to correct swing in 1 second.", "Pro Tips"));
+        list.add(new ShortcutHUDItem("Vertical Windows", "Proper East/West Alignment", "When placing windows on East or West vertical walls, press [R] to rotate 90° so glass sits flush in the wall.", "Pro Tips"));
+        list.add(new ShortcutHUDItem("Live Elevation (F5)", "Real-time Multi-Facade Sync", "Press [F5] to view split elevation. Click FRONT, REAR, LEFT, or RIGHT badges to inspect all 4 elevations as you draft!", "Pro Tips"));
+        list.add(new ShortcutHUDItem("Auto-Dimensioning", "One-Click Dimension Chains", "Click 'Auto Dims' in the top toolbar to automatically dimension all rooms, partitions, and perimeter plot walls without overlaps.", "Pro Tips"));
+        list.add(new ShortcutHUDItem("Wall Grip Editing", "Extend & Resize Walls", "Click any wall in Select mode [S] to reveal blue end grips. Drag either grip to extend, shorten, or angle the wall freely.", "Pro Tips"));
+        list.add(new ShortcutHUDItem("Vastu & Compass HUD", "Authentic Directional Rules", "Check the Compass Rose in the top-right corner to place Kitchen in South-East (Agni) and Master Bed in South-West (Nirruthi).", "Pro Tips"));
+        list.add(new ShortcutHUDItem("PDF Vector Export", "Client-Ready Blueprints", "Click 'PDF' in the top bar to export sharp, high-resolution vector blueprints in A4 or A3 with title block, scales, and client details.", "Pro Tips"));
+        list.add(new ShortcutHUDItem("Social Media Snip", "Reels & YouTube Formats", "Click the scissors icon in the toolbar to snip 9:16 vertical (Shorts/Reels) or 16:9 landscape presentations.", "Pro Tips"));
+
+        return list;
+    }
+
+    public void showQuickAccessShortcutsDialog() {
+        JDialog dlg = new JDialog(this, "HDE Studio — Quick Access & Shortcuts HUD", true);
+        dlg.setLayout(new BorderLayout());
+        dlg.getContentPane().setBackground(new Color(15, 23, 42)); // Slate-900
+        dlg.setSize(880, 640);
+        dlg.setMinimumSize(new Dimension(720, 500));
+        dlg.setLocationRelativeTo(this);
+        try { dlg.setIconImages(getIconImages()); } catch (Exception ignored) {}
+
+        // --- Top Header ---
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        headerPanel.setOpaque(false);
+        headerPanel.setBorder(new EmptyBorder(16, 22, 12, 22));
+
+        JPanel titleBlock = new JPanel();
+        titleBlock.setLayout(new BoxLayout(titleBlock, BoxLayout.Y_AXIS));
+        titleBlock.setOpaque(false);
+
+        JPanel badgeRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        badgeRow.setOpaque(false);
+
+        JLabel badgeIcon = new JLabel("⚡");
+        badgeIcon.setFont(new Font("Segoe UI Emoji", Font.BOLD, 15));
+        badgeIcon.setForeground(new Color(56, 189, 248));
+
+        JLabel titleLbl = new JLabel("QUICK ACCESS & SHORTCUTS HUD");
+        titleLbl.setFont(new Font("Segoe UI", Font.BOLD, 17));
+        titleLbl.setForeground(Color.WHITE);
+
+        JLabel keyPill = new JLabel(" PRESS [F2] ANYTIME ");
+        keyPill.setFont(new Font("Consolas", Font.BOLD, 10));
+        keyPill.setForeground(new Color(56, 189, 248));
+        keyPill.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(56, 189, 248, 160), 1, true),
+                BorderFactory.createEmptyBorder(2, 6, 2, 6)));
+
+        badgeRow.add(badgeIcon);
+        badgeRow.add(titleLbl);
+        badgeRow.add(keyPill);
+
+        JLabel subLbl = new JLabel("All Function Keys (F1-F12), drafting hotkeys, navigation controls & architectural pro tips at a glance.");
+        subLbl.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        subLbl.setForeground(new Color(148, 163, 184));
+        subLbl.setBorder(new EmptyBorder(4, 2, 0, 0));
+
+        titleBlock.add(badgeRow);
+        titleBlock.add(subLbl);
+        headerPanel.add(titleBlock, BorderLayout.WEST);
+
+        JLabel closeX = new JLabel(" ✕ ");
+        closeX.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        closeX.setForeground(new Color(148, 163, 184));
+        closeX.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        closeX.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) { dlg.dispose(); }
+        });
+        headerPanel.add(closeX, BorderLayout.EAST);
+
+        // --- Filter & Search Controls ---
+        JPanel topControls = new JPanel(new BorderLayout(0, 10));
+        topControls.setOpaque(false);
+        topControls.setBorder(new EmptyBorder(0, 22, 10, 22));
+
+        // Search Bar
+        JPanel searchBoxPanel = new JPanel(new BorderLayout(10, 0));
+        searchBoxPanel.setBackground(new Color(30, 41, 59));
+        searchBoxPanel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true),
+                new EmptyBorder(7, 12, 7, 12)));
+
+        JLabel searchIcon = new JLabel("🔍");
+        searchIcon.setForeground(new Color(148, 163, 184));
+        JTextField searchField = new JTextField();
+        searchField.setBackground(new Color(30, 41, 59));
+        searchField.setForeground(Color.WHITE);
+        searchField.setCaretColor(new Color(56, 189, 248));
+        searchField.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        searchField.setBorder(null);
+
+        JLabel clearSearchBtn = new JLabel("✕");
+        clearSearchBtn.setForeground(new Color(100, 116, 139));
+        clearSearchBtn.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        clearSearchBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        clearSearchBtn.setVisible(false);
+        clearSearchBtn.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) { searchField.setText(""); }
+        });
+
+        searchBoxPanel.add(searchIcon, BorderLayout.WEST);
+        searchBoxPanel.add(searchField, BorderLayout.CENTER);
+        searchBoxPanel.add(clearSearchBtn, BorderLayout.EAST);
+        topControls.add(searchBoxPanel, BorderLayout.NORTH);
+
+        // Category Filter Pills
+        String[] categoryTabs = new String[]{
+                "★ All (38)",
+                "⚡ Function Keys (F1-F12)",
+                "📐 Drafting Tools",
+                "✂ Editing & Transform",
+                "📁 File & Project",
+                "💡 Pro Tips"
+        };
+        final String[] activeTab = new String[]{"★ All (38)"};
+        JPanel pillsRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        pillsRow.setOpaque(false);
+
+        List<ModernButton> pillButtons = new ArrayList<>();
+
+        // Scrollable List of Cards
+        JPanel cardsContainer = new JPanel();
+        cardsContainer.setLayout(new BoxLayout(cardsContainer, BoxLayout.Y_AXIS));
+        cardsContainer.setBackground(new Color(15, 23, 42));
+        cardsContainer.setBorder(new EmptyBorder(4, 16, 16, 16));
+
+        JScrollPane scrollPane = new JScrollPane(cardsContainer);
+        scrollPane.setBorder(BorderFactory.createMatteBorder(1, 0, 1, 0, new Color(30, 41, 59)));
+        scrollPane.setBackground(new Color(15, 23, 42));
+        scrollPane.getViewport().setBackground(new Color(15, 23, 42));
+        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
+
+        List<ShortcutHUDItem> allItems = getShortcutHUDMasterList();
+
+        Runnable refreshList = () -> {
+            cardsContainer.removeAll();
+            String query = searchField.getText().trim().toLowerCase();
+            String tab = activeTab[0];
+
+            int count = 0;
+            for (ShortcutHUDItem item : allItems) {
+                // Category tab filtering
+                if (!tab.startsWith("★")) {
+                    if (tab.contains("Function") && !item.category.equals("Function Keys")) continue;
+                    if (tab.contains("Drafting") && !item.category.equals("Drafting Tools")) continue;
+                    if (tab.contains("Editing") && !item.category.equals("Editing & Transform")) continue;
+                    if (tab.contains("File") && !item.category.equals("File & Project")) continue;
+                    if (tab.contains("Tips") && !item.category.equals("Pro Tips")) continue;
+                }
+
+                // Text search filtering
+                if (!query.isEmpty()) {
+                    boolean match = item.keyBadge.toLowerCase().contains(query)
+                            || item.actionName.toLowerCase().contains(query)
+                            || item.description.toLowerCase().contains(query)
+                            || item.category.toLowerCase().contains(query);
+                    if (!match) continue;
+                }
+
+                cardsContainer.add(createShortcutCard(item));
+                cardsContainer.add(Box.createVerticalStrut(6));
+                count++;
+            }
+
+            if (count == 0) {
+                JPanel emptyP = new JPanel();
+                emptyP.setLayout(new BoxLayout(emptyP, BoxLayout.Y_AXIS));
+                emptyP.setOpaque(false);
+                emptyP.setBorder(new EmptyBorder(60, 20, 60, 20));
+
+                JLabel emptyIcon = new JLabel("🔎", SwingConstants.CENTER);
+                emptyIcon.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 28));
+                emptyIcon.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+                JLabel emptyLbl = new JLabel("No matching shortcuts or tips found for \"" + searchField.getText().trim() + "\"", SwingConstants.CENTER);
+                emptyLbl.setFont(new Font("Segoe UI", Font.BOLD, 13));
+                emptyLbl.setForeground(new Color(148, 163, 184));
+                emptyLbl.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+                JLabel tipLbl = new JLabel("Try searching for 'F5', 'wall', 'door', 'rotate', 'elevation', or clear your search filter.", SwingConstants.CENTER);
+                tipLbl.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+                tipLbl.setForeground(new Color(100, 116, 139));
+                tipLbl.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+                emptyP.add(emptyIcon);
+                emptyP.add(Box.createVerticalStrut(8));
+                emptyP.add(emptyLbl);
+                emptyP.add(Box.createVerticalStrut(4));
+                emptyP.add(tipLbl);
+                cardsContainer.add(emptyP);
+            }
+
+            cardsContainer.revalidate();
+            cardsContainer.repaint();
+        };
+
+        for (String cTab : categoryTabs) {
+            boolean isInit = cTab.equals(activeTab[0]);
+            ModernButton btn = new ModernButton(cTab,
+                    isInit ? new Color(2, 132, 199) : new Color(24, 33, 53),
+                    isInit ? Color.WHITE : new Color(148, 163, 184),
+                    new Color(56, 189, 248));
+            btn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+            btn.addActionListener(e -> {
+                activeTab[0] = cTab;
+                for (ModernButton b : pillButtons) {
+                    boolean sel = b.getText().equals(cTab);
+                    b.setBackground(sel ? new Color(2, 132, 199) : new Color(24, 33, 53));
+                    b.setForeground(sel ? Color.WHITE : new Color(148, 163, 184));
+                }
+                refreshList.run();
+            });
+            pillButtons.add(btn);
+            pillsRow.add(btn);
+        }
+        topControls.add(pillsRow, BorderLayout.SOUTH);
+
+        searchField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { update(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { update(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { update(); }
+            private void update() {
+                clearSearchBtn.setVisible(!searchField.getText().isEmpty());
+                refreshList.run();
+            }
+        });
+
+        JPanel northGroup = new JPanel(new BorderLayout());
+        northGroup.setOpaque(false);
+        northGroup.add(headerPanel, BorderLayout.NORTH);
+        northGroup.add(topControls, BorderLayout.SOUTH);
+        dlg.add(northGroup, BorderLayout.NORTH);
+
+        dlg.add(scrollPane, BorderLayout.CENTER);
+
+        // --- Bottom Footer ---
+        JPanel footer = new JPanel(new BorderLayout());
+        footer.setOpaque(false);
+        footer.setBorder(new EmptyBorder(10, 22, 12, 22));
+
+        JLabel footTip = new JLabel("⚡ Tip: Press [F2] anytime while drafting to instantly toggle this reference.");
+        footTip.setFont(new Font("Segoe UI", Font.ITALIC, 11));
+        footTip.setForeground(new Color(148, 163, 184));
+        footer.add(footTip, BorderLayout.WEST);
+
+        ModernButton closeBtn = new ModernButton("Close [Esc]", new Color(24, 33, 53), Color.WHITE, new Color(56, 189, 248));
+        closeBtn.setPreferredSize(new Dimension(110, 28));
+        closeBtn.addActionListener(e -> dlg.dispose());
+        footer.add(closeBtn, BorderLayout.EAST);
+
+        dlg.add(footer, BorderLayout.SOUTH);
+
+        // Key bindings for ESC and F2 to close
+        dlg.getRootPane().registerKeyboardAction(e -> dlg.dispose(), KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
+        dlg.getRootPane().registerKeyboardAction(e -> dlg.dispose(), KeyStroke.getKeyStroke(KeyEvent.VK_F2, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
+
+        refreshList.run();
+        dlg.setVisible(true);
+    }
+
+    private JPanel createShortcutCard(ShortcutHUDItem item) {
+        JPanel card = new JPanel(new BorderLayout(14, 0));
+        card.setBackground(new Color(24, 33, 53));
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true),
+                new EmptyBorder(8, 12, 8, 14)));
+        card.setMaximumSize(new Dimension(2000, 52));
+        card.setPreferredSize(new Dimension(800, 50));
+
+        // Key Badge Pill on Left
+        JPanel keyPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 4));
+        keyPanel.setOpaque(false);
+        keyPanel.setPreferredSize(new Dimension(135, 34));
+
+        JLabel keyLbl = new JLabel(item.keyBadge, SwingConstants.CENTER);
+        keyLbl.setFont(new Font("Consolas", Font.BOLD, 12));
+        keyLbl.setForeground(new Color(56, 189, 248)); // Bright Cyan
+        keyLbl.setBackground(new Color(15, 23, 42));
+        keyLbl.setOpaque(true);
+        keyLbl.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(56, 189, 248, 180), 1, true),
+                new EmptyBorder(3, 10, 3, 10)));
+        keyPanel.add(keyLbl);
+        card.add(keyPanel, BorderLayout.WEST);
+
+        // Center Details: Name + Description
+        JPanel center = new JPanel();
+        center.setLayout(new BoxLayout(center, BoxLayout.Y_AXIS));
+        center.setOpaque(false);
+
+        JLabel nameLbl = new JLabel(item.actionName);
+        nameLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        nameLbl.setForeground(Color.WHITE);
+
+        JLabel descLbl = new JLabel(item.description);
+        descLbl.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        descLbl.setForeground(new Color(203, 213, 225));
+
+        center.add(nameLbl);
+        center.add(Box.createVerticalStrut(2));
+        center.add(descLbl);
+        card.add(center, BorderLayout.CENTER);
+
+        // Category Pill on Right
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 8));
+        right.setOpaque(false);
+        right.setPreferredSize(new Dimension(135, 34));
+
+        JLabel catLbl = new JLabel(item.category.toUpperCase());
+        catLbl.setFont(new Font("Consolas", Font.BOLD, 9));
+        Color catCol = new Color(56, 189, 248);
+        Color catBg = new Color(14, 116, 144, 70);
+        if (item.category.equals("Function Keys")) {
+            catCol = new Color(251, 191, 36);
+            catBg = new Color(180, 83, 9, 70);
+        } else if (item.category.equals("Pro Tips")) {
+            catCol = new Color(52, 211, 153);
+            catBg = new Color(6, 95, 70, 70);
+        } else if (item.category.equals("Drafting Tools")) {
+            catCol = new Color(147, 197, 253);
+            catBg = new Color(30, 58, 138, 70);
+        } else if (item.category.equals("Editing & Transform")) {
+            catCol = new Color(244, 114, 182);
+            catBg = new Color(131, 24, 67, 70);
+        }
+        catLbl.setForeground(catCol);
+        catLbl.setBackground(catBg);
+        catLbl.setOpaque(true);
+        catLbl.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(catCol, 1, true),
+                new EmptyBorder(2, 6, 2, 6)));
+        right.add(catLbl);
+        card.add(right, BorderLayout.EAST);
+
+        return card;
     }
 
     private ImageIcon loadTutorialImage(String baseName, int targetWidth) {
