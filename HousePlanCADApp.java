@@ -6582,11 +6582,16 @@ public class HousePlanCADApp extends JFrame {
                 }
                 if (curT < len) solidSegs.add(new double[]{curT, len});
 
+                double eStart = getWallEndpointExtension(w, true);
+                double eEnd = getWallEndpointExtension(w, false);
+
                 for (double[] seg : solidSegs) {
                     if (seg[1] - seg[0] < 1.0) continue;
-                    Point pA = worldToScreen(w.x1 + ux * seg[0], w.y1 + uy * seg[0]);
-                    Point pB = worldToScreen(w.x1 + ux * seg[1], w.y1 + uy * seg[1]);
-                    combinedWallsArea.add(new Area(createWallSegmentPath(pA, pB, thickScreen)));
+                    double e1 = (seg[0] <= 0.05) ? eStart : 0.0;
+                    double e2 = (seg[1] >= len - 0.05) ? eEnd : 0.0;
+                    Point pA = worldToScreen(w.x1 + ux * (seg[0] - e1), w.y1 + uy * (seg[0] - e1));
+                    Point pB = worldToScreen(w.x1 + ux * (seg[1] + e2), w.y1 + uy * (seg[1] + e2));
+                    combinedWallsArea.add(new Area(createWallSegmentPathExact(pA, pB, thickScreen)));
                 }
 
                 for (double[] c : merged) {
@@ -6662,6 +6667,20 @@ public class HousePlanCADApp extends JFrame {
             g2.fillRect(x - 4, y - 4, 8, 8);
             g2.setColor(lightThemeEnabled ? new Color(15, 23, 42) : Color.WHITE);
             g2.drawRect(x - 4, y - 4, 8, 8);
+        }
+
+        private Path2D.Double createWallSegmentPathExact(Point p1, Point p2, float thick) {
+            double dx = p2.x - p1.x, dy = p2.y - p1.y;
+            double len = Math.hypot(dx, dy);
+            if (len == 0) return new Path2D.Double();
+            double px = (-dy / len) * (thick / 2.0), py = (dx / len) * (thick / 2.0);
+            Path2D.Double path = new Path2D.Double();
+            path.moveTo(p1.x + px, p1.y + py);
+            path.lineTo(p2.x + px, p2.y + py);
+            path.lineTo(p2.x - px, p2.y - py);
+            path.lineTo(p1.x - px, p1.y - py);
+            path.closePath();
+            return path;
         }
 
         private Path2D.Double createWallSegmentPath(Point p1, Point p2, float thick) {
@@ -14264,7 +14283,7 @@ public class HousePlanCADApp extends JFrame {
             int ey = cy - (int)(Math.sin(Math.toRadians(290)) * walkR);
             g2.fillPolygon(new int[]{ex - 4, ex + 4, ex}, new int[]{ey - 6, ey - 6, ey + 2}, 3);
 
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(9, (int)(10 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 8));
             g2.drawString("UP \u21bb", cx - 14, cy + centerR + 14);
 
         } else if ("stair-dogleg".equals(type)) {
@@ -14302,7 +14321,7 @@ public class HousePlanCADApp extends JFrame {
             g2.fillOval(wLeft - 3, sh - 12, 6, 6);
             g2.fillPolygon(new int[]{wRight - 4, wRight + 4, wRight}, new int[]{sh - 14, sh - 14, sh - 6}, 3);
 
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(9, (int)(10 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 8));
             g2.drawString("UP \u2191", wLeft - 12, sh - 16);
             g2.drawString("LANDING", midX - 22, landingH / 2 + 4);
 
@@ -14344,7 +14363,7 @@ public class HousePlanCADApp extends JFrame {
             g2.fillOval(wX1 - 3, sh - 12, 6, 6);
             g2.fillPolygon(new int[]{14, 14, 6}, new int[]{wY2 - 4, wY2 + 4, wY2}, 3);
 
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 8));
             g2.drawString("UP \u2191", wX1 - 10, sh - 16);
             g2.drawString("LANDING", sw - landW + 4, landH / 2 + 4);
 
@@ -14386,7 +14405,7 @@ public class HousePlanCADApp extends JFrame {
             g2.fillOval(wLeft - 3, sh - 12, 6, 6);
             g2.fillPolygon(new int[]{wRight - 4, wRight + 4, wRight}, new int[]{sh - 14, sh - 14, sh - 6}, 3);
 
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 8));
             g2.drawString("WELL", fW + 4, landingH + (sh - landingH) / 2);
             g2.drawString("UP \u2191", wLeft - 12, sh - 16);
 
@@ -14443,7 +14462,7 @@ public class HousePlanCADApp extends JFrame {
             g2.fillPolygon(new int[]{sideFlightW / 2 - 4, sideFlightW / 2 + 4, sideFlightW / 2}, new int[]{14, 14, 6}, 3);
             g2.fillPolygon(new int[]{sw - sideFlightW / 2 - 4, sw - sideFlightW / 2 + 4, sw - sideFlightW / 2}, new int[]{14, 14, 6}, 3);
 
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(9, (int)(10 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 8));
             g2.drawString("GRAND STAIR", midX - 32, landingY + landingH / 2 + 4);
 
         } else {
@@ -14478,7 +14497,7 @@ public class HousePlanCADApp extends JFrame {
             g2.fillOval(sw / 2 - 3, sh - 12, 6, 6);
             g2.fillPolygon(new int[]{sw / 2 - 4, sw / 2 + 4, sw / 2}, new int[]{16, 16, 8}, 3);
 
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(9, (int)(10 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 8));
             g2.drawString("UP \u2191", sw / 2 - 12, sh - 18);
         }
     }
@@ -17329,6 +17348,26 @@ public class HousePlanCADApp extends JFrame {
         }, null);
     }
 
+    /**
+     * Calculates the required geometric extension at a wall's endpoint (start or end)
+     * so that corners and T-junctions meet seamlessly without missing notches or corner gaps.
+     */
+    public double getWallEndpointExtension(Wall w, boolean isStart) {
+        double px = isStart ? w.x1 : w.x2;
+        double py = isStart ? w.y1 : w.y2;
+        double wallThickPx = (w.thicknessInches / 12.0) * FT_PX;
+        double thresh = Math.max(16.0, wallThickPx * 1.5);
+        double maxExt = 0;
+        for (Wall other : walls) {
+            if (other == w) continue;
+            double d = Line2D.ptSegDist(other.x1, other.y1, other.x2, other.y2, px, py);
+            if (d <= thresh) {
+                double otherHThick = (other.thicknessInches / 24.0) * FT_PX;
+                maxExt = Math.max(maxExt, otherHThick);
+            }
+        }
+        return maxExt;
+    }
 
     /**
      * Professional Architectural Drawing Renderer.
@@ -17616,11 +17655,15 @@ public class HousePlanCADApp extends JFrame {
 
             double hThick = wallThickPx / 2.0;
             double nx = -uy, ny = ux;
+            double eStart = getWallEndpointExtension(w, true);
+            double eEnd = getWallEndpointExtension(w, false);
 
             for (double[] seg : solidSegs) {
                 if (seg[1] - seg[0] < 1.0) continue;
-                double sx1 = w.x1 + ux * seg[0], sy1 = w.y1 + uy * seg[0];
-                double sx2 = w.x1 + ux * seg[1], sy2 = w.y1 + uy * seg[1];
+                double e1 = (seg[0] <= 0.05) ? eStart : 0.0;
+                double e2 = (seg[1] >= len - 0.05) ? eEnd : 0.0;
+                double sx1 = w.x1 + ux * (seg[0] - e1), sy1 = w.y1 + uy * (seg[0] - e1);
+                double sx2 = w.x1 + ux * (seg[1] + e2), sy2 = w.y1 + uy * (seg[1] + e2);
 
                 Path2D.Double wp = new Path2D.Double();
                 wp.moveTo(sx1 + nx * hThick, sy1 + ny * hThick);
@@ -17684,7 +17727,7 @@ public class HousePlanCADApp extends JFrame {
                 if (el.flipV) g2.scale(1, -1);
                 g2.translate(-ew / 2.0, -eh / 2.0);
 
-                renderAutoCADBlock(g2, el, ew, eh, isMonochrome, scale);
+                renderAutoCADBlock(g2, el, ew, eh, isMonochrome, 1.0);
 
                 g2.setTransform(elTx);
             }
@@ -17704,7 +17747,7 @@ public class HousePlanCADApp extends JFrame {
             if (el.flipV) g2.scale(1, -1);
             g2.translate(-ew / 2.0, -eh / 2.0);
 
-            renderAutoCADBlock(g2, el, ew, eh, isMonochrome, scale);
+            renderAutoCADBlock(g2, el, ew, eh, isMonochrome, 1.0);
 
             g2.setTransform(elTx);
         }
@@ -18509,7 +18552,7 @@ public class HousePlanCADApp extends JFrame {
                 if (ch >= 'A' && ch <= 'Z') letter = String.valueOf(ch);
             }
 
-            g2.setFont(new Font("Segoe UI", Font.BOLD, Math.max(8, (int)(9 * scale))));
+            g2.setFont(new Font("Segoe UI", Font.BOLD, 9));
             FontMetrics fmb = g2.getFontMetrics();
             g2.drawString(letter, bubR - fmb.stringWidth(letter) / 2, cy + fmb.getAscent() / 2 - 2);
             String letterP = letter + "'";
@@ -18725,7 +18768,7 @@ public class HousePlanCADApp extends JFrame {
             g2.setColor(elecCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(0, 0, sw, sh);
             g2.setStroke(new BasicStroke(sHair));
             for (int i = 1; i <= 3; i++) g2.drawLine(4, (sh / 4) * i, sw - 4, (sh / 4) * i);
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 7));
             g2.drawString("AC", 4, sh / 2 + 3);
 
         } else if (type.equals("light-point")) {
@@ -18905,7 +18948,7 @@ public class HousePlanCADApp extends JFrame {
             }
 
             g2.setColor(kitCol);
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 7));
             String lbl = type.equals("set-usa-kitchen-island") ? "CHEF ISLAND KITCHEN" : "ISLAND KITCHEN";
             g2.drawString(lbl, isX + (isW - g2.getFontMetrics().stringWidth(lbl)) / 2, isY + isH / 2 + 3);
 
@@ -18930,7 +18973,7 @@ public class HousePlanCADApp extends JFrame {
             drawAutoCADCooktop(g2, 6, d + 10, d - 4, stoveH, sMed, sHair, kitCol);
 
             g2.setColor(kitCol);
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 7));
             g2.drawString("U-KITCHEN SUITE", sw / 2 - 36, sh - 12);
 
         } else if (type.equals("set-kitchen-l")) {
@@ -18953,7 +18996,7 @@ public class HousePlanCADApp extends JFrame {
             drawAutoCADSink(g2, 6, d + 8, d - 4, sinkH, sMed, sHair, kitCol);
 
             g2.setColor(kitCol);
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 7));
             g2.drawString("L-KITCHEN", d + 10, sh - 12);
 
         } else if (type.equals("set-kitchen-parallel")) {
@@ -18973,7 +19016,7 @@ public class HousePlanCADApp extends JFrame {
             drawAutoCADSink(g2, sw / 2 - (int)(sw * 0.15), sh - d - 2, (int)(sw * 0.3), d - 4, sMed, sHair, kitCol);
 
             g2.setColor(kitCol);
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 7));
             g2.drawString("PARALLEL KITCHEN", 10, sh / 2 + 3);
 
         } else if (type.equals("set-kitchen-linear")) {
@@ -18987,7 +19030,7 @@ public class HousePlanCADApp extends JFrame {
 
             int frW = (int)(sw * 0.22);
             g2.drawRect(6, 6, frW, d - 4);
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(7, (int)(7 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 7));
             g2.drawString("REF", 10, d / 2 + 4);
 
             drawAutoCADSink(g2, frW + 10, 6, (int)(sw * 0.32), d - 4, sMed, sHair, kitCol);
@@ -19072,7 +19115,7 @@ public class HousePlanCADApp extends JFrame {
                 g2.drawRect(6, rugY + 6, armW, armH); g2.drawRect(sw - armW - 6, rugY + 6, armW, armH);
             }
 
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 7));
             String lbl = type.equals("set-usa-greatroom") ? "OPEN GREAT ROOM" : "GRAND LIVING SUITE";
             g2.drawString(lbl, 12, sh - 8);
 
@@ -19099,7 +19142,7 @@ public class HousePlanCADApp extends JFrame {
             g2.setColor(Color.WHITE); g2.fillOval((sw - rDia) / 2, (int)(sh * 0.44), rDia, rDia);
             g2.setColor(furnCol); g2.setStroke(new BasicStroke(sMed)); g2.drawOval((sw - rDia) / 2, (int)(sh * 0.44), rDia, rDia);
 
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 7));
             g2.drawString("HEARTH & FIREPLACE", 12, sh - 8);
 
         } else if (type.equals("set-living-full") || type.equals("set-living-compact") || type.equals("set-living-square") || type.equals("set-living-sectional")) {
@@ -19140,7 +19183,7 @@ public class HousePlanCADApp extends JFrame {
                 g2.setColor(furnCol); g2.drawRect((sw - tblW) / 2, (sh - tblH) / 2, tblW, tblH);
             }
 
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 7));
             g2.drawString(el.name.toUpperCase(), 10, sh - 8);
 
         // 3. Dining Sets & Breakfast Nook
@@ -19173,7 +19216,7 @@ public class HousePlanCADApp extends JFrame {
                 g2.drawRect(tX + tW + 1, tY + tH / 2 - 8, 6, 16);
             }
 
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 7));
             g2.drawString(el.name.toUpperCase(), tX + 4, tY + tH / 2 + 3);
 
         } else if (type.equals("set-dining-round")) {
@@ -19191,7 +19234,7 @@ public class HousePlanCADApp extends JFrame {
                 int cy = (int)(sh / 2 + (r + 8) * Math.sin(ang));
                 drawAutoCADStool(g2, cx, cy, Math.max(4, (int)(5 * scale)), sMed, sHair, furnCol);
             }
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 7));
             g2.drawString("ROUND DINING", sw / 2 - 28, sh / 2 + 3);
 
         } else if (type.equals("set-usa-breakfast-nook")) {
@@ -19210,7 +19253,7 @@ public class HousePlanCADApp extends JFrame {
             g2.setColor(Color.WHITE); g2.fillRect(32, 28, tbW, tbH);
             g2.setColor(furnCol); g2.drawRect(32, 28, tbW, tbH);
 
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(7, (int)(8 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 7));
             g2.drawString("BREAKFAST NOOK", 10, sh - 8);
 
         // 4. Primary Suite & Walk-In Closets
@@ -19229,7 +19272,7 @@ public class HousePlanCADApp extends JFrame {
                 g2.drawLine(wicX + 4, y, wicX + 14, y);
                 g2.drawLine(sw - 16, y, sw - 6, y);
             }
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(7, (int)(7 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 7));
             g2.drawString("W.I.C.", wicX + 8, sh / 2);
 
             // King Bed left
@@ -19247,7 +19290,7 @@ public class HousePlanCADApp extends JFrame {
             g2.drawRect(bedX - 16, bedY + 4, 12, 14);
             g2.drawRect(bedX - 16, bedY + bedH - 18, 12, 14);
 
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 7));
             g2.drawString("PRIMARY SUITE + WIC", 10, sh - 8);
 
         } else if (type.equals("set-usa-walkin-closet")) {
@@ -19264,7 +19307,7 @@ public class HousePlanCADApp extends JFrame {
             int isW = (int)(sw * 0.3), isH = (int)(sh * 0.35);
             g2.setColor(Color.WHITE); g2.fillRect((sw - isW) / 2, (sh - isH) / 2 + 10, isW, isH);
             g2.setColor(furnCol); g2.drawRect((sw - isW) / 2, (sh - isH) / 2 + 10, isW, isH);
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(7, (int)(8 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 7));
             g2.drawString("WALK-IN CLOSET (WIC)", (sw - isW) / 2 - 14, sh - 4);
 
         // 5. Bedroom Suites
@@ -19322,7 +19365,7 @@ public class HousePlanCADApp extends JFrame {
                 g2.drawRect(bedX + bedW + 4, bedY, standW, standW);
             }
 
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(9 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 7));
             g2.drawString(el.name.toUpperCase(), 10, sh - 8);
 
         // 6. Home Office & Study
@@ -19350,7 +19393,7 @@ public class HousePlanCADApp extends JFrame {
                 g2.drawLine(sw / 2, 6, sw / 2, 6 + dH);
             }
 
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 7));
             g2.drawString(el.name.toUpperCase(), 10, sh - 8);
 
         // 7. Bathrooms
@@ -19388,7 +19431,7 @@ public class HousePlanCADApp extends JFrame {
                 g2.drawOval(sw - toiletW - 6, sh - toiletH - 8 + toiletH / 4, toiletW - 4, (int)(toiletH * 0.75));
             }
 
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 7));
             g2.drawString(el.name.toUpperCase(), 10, sh - 4);
 
         // 8. Mudroom, Entry, Laundry & Mechanical
@@ -19423,7 +19466,7 @@ public class HousePlanCADApp extends JFrame {
                 drawAutoCADSink(g2, appW * 2 + 20, 6, sW, appH, sMed, sHair, kitCol);
             }
 
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(8, (int)(8 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 7));
             g2.drawString(el.name.toUpperCase(), 10, sh - 8);
 
         } else if (type.equals("set-usa-mechanical")) {
@@ -19478,19 +19521,19 @@ public class HousePlanCADApp extends JFrame {
             g2.setStroke(new BasicStroke(sHair, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, dashPattern, 0));
             g2.drawRoundRect(0, 0, sw, sh, 6, 6);
             g2.setColor(primaryCol);
-            g2.setFont(new Font("Consolas", Font.BOLD, Math.max(9, (int)(9 * scale))));
+            g2.setFont(new Font("Consolas", Font.BOLD, 7));
             FontMetrics fm = g2.getFontMetrics();
             g2.drawString(el.name, Math.max(6, (sw - fm.stringWidth(el.name)) / 2), Math.max(14, sh / 2));
             String dimStr = String.format("%.1f' x %.1f'", el.w / 12.0, el.h / 12.0);
             FontMetrics dfm = g2.getFontMetrics();
-            g2.setFont(new Font("Consolas", Font.PLAIN, Math.max(7, (int)(8 * scale))));
-            g2.drawString(dimStr, Math.max(6, (sw - dfm.stringWidth(dimStr)) / 2), Math.max(14, sh / 2) + 14);
+            g2.setFont(new Font("Consolas", Font.PLAIN, 7));
+            g2.drawString(dimStr, Math.max(6, (sw - dfm.stringWidth(dimStr)) / 2), Math.max(14, sh / 2) + 12);
 
         // ─── GENERIC FALLBACK ───
         } else {
             g2.setColor(Color.WHITE); g2.fillRect(0, 0, sw, sh);
             g2.setColor(primaryCol); g2.setStroke(new BasicStroke(sMed)); g2.drawRect(0, 0, sw, sh);
-            g2.setFont(new Font("Consolas", Font.PLAIN, Math.max(8, (int)(8 * scale))));
+            g2.setFont(new Font("Consolas", Font.PLAIN, 7));
             g2.drawString(el.name, 4, sh / 2 + 3);
         }
     }
