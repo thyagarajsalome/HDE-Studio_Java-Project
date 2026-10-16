@@ -642,13 +642,23 @@ public class HousePlanCADApp extends JFrame {
         loadUserPreferences();
         initUI();
         initAutoSaveEngine();
-        if (currentRegion == RegionProfile.USA_INTERNATIONAL) {
-            loadPresetUSARanch();
-        } else {
-            loadPreset30x40();
-        }
         enableDarkWindowTitle();
-        checkAutoSaveRecoveryOnStartup();
+
+        boolean firstRun = isFirstRun();
+        if (firstRun) {
+            cleanAutoSaveRecoveryFile();
+            SwingUtilities.invokeLater(() -> {
+                showRegionSelectorDialog(true);
+            });
+        } else {
+            if (currentRegion == RegionProfile.USA_INTERNATIONAL) {
+                loadPresetUSARanch();
+            } else {
+                loadPreset30x40();
+            }
+            checkAutoSaveRecoveryOnStartup();
+        }
+
         if (!LicenseManager.isActivated()) {
             boolean ok = showStartupActivationDialog();
             if (!ok || !LicenseManager.isActivated()) {
@@ -656,11 +666,7 @@ public class HousePlanCADApp extends JFrame {
                 return;
             }
         }
-        if (isFirstRun()) {
-            SwingUtilities.invokeLater(() -> {
-                showRegionSelectorDialog(true);
-            });
-        }
+
         // Background check for software updates 3 seconds after startup
         new javax.swing.Timer(3000, evt -> {
             ((javax.swing.Timer)evt.getSource()).stop();
@@ -1983,6 +1989,17 @@ public class HousePlanCADApp extends JFrame {
         applyBtn.setPreferredSize(new Dimension(140, 30));
         applyBtn.addActionListener(e -> {
             setRegionProfile(selected[0]);
+            saveUserPreferences();
+            if (isFirstRun) {
+                if (selected[0] == RegionProfile.USA_INTERNATIONAL) {
+                    loadPresetUSARanch();
+                } else {
+                    loadPreset30x40();
+                }
+                if (viewportPanel != null) {
+                    viewportPanel.zoomToFit();
+                }
+            }
             dlg.dispose();
         });
         btnRow.add(applyBtn);
@@ -1993,7 +2010,24 @@ public class HousePlanCADApp extends JFrame {
         dlg.setContentPane(root);
         dlg.pack();
         dlg.setSize(760, 420);
-        dlg.setLocationRelativeTo(this);
+        dlg.setLocationRelativeTo(isVisible() ? this : null);
+        dlg.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosed(WindowEvent e) {
+                if (isFirstRun && walls.isEmpty() && elements.isEmpty()) {
+                    setRegionProfile(selected[0]);
+                    saveUserPreferences();
+                    if (selected[0] == RegionProfile.USA_INTERNATIONAL) {
+                        loadPresetUSARanch();
+                    } else {
+                        loadPreset30x40();
+                    }
+                    if (viewportPanel != null) {
+                        viewportPanel.zoomToFit();
+                    }
+                }
+            }
+        });
         dlg.setVisible(true);
     }
 
@@ -10231,46 +10265,102 @@ public class HousePlanCADApp extends JFrame {
         double ox = 120.0, oy = 120.0;
         double pw = 30.0 * FT_PX, ph = 40.0 * FT_PX;
 
-        // Exterior Perimeter Walls (9" Brickwork)
-        walls.add(new Wall(ox, oy, ox + pw, oy, 9.0));
-        walls.add(new Wall(ox + pw, oy, ox + pw, oy + ph, 9.0));
-        walls.add(new Wall(ox + pw, oy + ph, ox, oy + ph, 9.0));
-        walls.add(new Wall(ox, oy + ph, ox, oy, 9.0));
+        // 1. Exterior Perimeter Walls (9" Solid Brickwork)
+        walls.add(new Wall(ox, oy, ox + pw, oy, 9.0)); // North Wall
+        walls.add(new Wall(ox + pw, oy, ox + pw, oy + ph, 9.0)); // East Wall
+        walls.add(new Wall(ox + pw, oy + ph, ox, oy + ph, 9.0)); // South Wall
+        walls.add(new Wall(ox, oy + ph, ox, oy, 9.0)); // West Wall
 
-        // Interior Partitions (6" and 4.5" Walls)
-        double divY = oy + 22.0 * FT_PX;
-        walls.add(new Wall(ox, divY, ox + pw, divY, 6.0)); // Living / Bedroom divider
-        double bedDivX = ox + 17.0 * FT_PX;
-        walls.add(new Wall(bedDivX, divY, bedDivX, oy + ph, 6.0)); // Bedroom / Bath-Kitchen divider
-        double bathY = oy + 31.0 * FT_PX;
-        walls.add(new Wall(bedDivX, bathY, ox + pw, bathY, 4.5)); // Kitchen / Bath divider
+        // 2. Interior Partitions (6" and 4.5" Brickwork)
+        double midY = oy + 20.0 * FT_PX;
+        walls.add(new Wall(ox, midY, ox + pw, midY, 6.0)); // Central Horizontal Spine
 
-        // Doors & Openings with Wall Cut-Through
-        elements.add(new CADElement("door", "Main Entry 3'-6\"", ox + 8.0 * FT_PX, oy - 0.375 * FT_PX, 3.5 * FT_PX, 0.75 * FT_PX));
-        elements.add(new CADElement("door", "Bed Door 3'-0\"", bedDivX - 3.5 * FT_PX, divY - 0.25 * FT_PX, 3.0 * FT_PX, 0.5 * FT_PX));
-        elements.add(new CADElement("door", "Kitchen Door 3'-0\"", ox + pw - 3.5 * FT_PX, divY - 0.25 * FT_PX, 3.0 * FT_PX, 0.5 * FT_PX));
-        elements.add(new CADElement("door", "Bath Door 2'-6\"", bedDivX + 0.5 * FT_PX, bathY - 0.2 * FT_PX, 2.5 * FT_PX, 0.375 * FT_PX));
+        double bed2X = ox + 12.0 * FT_PX;
+        walls.add(new Wall(bed2X, oy, bed2X, midY, 4.5)); // Bed 2 / Foyer Divider
 
-        // Windows
-        elements.add(new CADElement("window", "Living Window 5'", ox + 16.0 * FT_PX, oy - 0.375 * FT_PX, 5.0 * FT_PX, 0.75 * FT_PX));
-        elements.add(new CADElement("window", "Bed Window 4'", ox + 4.0 * FT_PX, oy + ph - 0.375 * FT_PX, 4.0 * FT_PX, 0.75 * FT_PX));
-        elements.add(new CADElement("window", "Kitchen Window 3'", ox + pw - 0.375 * FT_PX, divY + 4.0 * FT_PX, 3.0 * FT_PX, 0.75 * FT_PX));
-        elements.add(new CADElement("window", "Bath Ventilator 2'", ox + pw - 0.375 * FT_PX, bathY + 4.0 * FT_PX, 2.0 * FT_PX, 0.75 * FT_PX));
+        double bathY = oy + 14.0 * FT_PX;
+        walls.add(new Wall(ox, bathY, bed2X, bathY, 4.5)); // Bed 2 / Common Bath Divider
 
-        // Room Labels & Area Identifiers
-        elements.add(new CADElement("tag", "LIVING / DINING\n30'-0\" \u00d7 22'-0\"", ox + 8.0 * FT_PX, oy + 9.0 * FT_PX, 14.0 * FT_PX, 4.0 * FT_PX));
-        elements.add(new CADElement("tag", "MASTER BEDROOM\n17'-0\" \u00d7 18'-0\"", ox + 3.0 * FT_PX, divY + 8.0 * FT_PX, 11.0 * FT_PX, 4.0 * FT_PX));
-        elements.add(new CADElement("tag", "KITCHEN\n13'-0\" \u00d7 9'-0\"", bedDivX + 2.0 * FT_PX, divY + 4.0 * FT_PX, 9.0 * FT_PX, 3.0 * FT_PX));
-        elements.add(new CADElement("tag", "BATHROOM\n13'-0\" \u00d7 9'-0\"", bedDivX + 2.0 * FT_PX, bathY + 4.0 * FT_PX, 9.0 * FT_PX, 3.0 * FT_PX));
-        elements.add(new CADElement("north-arrow", "North", ox + pw + 3.0 * FT_PX, oy + 2.0 * FT_PX, 3.0 * FT_PX, 3.0 * FT_PX));
+        double midX = ox + 15.0 * FT_PX;
+        walls.add(new Wall(midX, midY, midX, oy + ph, 4.5)); // Master Bed / Kitchen-Dining Spine
 
-        // Complete Architectural Dimensions
+        double kitY = oy + 29.0 * FT_PX;
+        walls.add(new Wall(midX, kitY, ox + pw, kitY, 4.5)); // Dining / Kitchen Divider
+
+        // 3. Doors (All swinging inward against walls)
+        CADElement dMain = new CADElement("door", "Main Entry 3'-6\"", ox + 15.0 * FT_PX, oy - 0.375 * FT_PX, 3.5 * FT_PX, 0.75 * FT_PX);
+        dMain.flipV = true; // Inward swing into Living Hall
+        elements.add(dMain);
+
+        CADElement dBed2 = new CADElement("door", "Bed 2 Door 3'-0\"", bed2X - 1.5 * FT_PX, oy + 2.5 * FT_PX - 0.1875 * FT_PX, 3.0 * FT_PX, 0.375 * FT_PX);
+        dBed2.rotation = 90;
+        dBed2.flipH = true; // Inward swing into Bed 2 against North wall
+        elements.add(dBed2);
+
+        CADElement dBath = new CADElement("door", "Bath Door 2'-6\"", bed2X - 1.25 * FT_PX, oy + 17.0 * FT_PX - 0.1875 * FT_PX, 2.5 * FT_PX, 0.375 * FT_PX);
+        dBath.rotation = 90;
+        dBath.flipH = true; // Inward swing into Bath
+        elements.add(dBath);
+
+        CADElement dMaster = new CADElement("door", "Master Bed Door 3'-0\"", ox + 3.0 * FT_PX, midY - 0.25 * FT_PX, 3.0 * FT_PX, 0.5 * FT_PX);
+        dMaster.flipV = true; // Inward swing into Master Bed against West wall
+        elements.add(dMaster);
+
+        CADElement dUtil = new CADElement("door", "Utility Door 2'-8\"", ox + 24.0 * FT_PX, oy + ph - 0.375 * FT_PX, 2.67 * FT_PX, 0.75 * FT_PX);
+        dUtil.flipV = false; // Inward swing into Kitchen against South wall
+        elements.add(dUtil);
+
+        CADElement opKit = new CADElement("opening-wall", "Kitchen Arch 4'-0\"", ox + 20.0 * FT_PX, kitY - 0.1875 * FT_PX, 4.0 * FT_PX, 0.375 * FT_PX);
+        elements.add(opKit);
+
+        // 4. Windows (Horizontal: rot 0; Vertical: rot 90)
+        elements.add(new CADElement("window", "Living Front 5'-0\"", ox + 22.0 * FT_PX, oy - 0.375 * FT_PX, 5.0 * FT_PX, 0.75 * FT_PX));
+
+        CADElement wLivEast = new CADElement("window", "Living East 4'-0\"", ox + pw - 2.0 * FT_PX, oy + 10.0 * FT_PX - 0.375 * FT_PX, 4.0 * FT_PX, 0.75 * FT_PX);
+        wLivEast.rotation = 90;
+        elements.add(wLivEast);
+
+        elements.add(new CADElement("window", "Bed 2 North 4'-0\"", ox + 4.0 * FT_PX, oy - 0.375 * FT_PX, 4.0 * FT_PX, 0.75 * FT_PX));
+
+        CADElement wBed2West = new CADElement("window", "Bed 2 West 3'-6\"", ox - 1.75 * FT_PX, oy + 7.0 * FT_PX - 0.375 * FT_PX, 3.5 * FT_PX, 0.75 * FT_PX);
+        wBed2West.rotation = 90;
+        elements.add(wBed2West);
+
+        CADElement vBath = new CADElement("window-vent", "Bath Vent 2'-0\"", ox - 1.0 * FT_PX, oy + 17.0 * FT_PX - 0.375 * FT_PX, 2.0 * FT_PX, 0.75 * FT_PX);
+        vBath.rotation = 90;
+        elements.add(vBath);
+
+        elements.add(new CADElement("window", "Master South 5'-0\"", ox + 5.0 * FT_PX, oy + ph - 0.375 * FT_PX, 5.0 * FT_PX, 0.75 * FT_PX));
+
+        CADElement wMastWest = new CADElement("window", "Master West 4'-0\"", ox - 2.0 * FT_PX, oy + 30.0 * FT_PX - 0.375 * FT_PX, 4.0 * FT_PX, 0.75 * FT_PX);
+        wMastWest.rotation = 90;
+        elements.add(wMastWest);
+
+        CADElement wDinEast = new CADElement("window", "Dining East 4'-0\"", ox + pw - 2.0 * FT_PX, oy + 24.5 * FT_PX - 0.375 * FT_PX, 4.0 * FT_PX, 0.75 * FT_PX);
+        wDinEast.rotation = 90;
+        elements.add(wDinEast);
+
+        CADElement wKitEast = new CADElement("window", "Kitchen East 3'-6\"", ox + pw - 1.75 * FT_PX, oy + 34.5 * FT_PX - 0.375 * FT_PX, 3.5 * FT_PX, 0.75 * FT_PX);
+        wKitEast.rotation = 90;
+        elements.add(wKitEast);
+
+        // 5. Room Labels (Vastu & NBC Compliant)
+        elements.add(new CADElement("tag", "LIVING & DINING FOYER\n18'-0\" \u00d7 20'-0\"\n360 SQ.FT", ox + 14.0 * FT_PX, oy + 8.0 * FT_PX, 14.0 * FT_PX, 4.0 * FT_PX));
+        elements.add(new CADElement("tag", "BEDROOM 02\n12'-0\" \u00d7 14'-0\"\n168 SQ.FT", ox + 1.5 * FT_PX, oy + 5.5 * FT_PX, 9.0 * FT_PX, 3.5 * FT_PX));
+        elements.add(new CADElement("tag", "COMMON TOILET\n12'-0\" \u00d7 6'-0\"\n72 SQ.FT", ox + 1.5 * FT_PX, bathY + 1.2 * FT_PX, 9.0 * FT_PX, 3.0 * FT_PX));
+        elements.add(new CADElement("tag", "MASTER BEDROOM\n15'-0\" \u00d7 20'-0\"\n300 SQ.FT", ox + 2.0 * FT_PX, midY + 8.0 * FT_PX, 11.0 * FT_PX, 4.0 * FT_PX));
+        elements.add(new CADElement("tag", "DINING / POOJA\n15'-0\" \u00d7 9'-0\"\n135 SQ.FT", midX + 1.5 * FT_PX, midY + 3.0 * FT_PX, 11.0 * FT_PX, 3.0 * FT_PX));
+        elements.add(new CADElement("tag", "MODULAR KITCHEN\n15'-0\" \u00d7 11'-0\"\n165 SQ.FT", midX + 1.5 * FT_PX, kitY + 3.5 * FT_PX, 11.0 * FT_PX, 3.5 * FT_PX));
+        elements.add(new CADElement("north-arrow", "North", ox + pw + 3.5 * FT_PX, oy + 2.0 * FT_PX, 3.0 * FT_PX, 3.0 * FT_PX));
+
+        // 6. Complete Architectural Dimensions
         dimensions.add(new CADDimension(ox, oy, ox + pw, oy, -30.0)); // 30' Overall Top
         dimensions.add(new CADDimension(ox + pw, oy, ox + pw, oy + ph, -30.0)); // 40' Overall Right
-        dimensions.add(new CADDimension(ox, oy, ox, divY, 26.0)); // 22' Living Height
-        dimensions.add(new CADDimension(ox, divY, ox, oy + ph, 26.0)); // 18' Bedroom Height
-        dimensions.add(new CADDimension(ox, oy + ph, bedDivX, oy + ph, 26.0)); // 17' Bedroom Width
-        dimensions.add(new CADDimension(bedDivX, oy + ph, ox + pw, oy + ph, 26.0)); // 13' Bath/Kitchen Width
+        dimensions.add(new CADDimension(ox, oy, ox, bathY, 26.0)); // 14' Bed 2 Height
+        dimensions.add(new CADDimension(ox, bathY, ox, midY, 26.0)); // 6' Bath Height
+        dimensions.add(new CADDimension(ox, midY, ox, oy + ph, 26.0)); // 20' Master Bed Height
+        dimensions.add(new CADDimension(ox, oy + ph, midX, oy + ph, 26.0)); // 15' Master Bed Width
+        dimensions.add(new CADDimension(midX, oy + ph, ox + pw, oy + ph, 26.0)); // 15' Kitchen Width
 
         autoJoinAllWalls(); checkAllCollisions(); viewportPanel.repaint();
     }
@@ -10296,17 +10386,38 @@ public class HousePlanCADApp extends JFrame {
         walls.add(new Wall(splitX, midY1, splitX, oy + ph, 4.5)); // Bed divider to Kitchen/Toilet
 
         // Doors
-        elements.add(new CADElement("door", "Main Door 3'-6\"", ox + 6.0 * FT_PX, oy - 0.375 * FT_PX, 3.5 * FT_PX, 0.75 * FT_PX));
-        elements.add(new CADElement("door", "Bed 1 Door 3'-0\"", ox + 2.0 * FT_PX, midY1 - 0.25 * FT_PX, 3.0 * FT_PX, 0.5 * FT_PX));
-        elements.add(new CADElement("door", "Kitchen Door 3'-0\"", splitX + 2.0 * FT_PX, midY1 - 0.25 * FT_PX, 3.0 * FT_PX, 0.5 * FT_PX));
-        elements.add(new CADElement("door", "Bed 2 Door 3'-0\"", ox + 2.0 * FT_PX, midY2 - 0.25 * FT_PX, 3.0 * FT_PX, 0.5 * FT_PX));
-        elements.add(new CADElement("door", "Bath Door 2'-6\"", splitX + 2.0 * FT_PX, midY2 - 0.2 * FT_PX, 2.5 * FT_PX, 0.375 * FT_PX));
+        CADElement dMain25 = new CADElement("door", "Main Door 3'-6\"", ox + 6.0 * FT_PX, oy - 0.375 * FT_PX, 3.5 * FT_PX, 0.75 * FT_PX);
+        dMain25.flipV = true;
+        elements.add(dMain25);
+
+        CADElement dBed1_25 = new CADElement("door", "Bed 1 Door 3'-0\"", ox + 2.0 * FT_PX, midY1 - 0.25 * FT_PX, 3.0 * FT_PX, 0.5 * FT_PX);
+        dBed1_25.flipV = true;
+        elements.add(dBed1_25);
+
+        CADElement dKit25 = new CADElement("door", "Kitchen Door 3'-0\"", splitX + 2.0 * FT_PX, midY1 - 0.25 * FT_PX, 3.0 * FT_PX, 0.5 * FT_PX);
+        dKit25.flipV = true;
+        elements.add(dKit25);
+
+        CADElement dBed2_25 = new CADElement("door", "Bed 2 Door 3'-0\"", ox + 2.0 * FT_PX, midY2 - 0.25 * FT_PX, 3.0 * FT_PX, 0.5 * FT_PX);
+        dBed2_25.flipV = true;
+        elements.add(dBed2_25);
+
+        CADElement dBath25 = new CADElement("door", "Bath Door 2'-6\"", splitX + 2.0 * FT_PX, midY2 - 0.2 * FT_PX, 2.5 * FT_PX, 0.375 * FT_PX);
+        dBath25.flipV = true;
+        elements.add(dBath25);
 
         // Windows
         elements.add(new CADElement("window", "Hall Window 5'", ox + 15.0 * FT_PX, oy - 0.375 * FT_PX, 5.0 * FT_PX, 0.75 * FT_PX));
-        elements.add(new CADElement("window", "Bed 1 Window 4'", ox - 0.375 * FT_PX, midY1 + 4.0 * FT_PX, 4.0 * FT_PX, 0.75 * FT_PX));
+
+        CADElement wBed1_25 = new CADElement("window", "Bed 1 Window 4'", ox - 2.0 * FT_PX, midY1 + 4.0 * FT_PX - 0.375 * FT_PX, 4.0 * FT_PX, 0.75 * FT_PX);
+        wBed1_25.rotation = 90;
+        elements.add(wBed1_25);
+
         elements.add(new CADElement("window", "Bed 2 Window 4'", ox + 4.0 * FT_PX, oy + ph - 0.375 * FT_PX, 4.0 * FT_PX, 0.75 * FT_PX));
-        elements.add(new CADElement("window", "Kitchen Window 3'", ox + pw - 0.375 * FT_PX, midY1 + 4.0 * FT_PX, 3.0 * FT_PX, 0.75 * FT_PX));
+
+        CADElement wKit25 = new CADElement("window", "Kitchen Window 3'", ox + pw - 1.5 * FT_PX, midY1 + 4.0 * FT_PX - 0.375 * FT_PX, 3.0 * FT_PX, 0.75 * FT_PX);
+        wKit25.rotation = 90;
+        elements.add(wKit25);
 
         // Tags
         elements.add(new CADElement("tag", "LIVING HALL\n25'-0\" \u00d7 16'-0\"", ox + 6.0 * FT_PX, oy + 6.0 * FT_PX, 13.0 * FT_PX, 4.0 * FT_PX));
@@ -10346,14 +10457,26 @@ public class HousePlanCADApp extends JFrame {
         walls.add(new Wall(bathX, bathY, bathX, oy + ph, 4.5)); // Bath / Kitchenette divider
 
         // Openings
-        elements.add(new CADElement("door", "Studio Entry 3'-0\"", ox + 4.0 * FT_PX, oy - 0.375 * FT_PX, 3.0 * FT_PX, 0.75 * FT_PX));
-        elements.add(new CADElement("door", "Bath Door 2'-6\"", bathX + 1.0 * FT_PX, bathY - 0.2 * FT_PX, 2.5 * FT_PX, 0.375 * FT_PX));
+        CADElement dStudio20 = new CADElement("door", "Studio Entry 3'-0\"", ox + 4.0 * FT_PX, oy - 0.375 * FT_PX, 3.0 * FT_PX, 0.75 * FT_PX);
+        dStudio20.flipV = true;
+        elements.add(dStudio20);
+
+        CADElement dBath20 = new CADElement("door", "Bath Door 2'-6\"", bathX + 1.0 * FT_PX, bathY - 0.2 * FT_PX, 2.5 * FT_PX, 0.375 * FT_PX);
+        dBath20.flipV = true;
+        elements.add(dBath20);
+
         elements.add(new CADElement("door", "Kitchenette Opening", ox + 4.0 * FT_PX, bathY - 0.25 * FT_PX, 3.0 * FT_PX, 0.5 * FT_PX));
 
         // Windows
         elements.add(new CADElement("window", "Studio Window 4'", ox + 12.0 * FT_PX, oy - 0.375 * FT_PX, 4.0 * FT_PX, 0.75 * FT_PX));
-        elements.add(new CADElement("window", "Kitchen Window 3'", ox - 0.375 * FT_PX, bathY + 4.0 * FT_PX, 3.0 * FT_PX, 0.75 * FT_PX));
-        elements.add(new CADElement("window", "Bath Ventilator 2'", ox + pw - 0.375 * FT_PX, bathY + 4.0 * FT_PX, 2.0 * FT_PX, 0.75 * FT_PX));
+
+        CADElement wKit20 = new CADElement("window", "Kitchen Window 3'", ox - 1.5 * FT_PX, bathY + 4.0 * FT_PX - 0.375 * FT_PX, 3.0 * FT_PX, 0.75 * FT_PX);
+        wKit20.rotation = 90;
+        elements.add(wKit20);
+
+        CADElement vBath20 = new CADElement("window-vent", "Bath Vent 2'", ox + pw - 1.0 * FT_PX, bathY + 4.0 * FT_PX - 0.375 * FT_PX, 2.0 * FT_PX, 0.75 * FT_PX);
+        vBath20.rotation = 90;
+        elements.add(vBath20);
 
         // Tags
         elements.add(new CADElement("tag", "STUDIO ROOM\n20'-0\" \u00d7 20'-0\"", ox + 4.0 * FT_PX, oy + 8.0 * FT_PX, 12.0 * FT_PX, 4.0 * FT_PX));
@@ -10374,73 +10497,113 @@ public class HousePlanCADApp extends JFrame {
 
     private void loadPresetUSARanch() {
         clearCanvas();
-        double ox = 100.0, oy = 100.0;
-        double pw = 48.0 * FT_PX, ph = 34.0 * FT_PX;
+        double ox = 120.0, oy = 120.0;
+        double pw = 36.0 * FT_PX, ph = 28.0 * FT_PX;
 
-        // Exterior Perimeter Walls (6.5" 2x6 Stud Framing with Sheathing & Siding)
+        // 1. Exterior Perimeter Walls (6.5" 2x6 Stud Framing with Sheathing & Siding)
         walls.add(new Wall(ox, oy, ox + pw, oy, 6.5));
         walls.add(new Wall(ox + pw, oy, ox + pw, oy + ph, 6.5));
         walls.add(new Wall(ox + pw, oy + ph, ox, oy + ph, 6.5));
         walls.add(new Wall(ox, oy + ph, ox, oy, 6.5));
 
-        // Interior Partitions (4.5" 2x4 Wood Stud with 1/2" Drywall)
-        // 1. Garage Demising Wall (20' from right, 22' deep from top)
-        double garX = ox + pw - 20.0 * FT_PX;
-        double garY = oy + 22.0 * FT_PX;
-        walls.add(new Wall(garX, oy, garX, garY, 6.5)); // Fire-rated garage demising wall
-        walls.add(new Wall(garX, garY, ox + pw, garY, 6.5));
+        // 2. Interior Partitions (4.5" 2x4 Wood Stud Framing with 1/2" Drywall)
+        // Main dividing wall separating Private Wing (Left 18') from Public Living (Right 18')
+        double midX = ox + 18.0 * FT_PX;
+        walls.add(new Wall(midX, oy, midX, oy + ph, 4.5));
 
-        // 2. Primary Suite Wing (Left 16' span)
-        double primX = ox + 16.0 * FT_PX;
-        walls.add(new Wall(primX, oy, primX, oy + ph, 4.5));
-        double primBathY = oy + 12.0 * FT_PX;
-        walls.add(new Wall(ox, primBathY, primX, primBathY, 4.5)); // Primary Bath / Bedroom divider
-        double wicX = ox + 8.0 * FT_PX;
-        walls.add(new Wall(wicX, oy, wicX, primBathY, 4.5)); // WIC divider
+        // Public Wing: Kitchen / Dining dividing wall with open cased passage
+        double kitY = oy + 16.0 * FT_PX;
+        walls.add(new Wall(midX, kitY, ox + pw, kitY, 4.5));
 
-        // 3. Great Room to Mudroom & Laundry (Middle section)
-        double mudY = oy + 24.0 * FT_PX;
-        walls.add(new Wall(primX, mudY, garX, mudY, 4.5));
-        double mudDivX = primX + 10.0 * FT_PX;
-        walls.add(new Wall(mudDivX, mudY, mudDivX, oy + ph, 4.5)); // Laundry vs Bedroom 2
+        // Private Wing: Horizontal hallway divider
+        double midY = oy + 14.0 * FT_PX;
+        walls.add(new Wall(ox, midY, midX, midY, 4.5));
 
-        // Openings: Doors
-        elements.add(new CADElement("door", "Front Entry 3'-0\"", primX + 2.0 * FT_PX, oy - 0.27 * FT_PX, 3.0 * FT_PX, 0.54 * FT_PX));
-        elements.add(new CADElement("door-sliding", "Patio Slider 6'-0\"", primX + 12.0 * FT_PX, oy + ph - 0.27 * FT_PX, 6.0 * FT_PX, 0.54 * FT_PX));
-        elements.add(new CADElement("door", "Garage Entry 2'-8\"", garX - 0.27 * FT_PX, oy + 4.0 * FT_PX, 2.67 * FT_PX, 0.45 * FT_PX));
-        elements.add(new CADElement("door", "Primary Suite 2'-10\"", primX - 0.27 * FT_PX, primBathY + 4.0 * FT_PX, 2.83 * FT_PX, 0.45 * FT_PX));
-        elements.add(new CADElement("door-pocket", "Primary Bath Pocket 2'-6\"", ox + 4.0 * FT_PX, primBathY - 0.2 * FT_PX, 2.5 * FT_PX, 0.45 * FT_PX));
-        elements.add(new CADElement("door-pocket", "WIC Pocket 2'-6\"", wicX - 0.2 * FT_PX, oy + 4.0 * FT_PX, 2.5 * FT_PX, 0.45 * FT_PX));
-        elements.add(new CADElement("door", "Bed 2 Door 2'-8\"", mudDivX + 1.0 * FT_PX, mudY - 0.2 * FT_PX, 2.67 * FT_PX, 0.45 * FT_PX));
-        elements.add(new CADElement("door", "Laundry 2'-8\"", primX + 2.0 * FT_PX, mudY - 0.2 * FT_PX, 2.67 * FT_PX, 0.45 * FT_PX));
+        // North Section: Bed 2 vs Full Bath
+        double bed2DivX = ox + 11.0 * FT_PX;
+        walls.add(new Wall(bed2DivX, oy, bed2DivX, midY, 4.5));
 
-        // Garage 16' Sectional Overhead Door
-        elements.add(new CADElement("opening-wall", "Overhead Door 16'-0\"", ox + pw - 18.0 * FT_PX, oy - 0.3 * FT_PX, 16.0 * FT_PX, 0.6 * FT_PX));
+        // South Section: Primary Bed vs Walk-in Closet & Laundry
+        double primDivX = ox + 12.0 * FT_PX;
+        walls.add(new Wall(primDivX, midY, primDivX, oy + ph, 4.5));
 
-        // Windows (IRC Egress & Casement)
-        elements.add(new CADElement("window", "Primary Egress 3'×5'", ox - 0.27 * FT_PX, primBathY + 6.0 * FT_PX, 3.5 * FT_PX, 0.54 * FT_PX));
-        elements.add(new CADElement("window", "Great Room Picture 6'", primX + 4.0 * FT_PX, oy + ph - 0.27 * FT_PX, 6.0 * FT_PX, 0.54 * FT_PX));
-        elements.add(new CADElement("window", "Bed 2 Egress 3'×5'", ox + pw - 28.0 * FT_PX, oy + ph - 0.27 * FT_PX, 3.5 * FT_PX, 0.54 * FT_PX));
-        elements.add(new CADElement("window", "Kitchen Double-Hung 4'", garX - 6.0 * FT_PX, oy - 0.27 * FT_PX, 4.0 * FT_PX, 0.54 * FT_PX));
+        // Divider between Walk-in Closet (8' deep) and Laundry Suite (6' deep)
+        double wicY = midY + 8.0 * FT_PX;
+        walls.add(new Wall(primDivX, wicY, midX, wicY, 4.5));
 
-        // Tags
-        elements.add(new CADElement("tag", "OPEN GREAT ROOM\n20'-0\" \u00d7 18'-0\"", primX + 4.0 * FT_PX, oy + 8.0 * FT_PX, 14.0 * FT_PX, 4.0 * FT_PX));
-        elements.add(new CADElement("tag", "ISLAND KITCHEN & DINING\n16'-0\" \u00d7 14'-0\"", primX + 3.0 * FT_PX, oy + 15.0 * FT_PX, 14.0 * FT_PX, 3.5 * FT_PX));
-        elements.add(new CADElement("tag", "PRIMARY BEDROOM\n16'-0\" \u00d7 14'-0\"", ox + 2.0 * FT_PX, primBathY + 6.0 * FT_PX, 12.0 * FT_PX, 4.0 * FT_PX));
-        elements.add(new CADElement("tag", "5-PIECE SPA BATH\n10'-0\" \u00d7 8'-0\"", ox + 2.0 * FT_PX, oy + 3.0 * FT_PX, 10.0 * FT_PX, 3.5 * FT_PX));
-        elements.add(new CADElement("tag", "WALK-IN CLOSET (WIC)\n8'-0\" \u00d7 8'-0\"", wicX + 1.0 * FT_PX, oy + 3.0 * FT_PX, 8.0 * FT_PX, 3.0 * FT_PX));
-        elements.add(new CADElement("tag", "BEDROOM 2\n12'-0\" \u00d7 11'-0\"", mudDivX + 1.5 * FT_PX, mudY + 3.0 * FT_PX, 10.0 * FT_PX, 3.5 * FT_PX));
-        elements.add(new CADElement("tag", "MUDROOM & LAUNDRY\n10'-0\" \u00d7 8'-0\"", primX + 1.0 * FT_PX, mudY + 3.0 * FT_PX, 9.0 * FT_PX, 3.0 * FT_PX));
-        elements.add(new CADElement("tag", "2-CAR GARAGE\n20'-0\" \u00d7 22'-0\"", garX + 3.0 * FT_PX, oy + 9.0 * FT_PX, 14.0 * FT_PX, 4.0 * FT_PX));
-        elements.add(new CADElement("north-arrow", "North", ox + pw + 3.0 * FT_PX, oy + 2.0 * FT_PX, 3.0 * FT_PX, 3.0 * FT_PX));
+        // 3. Doors & Openings
+        CADElement dFront = new CADElement("door", "Front Entry 3'-0\"", ox + 20.0 * FT_PX, oy - 0.27 * FT_PX, 3.0 * FT_PX, 0.54 * FT_PX);
+        dFront.flipV = true; // Inward swing into Great Room
+        elements.add(dFront);
 
-        // Dimensions
-        dimensions.add(new CADDimension(ox, oy, ox + pw, oy, -30.0)); // 48' Overall Top
-        dimensions.add(new CADDimension(ox + pw, oy, ox + pw, oy + ph, -30.0)); // 34' Overall Right
-        dimensions.add(new CADDimension(ox, oy, ox, primBathY, 26.0)); // 12' Bath Height
-        dimensions.add(new CADDimension(ox, primBathY, ox, oy + ph, 26.0)); // 22' Primary Height
-        dimensions.add(new CADDimension(ox, oy + ph, primX, oy + ph, 26.0)); // 16' Primary Width
-        dimensions.add(new CADDimension(garX, oy + ph, ox + pw, oy + ph, 26.0)); // 20' Garage Width
+        CADElement slPatio = new CADElement("door-sliding", "Patio Slider 6'-0\"", ox + 24.0 * FT_PX, oy + ph - 0.27 * FT_PX, 6.0 * FT_PX, 0.54 * FT_PX);
+        elements.add(slPatio);
+
+        CADElement opGreat = new CADElement("opening-wall", "Great Room Opening 8'-0\"", ox + 22.0 * FT_PX, kitY - 0.1875 * FT_PX, 8.0 * FT_PX, 0.375 * FT_PX);
+        elements.add(opGreat);
+
+        CADElement dBed2 = new CADElement("door", "Bed 2 Door 2'-8\"", ox + 4.0 * FT_PX, midY - 0.1875 * FT_PX, 2.67 * FT_PX, 0.375 * FT_PX);
+        dBed2.flipV = false; // Inward swing into Bed 2
+        elements.add(dBed2);
+
+        CADElement dBath = new CADElement("door", "Bath Door 2'-6\"", ox + 13.0 * FT_PX, midY - 0.1875 * FT_PX, 2.5 * FT_PX, 0.375 * FT_PX);
+        dBath.flipV = false; // Inward swing into Bath
+        elements.add(dBath);
+
+        CADElement dPrim = new CADElement("door", "Primary Suite 2'-8\"", ox + 7.0 * FT_PX, midY - 0.1875 * FT_PX, 2.67 * FT_PX, 0.375 * FT_PX);
+        dPrim.flipV = true; // Inward swing into Primary Suite
+        elements.add(dPrim);
+
+        CADElement dWic = new CADElement("door-pocket", "WIC Pocket 2'-6\"", primDivX - 1.25 * FT_PX, midY + 4.0 * FT_PX - 0.1875 * FT_PX, 2.5 * FT_PX, 0.375 * FT_PX);
+        dWic.rotation = 90;
+        elements.add(dWic);
+
+        CADElement dLaundry = new CADElement("door", "Laundry 2'-6\"", midX - 1.25 * FT_PX, wicY + 3.0 * FT_PX - 0.1875 * FT_PX, 2.5 * FT_PX, 0.375 * FT_PX);
+        dLaundry.rotation = 90;
+        dLaundry.flipH = true;
+        elements.add(dLaundry);
+
+        // 4. Windows (IRC Code Compliant Egress & Dual-Hung)
+        elements.add(new CADElement("window", "Great Room Picture 5'-0\"", ox + 27.0 * FT_PX, oy - 0.27 * FT_PX, 5.0 * FT_PX, 0.54 * FT_PX));
+
+        CADElement wLivEast = new CADElement("window", "Great Room East 4'-0\"", ox + pw - 2.0 * FT_PX, oy + 8.0 * FT_PX - 0.27 * FT_PX, 4.0 * FT_PX, 0.54 * FT_PX);
+        wLivEast.rotation = 90;
+        elements.add(wLivEast);
+
+        CADElement wKitEast = new CADElement("window", "Kitchen East 4'-0\"", ox + pw - 2.0 * FT_PX, oy + 22.0 * FT_PX - 0.27 * FT_PX, 4.0 * FT_PX, 0.54 * FT_PX);
+        wKitEast.rotation = 90;
+        elements.add(wKitEast);
+
+        elements.add(new CADElement("window", "Bed 2 Egress 3'-6\"", ox + 4.0 * FT_PX, oy - 0.27 * FT_PX, 3.5 * FT_PX, 0.54 * FT_PX));
+
+        CADElement wBed2West = new CADElement("window", "Bed 2 West 3'-0\"", ox - 1.5 * FT_PX, oy + 7.0 * FT_PX - 0.27 * FT_PX, 3.0 * FT_PX, 0.54 * FT_PX);
+        wBed2West.rotation = 90;
+        elements.add(wBed2West);
+
+        elements.add(new CADElement("window", "Primary Egress 3'-6\"", ox + 4.0 * FT_PX, oy + ph - 0.27 * FT_PX, 3.5 * FT_PX, 0.54 * FT_PX));
+
+        CADElement wPrimWest = new CADElement("window", "Primary West 4'-0\"", ox - 2.0 * FT_PX, oy + 21.0 * FT_PX - 0.27 * FT_PX, 4.0 * FT_PX, 0.54 * FT_PX);
+        wPrimWest.rotation = 90;
+        elements.add(wPrimWest);
+
+        // 5. Room Tags
+        elements.add(new CADElement("tag", "OPEN GREAT ROOM\n18'-0\" \u00d7 16'-0\"\n288 SQ.FT", ox + 20.0 * FT_PX, oy + 7.5 * FT_PX, 14.0 * FT_PX, 4.0 * FT_PX));
+        elements.add(new CADElement("tag", "ISLAND KITCHEN & DINING\n18'-0\" \u00d7 12'-0\"\n216 SQ.FT", ox + 20.0 * FT_PX, kitY + 4.5 * FT_PX, 14.0 * FT_PX, 4.0 * FT_PX));
+        elements.add(new CADElement("tag", "BEDROOM 02\n11'-0\" \u00d7 14'-0\"\n154 SQ.FT", ox + 1.5 * FT_PX, oy + 5.5 * FT_PX, 8.5 * FT_PX, 3.5 * FT_PX));
+        elements.add(new CADElement("tag", "FULL BATHROOM\n7'-0\" \u00d7 14'-0\"\n98 SQ.FT", bed2DivX + 1.0 * FT_PX, oy + 5.5 * FT_PX, 5.5 * FT_PX, 3.5 * FT_PX));
+        elements.add(new CADElement("tag", "PRIMARY SUITE\n12'-0\" \u00d7 14'-0\"\n168 SQ.FT", ox + 1.5 * FT_PX, midY + 6.0 * FT_PX, 9.5 * FT_PX, 3.5 * FT_PX));
+        elements.add(new CADElement("tag", "WALK-IN CLOSET (WIC)\n6'-0\" \u00d7 8'-0\"\n48 SQ.FT", primDivX + 0.8 * FT_PX, midY + 2.5 * FT_PX, 4.5 * FT_PX, 3.0 * FT_PX));
+        elements.add(new CADElement("tag", "LAUNDRY / UTILITY\n6'-0\" \u00d7 6'-0\"\n36 SQ.FT", primDivX + 0.8 * FT_PX, wicY + 1.8 * FT_PX, 4.5 * FT_PX, 3.0 * FT_PX));
+        elements.add(new CADElement("north-arrow", "North", ox + pw + 3.5 * FT_PX, oy + 2.0 * FT_PX, 3.0 * FT_PX, 3.0 * FT_PX));
+
+        // 6. Complete Architectural Dimensions
+        dimensions.add(new CADDimension(ox, oy, ox + pw, oy, -30.0)); // 36' Overall Top
+        dimensions.add(new CADDimension(ox + pw, oy, ox + pw, oy + ph, -30.0)); // 28' Overall Right
+        dimensions.add(new CADDimension(ox, oy, ox, midY, 26.0)); // 14' Bed 2 Height
+        dimensions.add(new CADDimension(ox, midY, ox, oy + ph, 26.0)); // 14' Primary Bed Height
+        dimensions.add(new CADDimension(ox, oy + ph, primDivX, oy + ph, 26.0)); // 12' Primary Bed Width
+        dimensions.add(new CADDimension(primDivX, oy + ph, midX, oy + ph, 26.0)); // 6' WIC/Laundry Width
+        dimensions.add(new CADDimension(midX, oy + ph, ox + pw, oy + ph, 26.0)); // 18' Kitchen Width
 
         autoJoinAllWalls(); checkAllCollisions(); viewportPanel.repaint();
     }
@@ -10465,13 +10628,31 @@ public class HousePlanCADApp extends JFrame {
         walls.add(new Wall(bedDivX, bathY, ox + pw, bathY, 4.5)); // Bath divider
 
         // Doors & Windows
-        elements.add(new CADElement("door", "Front Entry 3'-0\"", ox + 6.0 * FT_PX, oy - 0.27 * FT_PX, 3.0 * FT_PX, 0.54 * FT_PX));
-        elements.add(new CADElement("door", "Primary Suite 2'-8\"", ox + 2.0 * FT_PX, midY - 0.2 * FT_PX, 2.67 * FT_PX, 0.45 * FT_PX));
-        elements.add(new CADElement("door", "Bed 2 Door 2'-8\"", bedDivX + 1.5 * FT_PX, midY - 0.2 * FT_PX, 2.67 * FT_PX, 0.45 * FT_PX));
-        elements.add(new CADElement("door", "Bath Door 2'-6\"", bedDivX + 1.5 * FT_PX, bathY - 0.2 * FT_PX, 2.5 * FT_PX, 0.45 * FT_PX));
+        CADElement dFrontCr = new CADElement("door", "Front Entry 3'-0\"", ox + 6.0 * FT_PX, oy - 0.27 * FT_PX, 3.0 * FT_PX, 0.54 * FT_PX);
+        dFrontCr.flipV = true;
+        elements.add(dFrontCr);
+
+        CADElement dPrimCr = new CADElement("door", "Primary Suite 2'-8\"", ox + 2.0 * FT_PX, midY - 0.2 * FT_PX, 2.67 * FT_PX, 0.45 * FT_PX);
+        dPrimCr.flipV = true;
+        elements.add(dPrimCr);
+
+        CADElement dBed2Cr = new CADElement("door", "Bed 2 Door 2'-8\"", bedDivX + 1.5 * FT_PX, midY - 0.2 * FT_PX, 2.67 * FT_PX, 0.45 * FT_PX);
+        dBed2Cr.flipV = true;
+        elements.add(dBed2Cr);
+
+        CADElement dBathCr = new CADElement("door", "Bath Door 2'-6\"", bedDivX + 1.5 * FT_PX, bathY - 0.2 * FT_PX, 2.5 * FT_PX, 0.45 * FT_PX);
+        dBathCr.flipV = true;
+        elements.add(dBathCr);
+
         elements.add(new CADElement("window", "Craftsman Living 5'", ox + 18.0 * FT_PX, oy - 0.27 * FT_PX, 5.0 * FT_PX, 0.54 * FT_PX));
-        elements.add(new CADElement("window", "Primary Egress 3'×5'", ox - 0.27 * FT_PX, midY + 6.0 * FT_PX, 3.5 * FT_PX, 0.54 * FT_PX));
-        elements.add(new CADElement("window", "Bed 2 Egress 3'×5'", ox + pw - 0.27 * FT_PX, midY + 4.0 * FT_PX, 3.5 * FT_PX, 0.54 * FT_PX));
+
+        CADElement wPrimCr = new CADElement("window", "Primary Egress 3'×5'", ox - 1.75 * FT_PX, midY + 6.0 * FT_PX - 0.27 * FT_PX, 3.5 * FT_PX, 0.54 * FT_PX);
+        wPrimCr.rotation = 90;
+        elements.add(wPrimCr);
+
+        CADElement wBed2Cr = new CADElement("window", "Bed 2 Egress 3'×5'", ox + pw - 1.75 * FT_PX, midY + 4.0 * FT_PX - 0.27 * FT_PX, 3.5 * FT_PX, 0.54 * FT_PX);
+        wBed2Cr.rotation = 90;
+        elements.add(wBed2Cr);
 
         // Tags
         elements.add(new CADElement("tag", "CRAFTSMAN GREAT ROOM\n30'-0\" \u00d7 20'-0\"", ox + 7.0 * FT_PX, oy + 8.0 * FT_PX, 16.0 * FT_PX, 4.0 * FT_PX));
@@ -10508,13 +10689,31 @@ public class HousePlanCADApp extends JFrame {
         walls.add(new Wall(bedDivX, bathY, ox + pw, bathY, 4.5)); // Bath divider
 
         // Doors & Windows
-        elements.add(new CADElement("door", "Front Entry 3'-0\"", ox + 4.0 * FT_PX, oy - 0.27 * FT_PX, 3.0 * FT_PX, 0.54 * FT_PX));
-        elements.add(new CADElement("door", "Bed 1 Door 2'-8\"", ox + 2.0 * FT_PX, midY - 0.2 * FT_PX, 2.67 * FT_PX, 0.45 * FT_PX));
-        elements.add(new CADElement("door", "Bed 2 Door 2'-8\"", bedDivX + 1.0 * FT_PX, midY - 0.2 * FT_PX, 2.67 * FT_PX, 0.45 * FT_PX));
-        elements.add(new CADElement("door", "Bath Door 2'-4\"", bedDivX + 1.0 * FT_PX, bathY - 0.2 * FT_PX, 2.33 * FT_PX, 0.45 * FT_PX));
+        CADElement dFrontCot = new CADElement("door", "Front Entry 3'-0\"", ox + 4.0 * FT_PX, oy - 0.27 * FT_PX, 3.0 * FT_PX, 0.54 * FT_PX);
+        dFrontCot.flipV = true;
+        elements.add(dFrontCot);
+
+        CADElement dBed1Cot = new CADElement("door", "Bed 1 Door 2'-8\"", ox + 2.0 * FT_PX, midY - 0.2 * FT_PX, 2.67 * FT_PX, 0.45 * FT_PX);
+        dBed1Cot.flipV = true;
+        elements.add(dBed1Cot);
+
+        CADElement dBed2Cot = new CADElement("door", "Bed 2 Door 2'-8\"", bedDivX + 1.0 * FT_PX, midY - 0.2 * FT_PX, 2.67 * FT_PX, 0.45 * FT_PX);
+        dBed2Cot.flipV = true;
+        elements.add(dBed2Cot);
+
+        CADElement dBathCot = new CADElement("door", "Bath Door 2'-4\"", bedDivX + 1.0 * FT_PX, bathY - 0.2 * FT_PX, 2.33 * FT_PX, 0.45 * FT_PX);
+        dBathCot.flipV = true;
+        elements.add(dBathCot);
+
         elements.add(new CADElement("window", "Cottage Living 5'", ox + 14.0 * FT_PX, oy - 0.27 * FT_PX, 5.0 * FT_PX, 0.54 * FT_PX));
-        elements.add(new CADElement("window", "Bed 1 Egress 3'×5'", ox - 0.27 * FT_PX, midY + 6.0 * FT_PX, 3.5 * FT_PX, 0.54 * FT_PX));
-        elements.add(new CADElement("window", "Bed 2 Egress 3'×5'", ox + pw - 0.27 * FT_PX, midY + 3.0 * FT_PX, 3.5 * FT_PX, 0.54 * FT_PX));
+
+        CADElement wBed1Cot = new CADElement("window", "Bed 1 Egress 3'×5'", ox - 1.75 * FT_PX, midY + 6.0 * FT_PX - 0.27 * FT_PX, 3.5 * FT_PX, 0.54 * FT_PX);
+        wBed1Cot.rotation = 90;
+        elements.add(wBed1Cot);
+
+        CADElement wBed2Cot = new CADElement("window", "Bed 2 Egress 3'×5'", ox + pw - 1.75 * FT_PX, midY + 3.0 * FT_PX - 0.27 * FT_PX, 3.5 * FT_PX, 0.54 * FT_PX);
+        wBed2Cot.rotation = 90;
+        elements.add(wBed2Cot);
 
         // Tags
         elements.add(new CADElement("tag", "COTTAGE LIVING & KITCHEN\n24'-0\" \u00d7 18'-0\"", ox + 4.0 * FT_PX, oy + 7.0 * FT_PX, 16.0 * FT_PX, 4.0 * FT_PX));
@@ -10782,7 +10981,20 @@ public class HousePlanCADApp extends JFrame {
         return result[0];
     }
 
+    private void cleanAutoSaveRecoveryFile() {
+        try {
+            File recovery = getAutoSaveFile();
+            if (recovery != null && recovery.exists()) {
+                recovery.delete();
+            }
+        } catch (Exception ignored) {}
+    }
+
     private void checkAutoSaveRecoveryOnStartup() {
+        if (isFirstRun()) {
+            cleanAutoSaveRecoveryFile();
+            return;
+        }
         File recovery = getAutoSaveFile();
         if (recovery.exists() && recovery.length() > 200) {
             long ageSec = (System.currentTimeMillis() - recovery.lastModified()) / 1000;
