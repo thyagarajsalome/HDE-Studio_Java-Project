@@ -657,23 +657,68 @@ public class HousePlanCADApp extends JFrame {
         }
     }
 
+    public enum DimensionType {
+        ALIGNED,             // AutoCAD DIMALIGNED: Parallel to the 2 points
+        LINEAR_ORTHO,        // AutoCAD DIMLINEAR: Auto-locks Horizontal or Vertical based on mouse drag
+        LINEAR_HORIZONTAL,   // Fixed horizontal
+        LINEAR_VERTICAL,     // Fixed vertical
+        CONTINUOUS           // AutoCAD DIMCONTINUE: Chain dimension
+    }
+
+    public enum DimensionArrowStyle {
+        CLOSED_FILLED,       // AutoCAD / ISO Engineering Closed Filled Arrow (►)
+        ARCH_TICK,           // Architectural 45° Oblique Slash (/)
+        DOT                  // Structural Column Grid Datum Dot (●)
+    }
+
+    public enum DimensionUnitStyle {
+        DEFAULT,             // Project Standard
+        DUAL_UNITS,          // Engineering Dual Units: 30'-0" [9144 mm]
+        FEET_INCHES,         // Architectural Fractional: 30'-0"
+        METRIC_MM,           // Engineering Millimeters: 9144 mm
+        METRIC_M             // Civil Meters: 9.14 m
+    }
+
     public static class CADDimension implements Cloneable {
         public String id = UUID.randomUUID().toString();
         public double x1, y1, x2, y2;
         public double offset = 24.0;
+        public DimensionType dimType = DimensionType.ALIGNED;
+        public DimensionArrowStyle arrowStyle = DimensionArrowStyle.CLOSED_FILLED;
+        public DimensionUnitStyle unitStyle = DimensionUnitStyle.DEFAULT;
+        public String customText = null;
 
         public CADDimension(double x1, double y1, double x2, double y2) {
-            this(x1, y1, x2, y2, 24.0);
+            this(x1, y1, x2, y2, 24.0, DimensionType.ALIGNED, DimensionArrowStyle.CLOSED_FILLED, DimensionUnitStyle.DEFAULT, null);
         }
 
         public CADDimension(double x1, double y1, double x2, double y2, double offset) {
+            this(x1, y1, x2, y2, offset, DimensionType.ALIGNED, DimensionArrowStyle.CLOSED_FILLED, DimensionUnitStyle.DEFAULT, null);
+        }
+
+        public CADDimension(double x1, double y1, double x2, double y2, double offset,
+                            DimensionType dimType, DimensionArrowStyle arrowStyle,
+                            DimensionUnitStyle unitStyle, String customText) {
             this.x1 = x1; this.y1 = y1; this.x2 = x2; this.y2 = y2;
             this.offset = offset;
+            this.dimType = (dimType != null) ? dimType : DimensionType.ALIGNED;
+            this.arrowStyle = (arrowStyle != null) ? arrowStyle : DimensionArrowStyle.CLOSED_FILLED;
+            this.unitStyle = (unitStyle != null) ? unitStyle : DimensionUnitStyle.DEFAULT;
+            this.customText = customText;
         }
 
         @Override public CADDimension clone() {
-            CADDimension d = new CADDimension(x1, y1, x2, y2, offset);
+            CADDimension d = new CADDimension(x1, y1, x2, y2, offset, dimType, arrowStyle, unitStyle, customText);
             d.id = id; return d;
+        }
+
+        public double getMeasuredDistance() {
+            if (dimType == DimensionType.LINEAR_HORIZONTAL) {
+                return Math.abs(x2 - x1);
+            } else if (dimType == DimensionType.LINEAR_VERTICAL) {
+                return Math.abs(y2 - y1);
+            }
+            return Point2D.distance(x1, y1, x2, y2);
         }
     }
 
@@ -846,6 +891,11 @@ public class HousePlanCADApp extends JFrame {
     private ToolMode currentTool = ToolMode.SELECT;
     private String wallHatchStyle = "DIAGONAL_45"; // "DIAGONAL_45", "SOLID_BLACK", "HOLLOW"
     private String activeHatchPattern = "floor-tiles-2x2"; // AutoCAD hatch pattern to fill perimeters with
+
+    // AutoCAD Engineering Dimension System Settings
+    public DimensionArrowStyle activeDimArrowStyle = DimensionArrowStyle.CLOSED_FILLED;
+    public DimensionUnitStyle activeDimUnitStyle = DimensionUnitStyle.DEFAULT;
+    public DimensionType activeDimMode = DimensionType.LINEAR_ORTHO;
 
     // Selection System (AutoCAD-style multi-select)
     private final LinkedHashSet<Object> selectedObjects = new LinkedHashSet<>();
@@ -1919,36 +1969,170 @@ public class HousePlanCADApp extends JFrame {
 
         // DIMENSIONS & TAGS (Stage 7 - Pure Dimensions & Annotations)
         JPanel tagsDimsPanel = createCatalogCategoryPanel();
-        JLabel dimToolsLbl = new JLabel("<html><b style='color:#38bdf8'>Linear Dimensions</b><br><span style='color:#94a3b8'>Standard point-to-point drafting:</span></html>");
+        JLabel dimToolsLbl = new JLabel("<html><b style='color:#38bdf8'>AutoCAD Engineering Dimensions</b><br><span style='color:#94a3b8'>Point-to-point drafting & chaining:</span></html>");
         dimToolsLbl.setFont(new Font("Segoe UI", Font.PLAIN, 10));
         dimToolsLbl.setBorder(new EmptyBorder(4, 4, 6, 4));
         tagsDimsPanel.add(dimToolsLbl);
 
-        ModernButton linearDimBtn = new ModernButton("Point-to-Point Dimension", new Color(24, 33, 53), new Color(56, 189, 248), new Color(14, 116, 144));
+        ModernButton linearDimBtn = new ModernButton("Linear Ortho [DIMLINEAR]", new Color(24, 33, 53), new Color(56, 189, 248), new Color(14, 116, 144));
         linearDimBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
-        linearDimBtn.setMaximumSize(new Dimension(252, 30));
+        linearDimBtn.setMaximumSize(new Dimension(252, 28));
         linearDimBtn.setHorizontalAlignment(SwingConstants.LEFT);
-        linearDimBtn.setToolTipText("AutoCAD-style 3-step dimension: Click Pt 1, Click Pt 2, Move mouse & click offset");
+        linearDimBtn.setToolTipText("AutoCAD DIMLINEAR: Auto-locks Horizontal or Vertical based on mouse drag direction (Shortcut: D)");
         linearDimBtn.addActionListener(e -> {
+            activeDimMode = DimensionType.LINEAR_ORTHO;
             currentTool = ToolMode.MEASURE;
             selectToolButton(ToolMode.MEASURE);
             viewportPanel.initPointToPointDimension();
+            viewportPanel.showToastNotification("[DIM] Linear Ortho Auto-Lock Mode Active");
         });
         tagsDimsPanel.add(linearDimBtn);
-        tagsDimsPanel.add(Box.createVerticalStrut(4));
+        tagsDimsPanel.add(Box.createVerticalStrut(3));
+
+        ModernButton alignedDimBtn = new ModernButton("Aligned [DIMALIGNED]", new Color(24, 33, 53), new Color(56, 189, 248), new Color(14, 116, 144));
+        alignedDimBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        alignedDimBtn.setMaximumSize(new Dimension(252, 28));
+        alignedDimBtn.setHorizontalAlignment(SwingConstants.LEFT);
+        alignedDimBtn.setToolTipText("AutoCAD DIMALIGNED: Parallel to extension points (Shortcut: Tab to toggle)");
+        alignedDimBtn.addActionListener(e -> {
+            activeDimMode = DimensionType.ALIGNED;
+            currentTool = ToolMode.MEASURE;
+            selectToolButton(ToolMode.MEASURE);
+            viewportPanel.initPointToPointDimension();
+            viewportPanel.showToastNotification("[DIM] Aligned Dimension Mode Active");
+        });
+        tagsDimsPanel.add(alignedDimBtn);
+        tagsDimsPanel.add(Box.createVerticalStrut(3));
+
+        ModernButton continueDimBtn = new ModernButton("Continue Chain [DIMCONTINUE]", new Color(24, 33, 53), new Color(52, 211, 153), new Color(16, 185, 129));
+        continueDimBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        continueDimBtn.setMaximumSize(new Dimension(252, 28));
+        continueDimBtn.setHorizontalAlignment(SwingConstants.LEFT);
+        continueDimBtn.setToolTipText("AutoCAD DIMCONTINUE: Chain consecutive dimensions along the same offset line");
+        continueDimBtn.addActionListener(e -> {
+            activeDimMode = DimensionType.CONTINUOUS;
+            currentTool = ToolMode.MEASURE;
+            selectToolButton(ToolMode.MEASURE);
+            viewportPanel.initPointToPointDimension();
+            viewportPanel.showToastNotification("[DIM] Continuous Chain Mode Active (Click endpoints in series)");
+        });
+        tagsDimsPanel.add(continueDimBtn);
+        tagsDimsPanel.add(Box.createVerticalStrut(8));
+
+        // Arrow Style (DIMBLK)
+        JLabel arrowHeaderLbl = new JLabel("<html><b style='color:#38bdf8'>Arrowhead Style (DIMBLK):</b></html>");
+        arrowHeaderLbl.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+        arrowHeaderLbl.setBorder(new EmptyBorder(2, 4, 3, 4));
+        tagsDimsPanel.add(arrowHeaderLbl);
+
+        JPanel arrowRow = new JPanel(new GridLayout(1, 3, 3, 3));
+        arrowRow.setOpaque(false);
+        arrowRow.setMaximumSize(new Dimension(252, 26));
+        arrowRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        ModernButton arrowBtn1 = new ModernButton("► Arrow", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
+        arrowBtn1.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        arrowBtn1.setToolTipText("ISO / ASME Standard 3:1 Closed Filled Arrowhead");
+        arrowBtn1.addActionListener(e -> {
+            activeDimArrowStyle = DimensionArrowStyle.CLOSED_FILLED;
+            for (Object obj : selectedObjects) {
+                if (obj instanceof CADDimension) ((CADDimension) obj).arrowStyle = DimensionArrowStyle.CLOSED_FILLED;
+            }
+            viewportPanel.showToastNotification("Terminator: Closed Filled Arrow (►)");
+            viewportPanel.repaint();
+        });
+
+        ModernButton arrowBtn2 = new ModernButton("/ Tick", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
+        arrowBtn2.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        arrowBtn2.setToolTipText("Architectural 45° Oblique Slash Tick");
+        arrowBtn2.addActionListener(e -> {
+            activeDimArrowStyle = DimensionArrowStyle.ARCH_TICK;
+            for (Object obj : selectedObjects) {
+                if (obj instanceof CADDimension) ((CADDimension) obj).arrowStyle = DimensionArrowStyle.ARCH_TICK;
+            }
+            viewportPanel.showToastNotification("Terminator: Architectural Tick (/)");
+            viewportPanel.repaint();
+        });
+
+        ModernButton arrowBtn3 = new ModernButton("● Dot", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
+        arrowBtn3.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        arrowBtn3.setToolTipText("Structural Column Grid Datum Dot");
+        arrowBtn3.addActionListener(e -> {
+            activeDimArrowStyle = DimensionArrowStyle.DOT;
+            for (Object obj : selectedObjects) {
+                if (obj instanceof CADDimension) ((CADDimension) obj).arrowStyle = DimensionArrowStyle.DOT;
+            }
+            viewportPanel.showToastNotification("Terminator: Structural Dot (●)");
+            viewportPanel.repaint();
+        });
+
+        arrowRow.add(arrowBtn1); arrowRow.add(arrowBtn2); arrowRow.add(arrowBtn3);
+        tagsDimsPanel.add(arrowRow);
+        tagsDimsPanel.add(Box.createVerticalStrut(8));
+
+        // Units Format (DIMALT)
+        JLabel unitsHeaderLbl = new JLabel("<html><b style='color:#38bdf8'>Units Format (DIMALT):</b></html>");
+        unitsHeaderLbl.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+        unitsHeaderLbl.setBorder(new EmptyBorder(2, 4, 3, 4));
+        tagsDimsPanel.add(unitsHeaderLbl);
+
+        JPanel unitsRow = new JPanel(new GridLayout(1, 3, 3, 3));
+        unitsRow.setOpaque(false);
+        unitsRow.setMaximumSize(new Dimension(252, 26));
+        unitsRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        ModernButton unitBtn1 = new ModernButton("Dual [mm]", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
+        unitBtn1.setFont(new Font("Segoe UI", Font.BOLD, 9));
+        unitBtn1.setToolTipText("Engineering Dual Units: 30'-0\" [9144 mm]");
+        unitBtn1.addActionListener(e -> {
+            activeDimUnitStyle = DimensionUnitStyle.DUAL_UNITS;
+            for (Object obj : selectedObjects) {
+                if (obj instanceof CADDimension) ((CADDimension) obj).unitStyle = DimensionUnitStyle.DUAL_UNITS;
+            }
+            viewportPanel.showToastNotification("Units: Engineering Dual [mm]");
+            viewportPanel.repaint();
+        });
+
+        ModernButton unitBtn2 = new ModernButton("Ft - In", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
+        unitBtn2.setFont(new Font("Segoe UI", Font.BOLD, 9));
+        unitBtn2.setToolTipText("Architectural Imperial: 30'-0\"");
+        unitBtn2.addActionListener(e -> {
+            activeDimUnitStyle = DimensionUnitStyle.FEET_INCHES;
+            for (Object obj : selectedObjects) {
+                if (obj instanceof CADDimension) ((CADDimension) obj).unitStyle = DimensionUnitStyle.FEET_INCHES;
+            }
+            viewportPanel.showToastNotification("Units: Architectural Feet-Inches");
+            viewportPanel.repaint();
+        });
+
+        ModernButton unitBtn3 = new ModernButton("Metric mm", new Color(24, 33, 53), Color.WHITE, new Color(51, 65, 85));
+        unitBtn3.setFont(new Font("Segoe UI", Font.BOLD, 9));
+        unitBtn3.setToolTipText("Engineering Metric: 9144 mm");
+        unitBtn3.addActionListener(e -> {
+            activeDimUnitStyle = DimensionUnitStyle.METRIC_MM;
+            for (Object obj : selectedObjects) {
+                if (obj instanceof CADDimension) ((CADDimension) obj).unitStyle = DimensionUnitStyle.METRIC_MM;
+            }
+            viewportPanel.showToastNotification("Units: Engineering Millimeters (mm)");
+            viewportPanel.repaint();
+        });
+
+        unitsRow.add(unitBtn1); unitsRow.add(unitBtn2); unitsRow.add(unitBtn3);
+        tagsDimsPanel.add(unitsRow);
+        tagsDimsPanel.add(Box.createVerticalStrut(8));
 
         ModernButton autoDimBtn = new ModernButton("Auto-Dimension All Walls", new Color(24, 33, 53), new Color(52, 211, 153), new Color(16, 185, 129));
         autoDimBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
-        autoDimBtn.setMaximumSize(new Dimension(252, 30));
+        autoDimBtn.setMaximumSize(new Dimension(252, 28));
         autoDimBtn.setHorizontalAlignment(SwingConstants.LEFT);
         autoDimBtn.setToolTipText("Generate exterior and interior perimeter dimensions automatically");
         autoDimBtn.addActionListener(e -> autoGenerateDimensions());
         tagsDimsPanel.add(autoDimBtn);
-        tagsDimsPanel.add(Box.createVerticalStrut(4));
+        tagsDimsPanel.add(Box.createVerticalStrut(3));
 
         ModernButton clearDimBtn = new ModernButton("Clear All Dimensions", new Color(40, 20, 20), new Color(248, 113, 113), new Color(153, 27, 27));
         clearDimBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
-        clearDimBtn.setMaximumSize(new Dimension(252, 28));
+        clearDimBtn.setMaximumSize(new Dimension(252, 26));
         clearDimBtn.setHorizontalAlignment(SwingConstants.LEFT);
         clearDimBtn.addActionListener(e -> {
             if (!dimensions.isEmpty()) {
@@ -3371,7 +3555,11 @@ public class HousePlanCADApp extends JFrame {
 
     private void applyNameChange() {
         if (isUpdatingInspector) return;
-        if (primarySelected instanceof CADElement) {
+        if (primarySelected instanceof CADDimension) {
+            String txt = propNameField.getText().trim();
+            ((CADDimension) primarySelected).customText = txt.isEmpty() ? null : txt;
+            viewportPanel.repaint();
+        } else if (primarySelected instanceof CADElement) {
             ((CADElement) primarySelected).name = propNameField.getText();
             viewportPanel.repaint();
         }
@@ -3401,10 +3589,15 @@ public class HousePlanCADApp extends JFrame {
     private void applyHeightChange() {
         if (isUpdatingInspector) return;
         try {
-            double ft = Double.parseDouble(propHeightField.getText());
-            if (ft <= 0) return;
+            double val = Double.parseDouble(propHeightField.getText());
+            if (primarySelected instanceof CADDimension) {
+                ((CADDimension) primarySelected).offset = val;
+                viewportPanel.repaint();
+                return;
+            }
+            if (val <= 0) return;
             if (primarySelected instanceof CADElement) {
-                ((CADElement) primarySelected).h = ft * FT_PX;
+                ((CADElement) primarySelected).h = val * FT_PX;
                 checkAllCollisions(); viewportPanel.repaint();
             }
         } catch (NumberFormatException ignored) {}
@@ -3462,15 +3655,15 @@ public class HousePlanCADApp extends JFrame {
                 propRotSlider.setEnabled(false);
             } else if (primarySelected instanceof CADDimension) {
                 CADDimension d = (CADDimension) primarySelected;
-                propTypeBadge.setText(isLocked ? "[LOCKED] DIMENSION (FROZEN)" : "DIMENSION");
+                propTypeBadge.setText(isLocked ? "[LOCKED] DIMENSION (FROZEN)" : "DIMENSION (" + d.arrowStyle.name() + ")");
                 propTypeBadge.setForeground(isLocked ? new Color(251, 191, 36) : new Color(56, 189, 248));
-                propNameField.setText("Linear Dimension");
-                double dist = Point2D.distance(d.x1, d.y1, d.x2, d.y2);
+                propNameField.setText(d.customText != null ? d.customText : "");
+                double dist = d.getMeasuredDistance();
                 propWidthField.setText(String.format("%.2f", dist / FT_PX));
-                propHeightField.setText(String.format("%.2f", d.offset));
-                propNameField.setEditable(false);
+                propHeightField.setText(String.format("%.1f", d.offset));
+                propNameField.setEditable(!isLocked);
                 propWidthField.setEditable(false);
-                propHeightField.setEditable(false);
+                propHeightField.setEditable(!isLocked);
                 propRotSlider.setEnabled(false);
             } else if (primarySelected instanceof CADElement) {
                 CADElement elem = (CADElement) primarySelected;
@@ -3798,11 +3991,23 @@ public class HousePlanCADApp extends JFrame {
                         return true;
                     }
                 }
+                if (e.getKeyCode() == KeyEvent.VK_TAB) {
+                    if (viewportPanel.isMeasuring()) {
+                        viewportPanel.toggleDimensionMode();
+                        return true;
+                    }
+                }
                 if (e.getKeyCode() == KeyEvent.VK_S && !e.isControlDown()) {
                     currentTool = ToolMode.SELECT; selectToolButton(ToolMode.SELECT); return true;
                 }
                 if (e.getKeyCode() == KeyEvent.VK_W && !e.isControlDown()) {
                     currentTool = ToolMode.DRAW_WALL; selectToolButton(ToolMode.DRAW_WALL); return true;
+                }
+                if (e.getKeyCode() == KeyEvent.VK_D && !e.isControlDown()) {
+                    currentTool = ToolMode.MEASURE;
+                    selectToolButton(ToolMode.MEASURE);
+                    viewportPanel.initPointToPointDimension();
+                    return true;
                 }
                 if (e.getKeyCode() == KeyEvent.VK_T && !e.isControlDown()) {
                     currentTool = ToolMode.FLOOR_ZONE; selectToolButton(ToolMode.FLOOR_ZONE); return true;
@@ -3842,6 +4047,52 @@ public class HousePlanCADApp extends JFrame {
         int feet = totalInches / 12;
         int inches = totalInches % 12;
         return feet + "'-" + inches + "\"";
+    }
+
+    public static String formatMetricMm(double pixels) {
+        double mm = (Math.abs(pixels) / FT_PX) * 304.8;
+        return Math.round(mm) + " mm";
+    }
+
+    public static String formatDual(double pixels) {
+        return formatImperial(pixels) + " [" + formatMetricMm(pixels) + "]";
+    }
+
+    public String formatEngineeringDimension(CADDimension d) {
+        double distPx = d.getMeasuredDistance();
+        String measureStr;
+        DimensionUnitStyle u = d.unitStyle;
+        if (u == DimensionUnitStyle.DEFAULT) {
+            u = activeDimUnitStyle;
+        }
+        if (u == DimensionUnitStyle.DEFAULT) {
+            u = (currentRegion == RegionProfile.INDIA) ? DimensionUnitStyle.DUAL_UNITS : DimensionUnitStyle.FEET_INCHES;
+        }
+
+        switch (u) {
+            case DUAL_UNITS:
+                long mm = Math.round((distPx / FT_PX) * 304.8);
+                measureStr = formatImperial(distPx) + " [" + mm + " mm]";
+                break;
+            case METRIC_MM:
+                measureStr = Math.round((distPx / FT_PX) * 304.8) + " mm";
+                break;
+            case METRIC_M:
+                measureStr = String.format(Locale.US, "%.2f m", (distPx / FT_PX) * 0.3048);
+                break;
+            case FEET_INCHES:
+            default:
+                measureStr = formatImperial(distPx);
+                break;
+        }
+
+        if (d.customText != null && !d.customText.trim().isEmpty()) {
+            if (d.customText.contains("<>")) {
+                return d.customText.replace("<>", measureStr);
+            }
+            return d.customText;
+        }
+        return measureStr;
     }
 
     public double snapCoord(double val) {
@@ -4538,6 +4789,12 @@ public class HousePlanCADApp extends JFrame {
             repaint();
         }
 
+        public void toggleDimensionMode() {
+            activeDimMode = (activeDimMode == DimensionType.LINEAR_ORTHO) ? DimensionType.ALIGNED : DimensionType.LINEAR_ORTHO;
+            showToastNotification("Dimension Mode: " + (activeDimMode == DimensionType.LINEAR_ORTHO ? "Auto-Linear (Horizontal/Vertical)" : "Aligned (Parallel)"));
+            repaint();
+        }
+
         // Architectural Section Cut Line Tool
         private Point2D.Double sectionPt1 = null;
         private int sectionStep = 0; // 0: wait for start point, 1: wait for second point
@@ -4702,20 +4959,39 @@ public class HousePlanCADApp extends JFrame {
                             Point sp2 = worldToScreen(dimP2.x, dimP2.y);
                             double dx = sp2.x - sp1.x, dy = sp2.y - sp1.y;
                             double len = Math.hypot(dx, dy);
-                            double offsetPx = 22.0;
-                            if (len > 0) {
+                            double offsetPx = 24.0;
+                            DimensionType finalType = activeDimMode;
+
+                            if (activeDimMode == DimensionType.LINEAR_ORTHO) {
+                                double mdx = Math.abs(mouseScreen.x - (sp1.x + sp2.x) / 2.0);
+                                double mdy = Math.abs(mouseScreen.y - (sp1.y + sp2.y) / 2.0);
+                                if (mdy >= mdx) {
+                                    finalType = DimensionType.LINEAR_HORIZONTAL;
+                                    offsetPx = mouseScreen.y - Math.min(sp1.y, sp2.y);
+                                } else {
+                                    finalType = DimensionType.LINEAR_VERTICAL;
+                                    offsetPx = mouseScreen.x - Math.min(sp1.x, sp2.x);
+                                }
+                            } else if (len > 0) {
                                 double nx = -dy / len, ny = dx / len;
                                 offsetPx = (mouseScreen.x - sp1.x) * nx + (mouseScreen.y - sp1.y) * ny;
-                                if (Math.abs(offsetPx) < 8) offsetPx = (offsetPx >= 0 ? 18.0 : -18.0);
                             }
+                            if (Math.abs(offsetPx) < 8) offsetPx = (offsetPx >= 0 ? 18.0 : -18.0);
+
                             saveUndoState();
-                            CADDimension newDim = new CADDimension(dimP1.x, dimP1.y, dimP2.x, dimP2.y, offsetPx);
+                            CADDimension newDim = new CADDimension(dimP1.x, dimP1.y, dimP2.x, dimP2.y, offsetPx,
+                                    finalType, activeDimArrowStyle, activeDimUnitStyle, null);
                             dimensions.add(newDim);
                             clearSelection();
                             addToSelection(newDim);
-                            dimP1 = null; dimP2 = null; dimStep = 0;
-                            currentTool = ToolMode.SELECT;
-                            selectToolButton(ToolMode.SELECT);
+
+                            // AutoCAD Chain Dimension (DIMCONTINUE): chain directly from the second point
+                            dimP1 = dimP2;
+                            dimP2 = null;
+                            dimStep = 1;
+                            if (statusCursorLabel != null) {
+                                statusCursorLabel.setText(" [DIMCONTINUE] Click next point to chain | ESC to finish ");
+                            }
                             updateProperties();
                             updateStatusText();
                             repaint();
@@ -10131,15 +10407,16 @@ public class HousePlanCADApp extends JFrame {
             }
         }
 
-        // --- Dimensions ---
+        // --- AutoCAD Engineering Dimensions ---
 
         private void drawDimensions(Graphics2D g2) {
             for (CADDimension d : dimensions) {
+                boolean isSel = isSelected(d);
                 Point p1 = worldToScreen(d.x1, d.y1);
                 Point p2 = worldToScreen(d.x2, d.y2);
-                boolean isSel = isSelected(d);
-                drawCADDimension(g2, p1.x, p1.y, p2.x, p2.y,
-                        formatImperial(Point2D.distance(d.x1, d.y1, d.x2, d.y2)), (int) Math.round(d.offset), isSel);
+                String text = formatEngineeringDimension(d);
+                drawCADDimensionAdvanced(g2, p1.x, p1.y, p2.x, p2.y, text, (int) Math.round(d.offset),
+                        d.dimType, d.arrowStyle, isSel);
             }
         }
 
@@ -10148,53 +10425,185 @@ public class HousePlanCADApp extends JFrame {
         }
 
         private void drawCADDimension(Graphics2D g2, int p1x, int p1y, int p2x, int p2y, String text, int offset, boolean isSel) {
-            double dx = p2x - p1x, dy = p2y - p1y;
-            double len = Math.hypot(dx, dy);
-            if (len < 6) return;
-            double perpX = (-dy / len) * offset, perpY = (dx / len) * offset;
-            double d1x = p1x + perpX, d1y = p1y + perpY;
-            double d2x = p2x + perpX, d2y = p2y + perpY;
+            drawCADDimensionAdvanced(g2, p1x, p1y, p2x, p2y, text, offset, DimensionType.ALIGNED, activeDimArrowStyle, isSel);
+        }
 
-            double extX = (offset != 0) ? (perpX / offset) * 3.5 : 0;
-            double extY = (offset != 0) ? (perpY / offset) * 3.5 : 0;
+        private void drawCADDimensionAdvanced(Graphics2D g2, int p1x, int p1y, int p2x, int p2y,
+                                              String text, int offset, DimensionType dimType,
+                                              DimensionArrowStyle arrowStyle, boolean isSel) {
+            double d1x, d1y, d2x, d2y;
+            double e1StartX, e1StartY, e2StartX, e2StartY;
+            double e1EndX, e1EndY, e2EndX, e2EndY;
+
+            double originGap = 5.0; // AutoCAD DIMEXO (gap between point and extension line)
+            double extBeyond = 4.0; // AutoCAD DIMEXE (extension beyond dimension line)
+
+            if (dimType == DimensionType.LINEAR_HORIZONTAL) {
+                // Strictly Horizontal Dimension (AutoCAD DIMLINEAR Horiz)
+                double dimY = Math.min(p1y, p2y) + offset;
+                d1x = p1x; d1y = dimY;
+                d2x = p2x; d2y = dimY;
+
+                double dir1 = Math.signum(dimY - p1y);
+                if (dir1 == 0) dir1 = 1;
+                e1StartX = p1x; e1StartY = p1y + dir1 * originGap;
+                e1EndX = p1x; e1EndY = dimY + dir1 * extBeyond;
+
+                double dir2 = Math.signum(dimY - p2y);
+                if (dir2 == 0) dir2 = 1;
+                e2StartX = p2x; e2StartY = p2y + dir2 * originGap;
+                e2EndX = p2x; e2EndY = dimY + dir2 * extBeyond;
+            } else if (dimType == DimensionType.LINEAR_VERTICAL) {
+                // Strictly Vertical Dimension (AutoCAD DIMLINEAR Vert)
+                double dimX = Math.min(p1x, p2x) + offset;
+                d1x = dimX; d1y = p1y;
+                d2x = dimX; d2y = p2y;
+
+                double dir1 = Math.signum(dimX - p1x);
+                if (dir1 == 0) dir1 = 1;
+                e1StartX = p1x + dir1 * originGap; e1StartY = p1y;
+                e1EndX = dimX + dir1 * extBeyond; e1EndY = p1y;
+
+                double dir2 = Math.signum(dimX - p2x);
+                if (dir2 == 0) dir2 = 1;
+                e2StartX = p2x + dir1 * originGap; e2StartY = p2y;
+                e2EndX = dimX + dir1 * extBeyond; e2EndY = p2y;
+            } else {
+                // Aligned Dimension (AutoCAD DIMALIGNED - parallel to measured span)
+                double dx = p2x - p1x, dy = p2y - p1y;
+                double len = Math.hypot(dx, dy);
+                if (len < 4) return;
+                double perpX = (-dy / len) * offset, perpY = (dx / len) * offset;
+                d1x = p1x + perpX; d1y = p1y + perpY;
+                d2x = p2x + perpX; d2y = p2y + perpY;
+
+                double offDist = Math.abs(offset);
+                double nx = (offDist > 0) ? (perpX / offDist) : 0;
+                double ny = (offDist > 0) ? (perpY / offDist) : 0;
+
+                e1StartX = p1x + nx * originGap; e1StartY = p1y + ny * originGap;
+                e1EndX = d1x + nx * extBeyond; e1EndY = d1y + ny * extBeyond;
+
+                e2StartX = p2x + nx * originGap; e2StartY = p2y + ny * originGap;
+                e2EndX = d2x + nx * extBeyond; e2EndY = d2y + ny * extBeyond;
+            }
 
             Color dimColor;
             if (isSel) {
                 dimColor = new Color(2, 132, 199);
             } else {
-                dimColor = lightThemeEnabled ? new Color(30, 41, 59, 210) : new Color(56, 189, 248, 175);
+                dimColor = lightThemeEnabled ? new Color(30, 41, 59, 220) : new Color(56, 189, 248, 200);
             }
+
             g2.setColor(dimColor);
-            g2.setStroke(isSel ? new BasicStroke(1.5f) : new BasicStroke(lightThemeEnabled ? 0.85f : 0.65f));
-            g2.draw(new Line2D.Double(p1x, p1y, d1x + extX, d1y + extY));
-            g2.draw(new Line2D.Double(p2x, p2y, d2x + extX, d2y + extY));
+            g2.setStroke(isSel ? new BasicStroke(1.5f) : new BasicStroke(lightThemeEnabled ? 0.9f : 0.75f));
+
+            // Draw extension witness lines
+            g2.draw(new Line2D.Double(e1StartX, e1StartY, e1EndX, e1EndY));
+            g2.draw(new Line2D.Double(e2StartX, e2StartY, e2EndX, e2EndY));
+
+            // Dimension line vector & length
+            double ddx = d2x - d1x, ddy = d2y - d1y;
+            double dLen = Math.hypot(ddx, ddy);
+            if (dLen < 2) return;
+            double ux = ddx / dLen, uy = ddy / dLen;
+            double vx = -uy, vy = ux; // perpendicular unit vector
+
+            // Draw Dimension Line
             g2.draw(new Line2D.Double(d1x, d1y, d2x, d2y));
 
-            double tick = 3.5;
-            g2.setStroke(new BasicStroke(isSel ? 1.6f : (lightThemeEnabled ? 1.0f : 0.85f)));
-            g2.draw(new Line2D.Double(d1x - tick, d1y - tick, d1x + tick, d1y + tick));
-            g2.draw(new Line2D.Double(d2x - tick, d2y - tick, d2x + tick, d2y + tick));
+            // Draw Arrowheads / Terminators (AutoCAD Engineering Styles)
+            if (arrowStyle == DimensionArrowStyle.ARCH_TICK) {
+                // Architectural 45-degree oblique slash tick
+                double tick = 4.0;
+                g2.setStroke(new BasicStroke(isSel ? 1.8f : 1.3f));
+                g2.draw(new Line2D.Double(d1x - tick, d1y + tick, d1x + tick, d1y - tick));
+                g2.draw(new Line2D.Double(d2x - tick, d2y + tick, d2x + tick, d2y - tick));
+            } else if (arrowStyle == DimensionArrowStyle.DOT) {
+                // Structural datum dot
+                double r = 2.5;
+                g2.fill(new Ellipse2D.Double(d1x - r, d1y - r, r * 2, r * 2));
+                g2.fill(new Ellipse2D.Double(d2x - r, d2y - r, r * 2, r * 2));
+            } else {
+                // AutoCAD Closed Filled Arrowhead (3:1 engineering proportion)
+                double aLen = 8.5, aWidth = 2.4;
+                boolean inside = (dLen >= aLen * 2 + 12);
 
+                Path2D.Double a1 = new Path2D.Double();
+                Path2D.Double a2 = new Path2D.Double();
+
+                if (inside) {
+                    a1.moveTo(d1x, d1y);
+                    a1.lineTo(d1x + ux * aLen + vx * aWidth, d1y + uy * aLen + vy * aWidth);
+                    a1.lineTo(d1x + ux * aLen - vx * aWidth, d1y + uy * aLen - vy * aWidth);
+                    a1.closePath();
+
+                    a2.moveTo(d2x, d2y);
+                    a2.lineTo(d2x - ux * aLen + vx * aWidth, d2y - uy * aLen + vy * aWidth);
+                    a2.lineTo(d2x - ux * aLen - vx * aWidth, d2y - uy * aLen - vy * aWidth);
+                    a2.closePath();
+                } else {
+                    a1.moveTo(d1x, d1y);
+                    a1.lineTo(d1x - ux * aLen + vx * aWidth, d1y - uy * aLen + vy * aWidth);
+                    a1.lineTo(d1x - ux * aLen - vx * aWidth, d1y - uy * aLen - vy * aWidth);
+                    a1.closePath();
+
+                    a2.moveTo(d2x, d2y);
+                    a2.lineTo(d2x + ux * aLen + vx * aWidth, d2y + uy * aLen + vy * aWidth);
+                    a2.lineTo(d2x + ux * aLen - vx * aWidth, d2y + uy * aLen - vy * aWidth);
+                    a2.closePath();
+                }
+                g2.fill(a1);
+                g2.fill(a2);
+            }
+
+            // Draw AutoCAD Grips if selected
             if (isSel) {
-                // Grips on dimension points and text center
                 drawGrip(g2, (int) Math.round(d1x), (int) Math.round(d1y));
                 drawGrip(g2, (int) Math.round(d2x), (int) Math.round(d2y));
                 drawGrip(g2, p1x, p1y);
                 drawGrip(g2, p2x, p2y);
             }
 
-            g2.setFont(new Font("Consolas", Font.BOLD, 10));
+            // Draw Dimension Text Aligned & Rotated along Dimension Line (AutoCAD DIMTAD)
+            g2.setFont(new Font("Segoe UI", Font.BOLD, 10));
             FontMetrics fm = g2.getFontMetrics();
             int tw = fm.stringWidth(text);
-            int midX = (int)((d1x + d2x) / 2), midY = (int)((d1y + d2y) / 2);
+            int th = fm.getHeight();
+
+            double midX = (d1x + d2x) / 2.0;
+            double midY = (d1y + d2y) / 2.0;
+
+            // Compute rotation angle (AutoCAD text readable rule)
+            double angle = Math.atan2(ddy, ddx);
+            if (angle > Math.PI / 2.0) {
+                angle -= Math.PI;
+            } else if (angle < -Math.PI / 2.0) {
+                angle += Math.PI;
+            }
+
+            AffineTransform origTx = g2.getTransform();
+            g2.translate(midX, midY);
+            g2.rotate(angle);
+
+            // Clean background cutout box so line does not cross text
             g2.setColor(lightThemeEnabled ? Color.WHITE : new Color(15, 23, 42));
-            g2.fillRect(midX - tw / 2 - 4, midY - 7, tw + 8, 14);
-            g2.setColor(isSel ? new Color(245, 158, 11) : (lightThemeEnabled ? new Color(71, 85, 105) : new Color(56, 189, 248)));
-            g2.drawRect(midX - tw / 2 - 4, midY - 7, tw + 8, 14);
-            g2.setColor(isSel ? new Color(180, 83, 9) : (lightThemeEnabled ? new Color(15, 23, 42) : Color.WHITE));
-            g2.drawString(text, midX - tw / 2, midY + 4);
+            g2.fillRoundRect(-tw / 2 - 4, -th / 2, tw + 8, th, 4, 4);
+
             if (isSel) {
-                drawGrip(g2, midX, midY);
+                g2.setColor(new Color(245, 158, 11));
+                g2.setStroke(new BasicStroke(1.0f));
+                g2.drawRoundRect(-tw / 2 - 4, -th / 2, tw + 8, th, 4, 4);
+                g2.setColor(new Color(251, 191, 36));
+            } else {
+                g2.setColor(lightThemeEnabled ? new Color(15, 23, 42) : Color.WHITE);
+            }
+
+            g2.drawString(text, -tw / 2, fm.getAscent() - th / 2 - 1);
+            g2.setTransform(origTx);
+
+            if (isSel) {
+                drawGrip(g2, (int) Math.round(midX), (int) Math.round(midY));
             }
         }
 
@@ -10537,9 +10946,14 @@ public class HousePlanCADApp extends JFrame {
                     g2.drawLine(sp1.x, sp1.y, curScreen.x, curScreen.y);
                     drawGrip(g2, sp1.x, sp1.y);
                     drawGrip(g2, curScreen.x, curScreen.y);
-                    drawCADDimension(g2, sp1.x, sp1.y, curScreen.x, curScreen.y, formatImperial(dimP1.distance(curPt)), 18);
 
-                    String badge = "DIMENSION (" + formatImperial(dimP1.distance(curPt)) + "): Click second point (Point 2)";
+                    double dist = dimP1.distance(curPt);
+                    String distText = (activeDimUnitStyle == DimensionUnitStyle.DUAL_UNITS || currentRegion == RegionProfile.INDIA) ?
+                            formatDual(dist) : formatImperial(dist);
+                    drawCADDimensionAdvanced(g2, sp1.x, sp1.y, curScreen.x, curScreen.y, distText, 18,
+                            DimensionType.ALIGNED, activeDimArrowStyle, false);
+
+                    String badge = "DIMENSION (" + distText + "): Click second point (Point 2) | TAB: Mode";
                     g2.setFont(new Font("Segoe UI", Font.BOLD, 11));
                     FontMetrics fm = g2.getFontMetrics();
                     int bw = fm.stringWidth(badge) + 16;
@@ -10553,15 +10967,47 @@ public class HousePlanCADApp extends JFrame {
                     Point sp2 = worldToScreen(dimP2.x, dimP2.y);
                     double dx = sp2.x - sp1.x, dy = sp2.y - sp1.y;
                     double len = Math.hypot(dx, dy);
-                    double offsetPx = 22.0;
-                    if (len > 0) {
-                        double nx = -dy / len, ny = dx / len;
-                        offsetPx = (curScreen.x - sp1.x) * nx + (curScreen.y - sp1.y) * ny;
-                        if (Math.abs(offsetPx) < 8) offsetPx = (offsetPx >= 0 ? 18.0 : -18.0);
-                    }
-                    drawCADDimension(g2, sp1.x, sp1.y, sp2.x, sp2.y, formatImperial(dimP1.distance(dimP2)), (int) Math.round(offsetPx));
 
-                    String badge = "DIMENSION: Move mouse to set offset distance and click to place";
+                    DimensionType curType = activeDimMode;
+                    double offsetPx = 24.0;
+                    String badge;
+                    String distText;
+
+                    if (activeDimMode == DimensionType.LINEAR_ORTHO) {
+                        double mdx = Math.abs(curScreen.x - (sp1.x + sp2.x) / 2.0);
+                        double mdy = Math.abs(curScreen.y - (sp1.y + sp2.y) / 2.0);
+                        if (mdy >= mdx) {
+                            curType = DimensionType.LINEAR_HORIZONTAL;
+                            offsetPx = curScreen.y - Math.min(sp1.y, sp2.y);
+                            double dist = Math.abs(dimP2.x - dimP1.x);
+                            distText = (activeDimUnitStyle == DimensionUnitStyle.DUAL_UNITS || currentRegion == RegionProfile.INDIA) ?
+                                    formatDual(dist) : formatImperial(dist);
+                            badge = "DIMLINEAR [HORIZONTAL]: " + distText + " | TAB: Aligned | Click to place";
+                        } else {
+                            curType = DimensionType.LINEAR_VERTICAL;
+                            offsetPx = curScreen.x - Math.min(sp1.x, sp2.x);
+                            double dist = Math.abs(dimP2.y - dimP1.y);
+                            distText = (activeDimUnitStyle == DimensionUnitStyle.DUAL_UNITS || currentRegion == RegionProfile.INDIA) ?
+                                    formatDual(dist) : formatImperial(dist);
+                            badge = "DIMLINEAR [VERTICAL]: " + distText + " | TAB: Aligned | Click to place";
+                        }
+                    } else {
+                        curType = DimensionType.ALIGNED;
+                        if (len > 0) {
+                            double nx = -dy / len, ny = dx / len;
+                            offsetPx = (curScreen.x - sp1.x) * nx + (curScreen.y - sp1.y) * ny;
+                        }
+                        double dist = dimP1.distance(dimP2);
+                        distText = (activeDimUnitStyle == DimensionUnitStyle.DUAL_UNITS || currentRegion == RegionProfile.INDIA) ?
+                                formatDual(dist) : formatImperial(dist);
+                        badge = "DIMALIGNED: " + distText + " | TAB: Linear Ortho | Click to place";
+                    }
+
+                    if (Math.abs(offsetPx) < 8) offsetPx = (offsetPx >= 0 ? 18.0 : -18.0);
+
+                    drawCADDimensionAdvanced(g2, sp1.x, sp1.y, sp2.x, sp2.y, distText, (int) Math.round(offsetPx),
+                            curType, activeDimArrowStyle, false);
+
                     g2.setFont(new Font("Segoe UI", Font.BOLD, 11));
                     FontMetrics fm = g2.getFontMetrics();
                     int bw = fm.stringWidth(badge) + 16;
@@ -10669,6 +11115,85 @@ public class HousePlanCADApp extends JFrame {
             if (primarySelected instanceof CADElement && selectedObjects.size() == 1) {
                 drawRotateHandleAndHUD(g2, (CADElement) primarySelected);
             }
+            if (primarySelected instanceof CADDimension && selectedObjects.size() == 1) {
+                drawDimensionHUD(g2, (CADDimension) primarySelected);
+            }
+        }
+
+        private void drawDimensionHUD(Graphics2D g2, CADDimension d) {
+            Point sp1 = worldToScreen(d.x1, d.y1);
+            Point sp2 = worldToScreen(d.x2, d.y2);
+            int midX = (sp1.x + sp2.x) / 2;
+            int midY = (sp1.y + sp2.y) / 2;
+
+            if (d.dimType == DimensionType.LINEAR_HORIZONTAL) {
+                midY = (int) (Math.min(sp1.y, sp2.y) + d.offset);
+            } else if (d.dimType == DimensionType.LINEAR_VERTICAL) {
+                midX = (int) (Math.min(sp1.x, sp2.x) + d.offset);
+            } else {
+                double dx = sp2.x - sp1.x, dy = sp2.y - sp1.y;
+                double len = Math.hypot(dx, dy);
+                if (len > 0) {
+                    midX += (int) ((-dy / len) * d.offset);
+                    midY += (int) ((dx / len) * d.offset);
+                }
+            }
+
+            int hudW = 278, hudH = 22;
+            int hudX = midX - hudW / 2;
+            int hudY = midY - 32;
+
+            g2.setColor(lightThemeEnabled ? new Color(255, 255, 255, 245) : new Color(15, 23, 42, 235));
+            g2.fillRoundRect(hudX - 6, hudY - 4, hudW + 12, hudH + 8, 8, 8);
+            g2.setColor(lightThemeEnabled ? new Color(203, 213, 225) : new Color(56, 189, 248, 160));
+            g2.setStroke(new BasicStroke(0.8f));
+            g2.drawRoundRect(hudX - 6, hudY - 4, hudW + 12, hudH + 8, 8, 8);
+
+            String arrowLabel = (d.arrowStyle == DimensionArrowStyle.CLOSED_FILLED) ? "► Arrow" :
+                    ((d.arrowStyle == DimensionArrowStyle.ARCH_TICK) ? "/ Tick" : "● Dot");
+            addHUDButton(g2, hudX, hudY, 56, 20, arrowLabel, () -> {
+                saveUndoState();
+                if (d.arrowStyle == DimensionArrowStyle.CLOSED_FILLED) d.arrowStyle = DimensionArrowStyle.ARCH_TICK;
+                else if (d.arrowStyle == DimensionArrowStyle.ARCH_TICK) d.arrowStyle = DimensionArrowStyle.DOT;
+                else d.arrowStyle = DimensionArrowStyle.CLOSED_FILLED;
+                activeDimArrowStyle = d.arrowStyle;
+                repaint();
+            });
+
+            String unitLabel = (d.unitStyle == DimensionUnitStyle.DUAL_UNITS) ? "Dual [mm]" :
+                    ((d.unitStyle == DimensionUnitStyle.METRIC_MM) ? "Metric" : "Ft-In");
+            addHUDButton(g2, hudX + 60, hudY, 62, 20, unitLabel, () -> {
+                saveUndoState();
+                if (d.unitStyle == DimensionUnitStyle.DEFAULT || d.unitStyle == DimensionUnitStyle.FEET_INCHES)
+                    d.unitStyle = DimensionUnitStyle.DUAL_UNITS;
+                else if (d.unitStyle == DimensionUnitStyle.DUAL_UNITS)
+                    d.unitStyle = DimensionUnitStyle.METRIC_MM;
+                else
+                    d.unitStyle = DimensionUnitStyle.FEET_INCHES;
+                updateProperties();
+                repaint();
+            });
+
+            addHUDButton(g2, hudX + 126, hudY, 48, 20, "✎ Text", () -> {
+                String current = (d.customText != null) ? d.customText : "";
+                String input = JOptionPane.showInputDialog(HousePlanCADApp.this,
+                        "Enter custom dimension text / note:\n(Use <> for measured length, e.g. '<> TYP.' or '2X <>'):",
+                        current);
+                if (input != null) {
+                    saveUndoState();
+                    d.customText = input.trim().isEmpty() ? null : input.trim();
+                    updateProperties();
+                    repaint();
+                }
+            });
+
+            addHUDButton(g2, hudX + 178, hudY, 44, 20, "⇄ Flip", () -> {
+                saveUndoState();
+                d.offset = -d.offset;
+                repaint();
+            });
+
+            addHUDButton(g2, hudX + 226, hudY, 44, 20, "✕ Del", HousePlanCADApp.this::deleteSelected);
         }
 
         private void drawRotateHandleAndHUD(Graphics2D g2, CADElement el) {
@@ -11686,7 +12211,14 @@ public class HousePlanCADApp extends JFrame {
                   .append(", \"y1\": ").append(d.y1)
                   .append(", \"x2\": ").append(d.x2)
                   .append(", \"y2\": ").append(d.y2)
-                  .append(", \"offset\": ").append(d.offset).append("}");
+                  .append(", \"offset\": ").append(d.offset)
+                  .append(", \"dimType\": \"").append(d.dimType != null ? d.dimType.name() : "ALIGNED").append("\"")
+                  .append(", \"arrowStyle\": \"").append(d.arrowStyle != null ? d.arrowStyle.name() : "CLOSED_FILLED").append("\"")
+                  .append(", \"unitStyle\": \"").append(d.unitStyle != null ? d.unitStyle.name() : "DEFAULT").append("\"");
+                if (d.customText != null) {
+                    sb.append(", \"customText\": \"").append(SimpleJson.escape(d.customText)).append("\"");
+                }
+                sb.append("}");
                 if (i < dimensions.size() - 1) sb.append(",");
                 sb.append("\n");
             }
@@ -11844,6 +12376,19 @@ public class HousePlanCADApp extends JFrame {
                         double offset = SimpleJson.getDouble(dm, "offset", 24.0);
                         CADDimension d = new CADDimension(x1, y1, x2, y2, offset);
                         d.id = SimpleJson.getString(dm, "id", UUID.randomUUID().toString());
+                        String dt = SimpleJson.getString(dm, "dimType", null);
+                        if (dt != null) {
+                            try { d.dimType = DimensionType.valueOf(dt); } catch (Exception ignored) {}
+                        }
+                        String as = SimpleJson.getString(dm, "arrowStyle", null);
+                        if (as != null) {
+                            try { d.arrowStyle = DimensionArrowStyle.valueOf(as); } catch (Exception ignored) {}
+                        }
+                        String us = SimpleJson.getString(dm, "unitStyle", null);
+                        if (us != null) {
+                            try { d.unitStyle = DimensionUnitStyle.valueOf(us); } catch (Exception ignored) {}
+                        }
+                        d.customText = SimpleJson.getString(dm, "customText", null);
                         dimensions.add(d);
                     }
                 }
@@ -16709,35 +17254,113 @@ public class HousePlanCADApp extends JFrame {
             g2.setTransform(elTx);
         }
 
-        // --- Layer 3: Architectural Dimensions ---
+        // --- Layer 3: Architectural Dimensions (AutoCAD Engineering Style) ---
         for (CADDimension d : dimensions) {
-            double dx = d.x2 - d.x1, dy = d.y2 - d.y1;
-            double len = Math.hypot(dx, dy);
-            if (len <= 0) continue;
-            double ux = dx / len, uy = dy / len;
-            double nx = -uy, ny = ux;
+            double p1x, p1y, p2x, p2y;
+            double e1StartX, e1StartY, e2StartX, e2StartY;
+            double e1EndX, e1EndY, e2EndX, e2EndY;
+            double originGap = 5.0 / scale;
+            double extBeyond = 4.0 / scale;
 
-            double p1x = d.x1 + nx * d.offset, p1y = d.y1 + ny * d.offset;
-            double p2x = d.x2 + nx * d.offset, p2y = d.y2 + ny * d.offset;
+            if (d.dimType == DimensionType.LINEAR_HORIZONTAL) {
+                double dimY = Math.min(d.y1, d.y2) + d.offset;
+                p1x = d.x1; p1y = dimY;
+                p2x = d.x2; p2y = dimY;
+
+                double dir1 = Math.signum(dimY - d.y1); if (dir1 == 0) dir1 = 1;
+                double dir2 = Math.signum(dimY - d.y2); if (dir2 == 0) dir2 = 1;
+                e1StartX = d.x1; e1StartY = d.y1 + dir1 * originGap;
+                e1EndX = d.x1; e1EndY = dimY + dir1 * extBeyond;
+                e2StartX = d.x2; e2StartY = d.y2 + dir2 * originGap;
+                e2EndX = d.x2; e2EndY = dimY + dir2 * extBeyond;
+            } else if (d.dimType == DimensionType.LINEAR_VERTICAL) {
+                double dimX = Math.min(d.x1, d.x2) + d.offset;
+                p1x = dimX; p1y = d.y1;
+                p2x = dimX; p2y = d.y2;
+
+                double dir1 = Math.signum(dimX - d.x1); if (dir1 == 0) dir1 = 1;
+                double dir2 = Math.signum(dimX - d.x2); if (dir2 == 0) dir2 = 1;
+                e1StartX = d.x1 + dir1 * originGap; e1StartY = d.y1;
+                e1EndX = dimX + dir1 * extBeyond; e1EndY = d.y1;
+                e2StartX = d.x2 + dir2 * originGap; e2StartY = d.y2;
+                e2EndX = dimX + dir2 * extBeyond; e2EndY = d.y2;
+            } else {
+                double dx = d.x2 - d.x1, dy = d.y2 - d.y1;
+                double len = Math.hypot(dx, dy);
+                if (len <= 0) continue;
+                double ux = dx / len, uy = dy / len;
+                double nx = -uy, ny = ux;
+                p1x = d.x1 + nx * d.offset; p1y = d.y1 + ny * d.offset;
+                p2x = d.x2 + nx * d.offset; p2y = d.y2 + ny * d.offset;
+
+                double offDist = Math.abs(d.offset);
+                double dirX = (offDist > 0) ? (nx * Math.signum(d.offset)) : 0;
+                double dirY = (offDist > 0) ? (ny * Math.signum(d.offset)) : 0;
+                e1StartX = d.x1 + dirX * originGap; e1StartY = d.y1 + dirY * originGap;
+                e1EndX = p1x + dirX * extBeyond; e1EndY = p1y + dirY * extBeyond;
+                e2StartX = d.x2 + dirX * originGap; e2StartY = d.y2 + dirY * originGap;
+                e2EndX = p2x + dirX * extBeyond; e2EndY = p2y + dirY * extBeyond;
+            }
 
             g2.setColor(isMonochrome ? Color.BLACK : new Color(51, 65, 85));
-            g2.setStroke(new BasicStroke((float) (0.65 / scale)));
+            g2.setStroke(new BasicStroke((float) (0.75 / scale)));
 
             // Extension witness lines
-            g2.draw(new Line2D.Double(d.x1, d.y1, p1x + nx * (3.0 / scale), p1y + ny * (3.0 / scale)));
-            g2.draw(new Line2D.Double(d.x2, d.y2, p2x + nx * (3.0 / scale), p2y + ny * (3.0 / scale)));
+            g2.draw(new Line2D.Double(e1StartX, e1StartY, e1EndX, e1EndY));
+            g2.draw(new Line2D.Double(e2StartX, e2StartY, e2EndX, e2EndY));
 
             // Dimension line
             g2.draw(new Line2D.Double(p1x, p1y, p2x, p2y));
 
-            // 45-degree architectural slash ticks
-            double tickSize = 4.0 / scale;
-            g2.setStroke(new BasicStroke((float) (0.9 / scale)));
-            g2.draw(new Line2D.Double(p1x - tickSize, p1y + tickSize, p1x + tickSize, p1y - tickSize));
-            g2.draw(new Line2D.Double(p2x - tickSize, p2y + tickSize, p2x + tickSize, p2y - tickSize));
+            // Dimension line vector & terminators
+            double ddx = p2x - p1x, ddy = p2y - p1y;
+            double dLen = Math.hypot(ddx, ddy);
+            if (dLen <= 0) continue;
+            double dux = ddx / dLen, duy = ddy / dLen;
+            double dvx = -duy, dvy = dux;
+
+            DimensionArrowStyle arrStyle = (d.arrowStyle != null) ? d.arrowStyle : DimensionArrowStyle.CLOSED_FILLED;
+            if (arrStyle == DimensionArrowStyle.ARCH_TICK) {
+                double tickSize = 4.5 / scale;
+                g2.setStroke(new BasicStroke((float) (1.1 / scale)));
+                g2.draw(new Line2D.Double(p1x - tickSize, p1y + tickSize, p1x + tickSize, p1y - tickSize));
+                g2.draw(new Line2D.Double(p2x - tickSize, p2y + tickSize, p2x + tickSize, p2y - tickSize));
+            } else if (arrStyle == DimensionArrowStyle.DOT) {
+                double r = 2.5 / scale;
+                g2.fill(new Ellipse2D.Double(p1x - r, p1y - r, r * 2, r * 2));
+                g2.fill(new Ellipse2D.Double(p2x - r, p2y - r, r * 2, r * 2));
+            } else {
+                double aLen = 8.5 / scale, aWidth = 2.4 / scale;
+                boolean inside = (dLen >= aLen * 2 + (12.0 / scale));
+                Path2D.Double a1 = new Path2D.Double();
+                Path2D.Double a2 = new Path2D.Double();
+                if (inside) {
+                    a1.moveTo(p1x, p1y);
+                    a1.lineTo(p1x + dux * aLen + dvx * aWidth, p1y + duy * aLen + dvy * aWidth);
+                    a1.lineTo(p1x + dux * aLen - dvx * aWidth, p1y + duy * aLen - dvy * aWidth);
+                    a1.closePath();
+
+                    a2.moveTo(p2x, p2y);
+                    a2.lineTo(p2x - dux * aLen + dvx * aWidth, p2y - duy * aLen + dvy * aWidth);
+                    a2.lineTo(p2x - dux * aLen - dvx * aWidth, p2y - duy * aLen - dvy * aWidth);
+                    a2.closePath();
+                } else {
+                    a1.moveTo(p1x, p1y);
+                    a1.lineTo(p1x - dux * aLen + dvx * aWidth, p1y - duy * aLen + dvy * aWidth);
+                    a1.lineTo(p1x - dux * aLen - dvx * aWidth, p1y - duy * aLen - dvy * aWidth);
+                    a1.closePath();
+
+                    a2.moveTo(p2x, p2y);
+                    a2.lineTo(p2x + dux * aLen + dvx * aWidth, p2y + duy * aLen + dvy * aWidth);
+                    a2.lineTo(p2x + dux * aLen - dvx * aWidth, p2y + duy * aLen - dvy * aWidth);
+                    a2.closePath();
+                }
+                g2.fill(a1);
+                g2.fill(a2);
+            }
 
             // Dimension text badge
-            String dimText = formatImperial(len);
+            String dimText = formatEngineeringDimension(d);
             float fontSize = (float) Math.max(10.0, 11.5 / scale);
             g2.setFont(new Font("Consolas", Font.BOLD, (int) fontSize));
             FontMetrics fm = g2.getFontMetrics();
@@ -16747,7 +17370,7 @@ public class HousePlanCADApp extends JFrame {
 
             AffineTransform dimTx = g2.getTransform();
             g2.translate(midX, midY);
-            double angle = Math.toDegrees(Math.atan2(dy, dx));
+            double angle = Math.toDegrees(Math.atan2(ddy, ddx));
             if (angle > 90 || angle < -90) angle += 180;
             g2.rotate(Math.toRadians(angle));
 
