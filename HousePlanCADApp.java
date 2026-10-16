@@ -487,6 +487,10 @@ public class HousePlanCADApp extends JFrame {
     private javax.swing.Timer autoSaveTimer = null;
     private JLabel headerProjectTitleLbl = null;
     private JLabel headerDirtyIndicator = null;
+    public static final String APP_VERSION = "1.2.1";
+    public static final String UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/thyagarajsalome/HDE-Studio_Java-Project/main/version.json";
+    private ModernButton headerUpdateBtn = null;
+    private UpdateInfo availableUpdate = null;
 
     // ─── Commercial Licensing & Activation Engine ───
     public static class LicenseManager {
@@ -654,6 +658,11 @@ public class HousePlanCADApp extends JFrame {
                 showRegionSelectorDialog(true);
             });
         }
+        // Background check for software updates 3 seconds after startup
+        new javax.swing.Timer(3000, evt -> {
+            ((javax.swing.Timer)evt.getSource()).stop();
+            checkForUpdatesAsync(false);
+        }).start();
     }
 
     private void initUI() {
@@ -866,6 +875,17 @@ public class HousePlanCADApp extends JFrame {
         licenseBtn.setToolTipText("HDE Studio Commercial License Status & Device Activation");
         licenseBtn.addActionListener(e -> showActivationDialog(false));
 
+        headerUpdateBtn = new ModernButton("Updates", new Color(24, 33, 53), new Color(56, 189, 248), new Color(14, 116, 144));
+        headerUpdateBtn.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        headerUpdateBtn.setToolTipText("Check for HDE Studio Updates (v" + APP_VERSION + ")");
+        headerUpdateBtn.addActionListener(e -> {
+            if (availableUpdate != null) {
+                showUpdateDialog(availableUpdate);
+            } else {
+                checkForUpdatesAsync(true);
+            }
+        });
+
         ModernButton learnBtn = new ModernButton("Learn", new Color(30, 41, 59), new Color(147, 197, 253), new Color(59, 130, 246));
         learnBtn.setFont(new Font("Segoe UI", Font.BOLD, 11));
         learnBtn.setToolTipText("Learn HDE Studio: Step-by-Step Interactive Tutorials & Shortcuts (F1)");
@@ -886,6 +906,7 @@ public class HousePlanCADApp extends JFrame {
         actionPanel.add(headerThemeBtn);
         actionPanel.add(exportBtn);
         actionPanel.add(licenseBtn);
+        actionPanel.add(headerUpdateBtn);
         actionPanel.add(learnBtn);
         actionPanel.add(clearBtn);
 
@@ -15978,6 +15999,354 @@ public class HousePlanCADApp extends JFrame {
         g2.drawOval(cx - r, cy - r, r * 2, r * 2);
         g2.setStroke(new BasicStroke(sHair));
         g2.drawOval(cx - r * 2 / 3, cy - r * 2 / 3, r * 4 / 3, r * 4 / 3);
+    }
+
+    // ─── Automatic In-App Update Engine ───
+    public static class UpdateInfo {
+        public String version = "";
+        public String downloadUrl = "";
+        public String releaseNotes = "";
+    }
+
+    public static boolean isNewerVersion(String remote, String current) {
+        if (remote == null || current == null) return false;
+        try {
+            String[] rParts = remote.replaceAll("[^0-9.]", "").split("\\.");
+            String[] cParts = current.replaceAll("[^0-9.]", "").split("\\.");
+            int max = Math.max(rParts.length, cParts.length);
+            for (int i = 0; i < max; i++) {
+                int r = (i < rParts.length && !rParts[i].isEmpty()) ? Integer.parseInt(rParts[i]) : 0;
+                int c = (i < cParts.length && !cParts[i].isEmpty()) ? Integer.parseInt(cParts[i]) : 0;
+                if (r > c) return true;
+                if (r < c) return false;
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    public void checkForUpdatesAsync(boolean manual) {
+        if (manual) {
+            setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+            if (headerUpdateBtn != null) headerUpdateBtn.setText("Checking...");
+        }
+        new Thread(() -> {
+            UpdateInfo info = null;
+            String errorMsg = null;
+            try {
+                java.net.URL url = new java.net.URL(UPDATE_MANIFEST_URL);
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                conn.setConnectTimeout(6000);
+                conn.setReadTimeout(6000);
+                conn.setRequestProperty("User-Agent", "HDE-Studio-App/" + APP_VERSION);
+                conn.setRequestProperty("Accept", "application/json");
+
+                int code = conn.getResponseCode();
+                if (code == 200) {
+                    try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                            new java.io.InputStreamReader(conn.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+                        StringBuilder sb = new StringBuilder();
+                        String line;
+                        while ((line = reader.readLine()) != null) sb.append(line).append("\n");
+                        String json = sb.toString();
+
+                        info = new UpdateInfo();
+                        java.util.regex.Matcher mV = java.util.regex.Pattern.compile("\"version\"\\s*:\\s*\"([^\"]+)\"").matcher(json);
+                        if (mV.find()) info.version = mV.group(1).trim();
+
+                        java.util.regex.Matcher mU = java.util.regex.Pattern.compile("\"downloadUrl\"\\s*:\\s*\"([^\"]+)\"").matcher(json);
+                        if (mU.find()) info.downloadUrl = mU.group(1).trim();
+
+                        java.util.regex.Matcher mR = java.util.regex.Pattern.compile("\"releaseNotes\"\\s*:\\s*\"([^\"]+)\"").matcher(json);
+                        if (mR.find()) info.releaseNotes = mR.group(1).replace("\\n", "\n").replace("\\\"", "\"").trim();
+                    }
+                } else {
+                    errorMsg = "Server returned HTTP " + code;
+                }
+            } catch (Exception ex) {
+                errorMsg = ex.getMessage();
+            }
+
+            final UpdateInfo finalInfo = info;
+            final String finalErr = errorMsg;
+
+            SwingUtilities.invokeLater(() -> {
+                if (manual) {
+                    setCursor(Cursor.getDefaultCursor());
+                    if (headerUpdateBtn != null) headerUpdateBtn.setText("Updates");
+                }
+
+                if (finalInfo != null && !finalInfo.version.isEmpty()) {
+                    boolean hasUpdate = isNewerVersion(finalInfo.version, APP_VERSION);
+                    if (hasUpdate) {
+                        availableUpdate = finalInfo;
+                        if (headerUpdateBtn != null) {
+                            headerUpdateBtn.setText("Update: v" + finalInfo.version);
+                            headerUpdateBtn.setForeground(new Color(251, 191, 36)); // Gold
+                        }
+                        if (manual) {
+                            showUpdateDialog(finalInfo);
+                        } else {
+                            if (viewportPanel != null) {
+                                viewportPanel.showToastNotification("[UPDATE] HDE Studio v" + finalInfo.version + " available! Click 'Update' in top bar to install.");
+                            }
+                        }
+                    } else {
+                        if (manual) {
+                            showModernDialog(this, "Software Updates", "HDE Studio is Up to Date",
+                                    "You are using the latest version of HDE Studio (v" + APP_VERSION + ").<br>No new updates are currently required.");
+                        }
+                    }
+                } else {
+                    if (manual) {
+                        showModernDialog(this, "Update Check", "Unable to Check for Updates",
+                                "Could not connect to update server.<br>" + (finalErr != null ? finalErr : "Please check your internet connection and try again."));
+                    }
+                }
+            });
+        }).start();
+    }
+
+    public void showUpdateDialog(UpdateInfo info) {
+        JDialog dlg = new JDialog(this, "HDE Studio Software Update", true);
+        dlg.setLayout(new BorderLayout());
+        dlg.getContentPane().setBackground(new Color(15, 23, 42)); // Slate #0f172a
+
+        JPanel root = new JPanel(new BorderLayout(0, 16));
+        root.setOpaque(false);
+        root.setBorder(new EmptyBorder(22, 24, 20, 24));
+
+        // Header
+        JPanel headPanel = new JPanel();
+        headPanel.setLayout(new BoxLayout(headPanel, BoxLayout.Y_AXIS));
+        headPanel.setOpaque(false);
+
+        JLabel badge = new JLabel("HDE STUDIO SOFTWARE UPDATE");
+        badge.setFont(new Font("Consolas", Font.BOLD, 10));
+        badge.setForeground(new Color(56, 189, 248));
+
+        JLabel titleLbl = new JLabel("New Version Available: v" + info.version);
+        titleLbl.setFont(new Font("Segoe UI", Font.BOLD, 18));
+        titleLbl.setForeground(Color.WHITE);
+
+        headPanel.add(badge);
+        headPanel.add(Box.createVerticalStrut(4));
+        headPanel.add(titleLbl);
+        root.add(headPanel, BorderLayout.NORTH);
+
+        // Center: Version Comparison Card & Release Notes
+        JPanel centerPanel = new JPanel();
+        centerPanel.setLayout(new BoxLayout(centerPanel, BoxLayout.Y_AXIS));
+        centerPanel.setOpaque(false);
+
+        // Version card
+        JPanel verCard = new JPanel(new GridLayout(1, 2, 12, 0));
+        verCard.setOpaque(false);
+        verCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, 50));
+
+        JPanel curVerBox = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 8));
+        curVerBox.setBackground(new Color(24, 33, 53));
+        curVerBox.setBorder(BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true));
+        JLabel curLbl = new JLabel("<html><span style='color:#94a3b8; font-size:10px'>INSTALLED VERSION</span><br><b style='color:#cbd5e1; font-size:13px'>v" + APP_VERSION + "</b></html>");
+        curVerBox.add(curLbl);
+
+        JPanel newVerBox = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 8));
+        newVerBox.setBackground(new Color(16, 44, 38));
+        newVerBox.setBorder(BorderFactory.createLineBorder(new Color(52, 211, 153), 1, true));
+        JLabel newLbl = new JLabel("<html><span style='color:#6ee7b7; font-size:10px'>LATEST VERSION</span><br><b style='color:#34d399; font-size:13px'>v" + info.version + "</b></html>");
+        newVerBox.add(newLbl);
+
+        verCard.add(curVerBox);
+        verCard.add(newVerBox);
+        centerPanel.add(verCard);
+        centerPanel.add(Box.createVerticalStrut(12));
+
+        // Release notes box
+        JLabel notesTitle = new JLabel("Release Notes & What's New:");
+        notesTitle.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        notesTitle.setForeground(new Color(203, 213, 225));
+        centerPanel.add(notesTitle);
+        centerPanel.add(Box.createVerticalStrut(6));
+
+        JTextArea notesArea = new JTextArea(info.releaseNotes.isEmpty() ? "General stability and performance improvements." : info.releaseNotes);
+        notesArea.setEditable(false);
+        notesArea.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        notesArea.setBackground(new Color(24, 33, 53));
+        notesArea.setForeground(new Color(226, 232, 240));
+        notesArea.setLineWrap(true);
+        notesArea.setWrapStyleWord(true);
+        notesArea.setBorder(new EmptyBorder(8, 10, 8, 10));
+
+        JScrollPane scroll = new JScrollPane(notesArea);
+        scroll.setPreferredSize(new Dimension(480, 130));
+        scroll.setBorder(BorderFactory.createLineBorder(new Color(51, 65, 85), 1, true));
+        centerPanel.add(scroll);
+        centerPanel.add(Box.createVerticalStrut(12));
+
+        // Progress section (hidden until download starts)
+        JPanel progressPanel = new JPanel();
+        progressPanel.setLayout(new BoxLayout(progressPanel, BoxLayout.Y_AXIS));
+        progressPanel.setOpaque(false);
+
+        JLabel statusLabel = new JLabel("Click 'Update Now' to automatically download and apply.");
+        statusLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        statusLabel.setForeground(new Color(148, 163, 184));
+
+        JProgressBar pBar = new JProgressBar(0, 100);
+        pBar.setStringPainted(true);
+        pBar.setForeground(new Color(14, 165, 233));
+        pBar.setBackground(new Color(24, 33, 53));
+        pBar.setBorder(BorderFactory.createLineBorder(new Color(51, 65, 85)));
+        pBar.setVisible(false);
+
+        progressPanel.add(statusLabel);
+        progressPanel.add(Box.createVerticalStrut(4));
+        progressPanel.add(pBar);
+        centerPanel.add(progressPanel);
+
+        root.add(centerPanel, BorderLayout.CENTER);
+
+        // Footer buttons
+        JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        btnRow.setOpaque(false);
+
+        ModernButton cancelBtn = new ModernButton("Remind Me Later", new Color(24, 33, 53), new Color(148, 163, 184), new Color(51, 65, 85));
+        cancelBtn.setPreferredSize(new Dimension(130, 32));
+        cancelBtn.addActionListener(e -> dlg.dispose());
+
+        ModernButton updateBtn = new ModernButton("Update & Restart", new Color(14, 116, 144), Color.WHITE, new Color(56, 189, 248));
+        updateBtn.setPreferredSize(new Dimension(140, 32));
+        updateBtn.addActionListener(e -> {
+            updateBtn.setEnabled(false);
+            cancelBtn.setEnabled(false);
+            pBar.setVisible(true);
+            statusLabel.setText("Connecting to update server...");
+            dlg.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+
+            new Thread(() -> performJarDownloadAndUpdate(info, pBar, statusLabel, dlg, updateBtn, cancelBtn)).start();
+        });
+
+        btnRow.add(cancelBtn);
+        btnRow.add(updateBtn);
+        root.add(btnRow, BorderLayout.SOUTH);
+
+        dlg.setContentPane(root);
+        dlg.pack();
+        dlg.setSize(540, 440);
+        dlg.setLocationRelativeTo(this);
+        dlg.setVisible(true);
+    }
+
+    private void performJarDownloadAndUpdate(UpdateInfo info, JProgressBar pBar, JLabel statusLbl, JDialog dlg,
+                                             ModernButton updateBtn, ModernButton cancelBtn) {
+        try {
+            File currentJar = null;
+            try {
+                java.net.URI uri = HousePlanCADApp.class.getProtectionDomain().getCodeSource().getLocation().toURI();
+                currentJar = new File(uri);
+            } catch (Exception ignored) {}
+
+            File downloadDir;
+            boolean isRunningFromJar = (currentJar != null && currentJar.isFile() && currentJar.getName().toLowerCase().endsWith(".jar"));
+            if (isRunningFromJar) {
+                downloadDir = currentJar.getParentFile();
+            } else {
+                downloadDir = new File(System.getProperty("user.home"), "Downloads");
+            }
+
+            File targetFile = new File(downloadDir, "HDE-Studio.jar.update");
+
+            // Follow HTTP redirects (GitHub releases redirect to AWS S3)
+            String targetUrl = info.downloadUrl;
+            java.net.HttpURLConnection conn = null;
+            int redirectCount = 0;
+            while (redirectCount < 6) {
+                java.net.URL u = new java.net.URL(targetUrl);
+                conn = (java.net.HttpURLConnection) u.openConnection();
+                conn.setRequestProperty("User-Agent", "HDE-Studio-Updater/" + APP_VERSION);
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(15000);
+                int code = conn.getResponseCode();
+                if (code == java.net.HttpURLConnection.HTTP_MOVED_TEMP || code == java.net.HttpURLConnection.HTTP_MOVED_PERM || code == 307 || code == 308) {
+                    targetUrl = conn.getHeaderField("Location");
+                    redirectCount++;
+                } else if (code == 200) {
+                    break;
+                } else {
+                    throw new java.io.IOException("Server returned HTTP " + code);
+                }
+            }
+
+            long totalBytes = conn.getContentLengthLong();
+            SwingUtilities.invokeLater(() -> statusLbl.setText("Downloading HDE Studio v" + info.version + "..."));
+
+            try (java.io.InputStream in = conn.getInputStream();
+                 java.io.FileOutputStream out = new java.io.FileOutputStream(targetFile)) {
+                byte[] buf = new byte[16384];
+                long readSoFar = 0;
+                int n;
+                while ((n = in.read(buf)) != -1) {
+                    out.write(buf, 0, n);
+                    readSoFar += n;
+                    if (totalBytes > 0) {
+                        final int pct = (int) ((readSoFar * 100) / totalBytes);
+                        final String stat = String.format("Downloading: %.1f MB / %.1f MB (%d%%)",
+                                readSoFar / (1024.0 * 1024.0), totalBytes / (1024.0 * 1024.0), pct);
+                        SwingUtilities.invokeLater(() -> {
+                            pBar.setValue(pct);
+                            statusLbl.setText(stat);
+                        });
+                    }
+                }
+                out.flush();
+            }
+
+            if (!targetFile.exists() || targetFile.length() < 100000) {
+                throw new java.io.IOException("Downloaded update file appears corrupted or incomplete.");
+            }
+
+            SwingUtilities.invokeLater(() -> {
+                pBar.setValue(100);
+                statusLbl.setText("Download complete! Applying update...");
+            });
+
+            Thread.sleep(800);
+
+            if (isRunningFromJar) {
+                // Write restart batch script next to the jar
+                File batchFile = new File(downloadDir, "update_and_restart.bat");
+                String jarName = currentJar.getName();
+                String updateName = targetFile.getName();
+                try (PrintWriter pw = new PrintWriter(new FileWriter(batchFile))) {
+                    pw.println("@echo off");
+                    pw.println("echo Updating HDE Studio to version " + info.version + "...");
+                    pw.println("timeout /t 2 /nobreak > nul");
+                    pw.println("copy /y \"%~dp0" + updateName + "\" \"%~dp0" + jarName + "\" > nul");
+                    pw.println("del \"%~dp0" + updateName + "\" > nul");
+                    pw.println("start \"\" javaw -jar \"%~dp0" + jarName + "\"");
+                    pw.println("del \"%~f0\"");
+                }
+
+                new ProcessBuilder("cmd.exe", "/c", batchFile.getAbsolutePath()).start();
+                System.exit(0);
+            } else {
+                SwingUtilities.invokeLater(() -> {
+                    statusLbl.setText("Downloaded update to: " + targetFile.getAbsolutePath());
+                    showModernDialog(dlg, "Update Ready", "JAR Downloaded",
+                            "HDE Studio v" + info.version + " has been downloaded to:<br><code>" + targetFile.getAbsolutePath() + "</code><br>(Running in development mode).");
+                    dlg.dispose();
+                });
+            }
+        } catch (Exception ex) {
+            final String err = ex.getMessage();
+            SwingUtilities.invokeLater(() -> {
+                statusLbl.setText("Update failed: " + err);
+                updateBtn.setEnabled(true);
+                cancelBtn.setEnabled(true);
+                dlg.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+                showModernDialog(dlg, "Update Failed", "Could not complete update",
+                        "An error occurred while downloading the update:<br>" + err + "<br>Please check your internet connection or download manually from GitHub.");
+            });
+        }
     }
 
     private void exportBlueprintPNG() {

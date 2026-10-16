@@ -1,0 +1,5 @@
+{
+  "version": "1.2.1",
+  "downloadUrl": "https://github.com/thyagarajsalome/HDE-Studio_Java-Project/releases/download/v1.2.1/HDE-Studio.jar",
+  "releaseNotes": "• Fixed missing rectangular glyphs (tofu boxes) across buttons, stage stepper, and status HUD\n• Improved Undo/Redo button clarity and sizing\n• Parametric Room Builder & Column Grid UI polish\n• Added automatic in-app update engine"
+}
