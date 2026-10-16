@@ -967,12 +967,41 @@ public class HousePlanCADApp extends JFrame {
     private ModernButton headerUpdateBtn = null;
     private UpdateInfo availableUpdate = null;
 
-    // ─── Commercial Licensing & Activation Engine ───
+    // ─── Commercial Licensing & Cryptographic Activation Engine ───
     public static class LicenseManager {
         public static final String PREF_LICENSE_KEY = "hde_license_key";
         public static final String PREF_LICENSE_EMAIL = "hde_license_email";
         public static final String PREF_LICENSE_PLAN = "hde_license_plan";
         public static final String PREF_LICENSE_TOKEN = "hde_license_token";
+
+        // Embedded RSA-2048 Public Key for digital signature verification (PKCS#8 / X.509)
+        public static final String RSA_PUBLIC_KEY_B64 =
+                "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuGIA07lK+pY/2Lr1OXUtOzM+eGKH" +
+                "28cMNM2G2GoWpnwZwKrC5biIhu0LgXhCY7h8pBDbGl1/yACHf/qi80qiNr+N1lUZfNBdyYFV" +
+                "fkShPv39XSEBGOqEo1dEtdba0irDnazEthklzLArtpHEt9JJ72PALcdTHCYdTF2XpLkAGaxh" +
+                "zS47gBwYU7xoBkZOZmGMCFr70dDSIy6Vlm9+ZMUFHzvyQQ2gzfM63ZKNRLbVlQ7hHJbI5/1m" +
+                "PMkgAl+ZanSLbSafaW5Qib1DDK+Yy2B/0daOl3AjEOskpnx2LUlo4OuYTh/IipID/UmzuSqL" +
+                "TVy+J0gjtcJb+qJgl/lzSajU2QIDAQAB";
+
+        private static final String HARDWARE_SALT = "HDE-STUDIO-SALT-839217";
+
+        public static class LicensePayload {
+            public final String email;
+            public final String plan;
+            public final long issued;
+            public final long expires;
+
+            public LicensePayload(String email, String plan, long issued, long expires) {
+                this.email = email;
+                this.plan = plan;
+                this.issued = issued;
+                this.expires = expires;
+            }
+
+            public boolean isExpired() {
+                return expires > 0 && System.currentTimeMillis() > expires;
+            }
+        }
 
         public static String getMachineFingerprint() {
             try {
@@ -996,15 +1025,87 @@ public class HousePlanCADApp extends JFrame {
             }
         }
 
+        /**
+         * Cryptographically verifies that the license key is authentic, signed with the
+         * developer's 2048-bit RSA private key, belongs to the provided email, and has not expired.
+         */
+        public static LicensePayload verifyCryptographicKey(String email, String rawKey) {
+            if (rawKey == null || email == null) return null;
+            String cleanKey = rawKey.trim();
+            if (!cleanKey.startsWith("HDE.")) return null;
+
+            String[] parts = cleanKey.split("\\.");
+            if (parts.length != 3) return null;
+
+            try {
+                byte[] payloadBytes = java.util.Base64.getUrlDecoder().decode(parts[1]);
+                byte[] sigBytes = java.util.Base64.getUrlDecoder().decode(parts[2]);
+
+                byte[] pubKeyBytes = java.util.Base64.getDecoder().decode(RSA_PUBLIC_KEY_B64);
+                java.security.spec.X509EncodedKeySpec pubSpec = new java.security.spec.X509EncodedKeySpec(pubKeyBytes);
+                java.security.KeyFactory kf = java.security.KeyFactory.getInstance("RSA");
+                java.security.PublicKey pubKey = kf.generatePublic(pubSpec);
+
+                java.security.Signature verifier = java.security.Signature.getInstance("SHA256withRSA");
+                verifier.initVerify(pubKey);
+                verifier.update(payloadBytes);
+                if (!verifier.verify(sigBytes)) {
+                    return null; // Cryptographic signature failed! Fake/tampered key!
+                }
+
+                String payloadStr = new String(payloadBytes, "UTF-8");
+                String[] fields = payloadStr.split("\\|");
+                if (fields.length < 5 || !"v1".equals(fields[0])) return null;
+
+                String licensedEmail = fields[1].trim().toLowerCase();
+                String plan = fields[2].trim().toUpperCase();
+                long issued = Long.parseLong(fields[3].trim());
+                long expires = Long.parseLong(fields[4].trim());
+
+                if (!licensedEmail.equalsIgnoreCase(email.trim().toLowerCase())) {
+                    return null; // Key was issued to a different email!
+                }
+
+                LicensePayload lp = new LicensePayload(licensedEmail, plan, issued, expires);
+                if (lp.isExpired()) {
+                    return null; // Expired
+                }
+
+                return lp;
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
         public static boolean isActivated() {
             try {
                 java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(HousePlanCADApp.class);
                 String key = prefs.get(PREF_LICENSE_KEY, null);
                 String token = prefs.get(PREF_LICENSE_TOKEN, null);
-                return key != null && !key.trim().isEmpty() && token != null && !token.trim().isEmpty();
+                String email = prefs.get(PREF_LICENSE_EMAIL, null);
+                if (key == null || token == null || email == null) return false;
+
+                // 1. Verify token binding to current hardware
+                String expectedToken = computeBindingToken(key, email);
+                if (!expectedToken.equalsIgnoreCase(token.trim())) {
+                    return false; // Hardware token mismatch or transferred to another machine
+                }
+
+                // 2. Cryptographically re-verify RSA signature and expiry
+                LicensePayload lp = verifyCryptographicKey(email, key);
+                return lp != null && !lp.isExpired();
             } catch (Exception e) {
                 return false;
             }
+        }
+
+        private static String computeBindingToken(String key, String email) throws Exception {
+            String raw = key.trim() + "#" + getMachineFingerprint() + "#" + email.trim().toLowerCase() + "#" + HARDWARE_SALT;
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] th = md.digest(raw.getBytes("UTF-8"));
+            StringBuilder tb = new StringBuilder();
+            for (byte b : th) tb.append(String.format("%02x", b));
+            return tb.toString();
         }
 
         public static String getRegisteredEmail() {
@@ -1027,41 +1128,36 @@ public class HousePlanCADApp extends JFrame {
 
         public static boolean verifyAndActivate(String email, String key) {
             if (email == null || !email.contains("@") || key == null) return false;
-            String cleanKey = key.trim().toUpperCase();
-            // Accepts standard commercial formats: HDE-IND-XXXX-XXXX, HDE-USA-XXXX-XXXX, HDE-PRO-XXXX-XXXX
-            // Or any valid 16+ character license key issued by HDE Web App
-            if (cleanKey.length() < 12) return false;
+            LicensePayload lp = verifyCryptographicKey(email, key);
+            if (lp == null) return false;
 
             try {
                 java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(HousePlanCADApp.class);
-                prefs.put(PREF_LICENSE_EMAIL, email.trim());
-                prefs.put(PREF_LICENSE_KEY, cleanKey);
+                prefs.put(PREF_LICENSE_EMAIL, lp.email);
+                prefs.put(PREF_LICENSE_KEY, key.trim());
+
                 String plan;
-                if (cleanKey.contains("GLOBAL") || cleanKey.contains("PRO") || cleanKey.contains("ENT") || cleanKey.contains("ALL")) {
+                if ("GLOBAL_PRO".equals(lp.plan) || lp.plan.contains("GLOBAL") || lp.plan.contains("ALL")) {
                     plan = "All-Access Global Pro Edition (India + USA)";
-                } else if (cleanKey.contains("USA")) {
+                } else if ("USA_PRO".equals(lp.plan) || lp.plan.contains("USA")) {
                     plan = "USA & International Edition";
-                } else if (cleanKey.contains("IND")) {
+                } else if ("IND_PRO".equals(lp.plan) || lp.plan.contains("IND")) {
                     plan = "India Standard Edition";
                 } else {
-                    plan = "HDE Studio Commercial License";
+                    plan = "HDE Studio Commercial License (" + lp.plan + ")";
                 }
                 prefs.put(PREF_LICENSE_PLAN, plan);
 
                 // Auto-configure initial region based on license plan
-                if (cleanKey.contains("USA") && !cleanKey.contains("IND")) {
+                if (lp.plan.contains("USA") && !lp.plan.contains("IND")) {
                     prefs.put("hde_region_profile", RegionProfile.USA_INTERNATIONAL.name());
-                } else if (cleanKey.contains("IND") && !cleanKey.contains("USA")) {
+                } else if (lp.plan.contains("IND") && !lp.plan.contains("USA")) {
                     prefs.put("hde_region_profile", RegionProfile.INDIA.name());
                 }
 
-                // Compute local security token combining key and machine fingerprint
-                String tokenRaw = cleanKey + "#" + getMachineFingerprint();
-                java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
-                byte[] th = md.digest(tokenRaw.getBytes("UTF-8"));
-                StringBuilder tb = new StringBuilder();
-                for (byte b : th) tb.append(String.format("%02x", b));
-                prefs.put(PREF_LICENSE_TOKEN, tb.toString());
+                // Compute local cryptographic token bound to machine hardware
+                String token = computeBindingToken(key, lp.email);
+                prefs.put(PREF_LICENSE_TOKEN, token);
                 prefs.flush();
                 return true;
             } catch (Exception e) {

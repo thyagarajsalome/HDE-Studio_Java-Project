@@ -19,3 +19,8 @@ jpackage_input/
 installer_build/
 *.zip
 *.vbs
+
+# Private Licensing Keys & Secrets (NEVER push to repository)
+licensing_secret/
+*.pem
+*.key

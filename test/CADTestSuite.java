@@ -168,19 +168,69 @@ public class CADTestSuite {
                 "Unexpected format output: " + fmt6);
     }
 
-    // ─── Test 6: Licensing Logic ───
+    // ─── Test 6: Cryptographic RSA-2048 Licensing Security ───
     private static void testLicenseManagerValidation() {
-        System.out.println("\n[Suite 6] License Engine Baseline Verification");
+        System.out.println("\n[Suite 6] Cryptographic RSA-2048 Licensing Security");
         String fp = HousePlanCADApp.LicenseManager.getMachineFingerprint();
         assertTrue("Machine fingerprint generated", fp != null && fp.length() >= 8,
                 "Invalid machine fingerprint: " + fp);
 
-        // Verify key length constraint baseline
-        assertTrue("Rejects key shorter than 12 chars",
-                !HousePlanCADApp.LicenseManager.verifyAndActivate("test@example.com", "SHORT-KEY"),
-                "Should reject key < 12 characters");
-        assertTrue("Rejects null or invalid email",
-                !HousePlanCADApp.LicenseManager.verifyAndActivate("invalid-email", "HDE-PRO-1234-5678"),
+        // 1. Rejects fake / scammer keys
+        assertTrue("Rejects dummy key 'HDE-PRO-1234-5678'",
+                !HousePlanCADApp.LicenseManager.verifyAndActivate("test@example.com", "HDE-PRO-1234-5678"),
+                "Should reject fake key without cryptographic signature");
+
+        assertTrue("Rejects random 16-character string",
+                !HousePlanCADApp.LicenseManager.verifyAndActivate("test@example.com", "ABCDEF1234567890"),
+                "Should reject arbitrary strings");
+
+        assertTrue("Rejects invalid email",
+                !HousePlanCADApp.LicenseManager.verifyAndActivate("invalid-email", "HDE.fake.signature"),
                 "Should reject email without @");
+
+        // 2. Generate and test real cryptographic license
+        try {
+            String testEmail = "licensed.architect@example.com";
+            String validKey = tools.GenerateLicense.generateKey(testEmail, "GLOBAL_PRO", 0);
+
+            assertTrue("Generates valid HDE license key starting with HDE.",
+                    validKey != null && validKey.startsWith("HDE."),
+                    "Invalid key format: " + validKey);
+
+            // 3. Test tampered key rejection (even 1 character changed)
+            String tamperedKey = validKey.substring(0, validKey.length() - 2) + "AB";
+            assertTrue("Rejects tampered signature (anti-cracker protection)",
+                    !HousePlanCADApp.LicenseManager.verifyAndActivate(testEmail, tamperedKey),
+                    "Should reject tampered signature");
+
+            // 4. Test wrong email rejection (anti-sharing protection)
+            assertTrue("Rejects valid key when entered by different email",
+                    !HousePlanCADApp.LicenseManager.verifyAndActivate("pirate@different.com", validKey),
+                    "Should reject key when email doesn't match licensed payload");
+
+            // 5. Test legitimate activation
+            boolean activated = HousePlanCADApp.LicenseManager.verifyAndActivate(testEmail, validKey);
+            assertTrue("Legitimate RSA-signed key activates successfully", activated,
+                    "Failed to activate valid cryptographic license");
+
+            assertTrue("isActivated() reports true for valid hardware token",
+                    HousePlanCADApp.LicenseManager.isActivated(),
+                    "isActivated() returned false after valid activation");
+
+            assertTrue("License plan recognized as Global Pro",
+                    HousePlanCADApp.LicenseManager.getLicensePlan().contains("Global Pro"),
+                    "Unexpected plan: " + HousePlanCADApp.LicenseManager.getLicensePlan());
+
+            // 6. Clean up deactivation
+            HousePlanCADApp.LicenseManager.deactivate();
+            assertTrue("isActivated() reports false after deactivation",
+                    !HousePlanCADApp.LicenseManager.isActivated(),
+                    "Deactivate failed to clear license");
+
+        } catch (Exception e) {
+            failedTests++;
+            System.err.println("  [FAIL] Cryptographic license test exception: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 }
