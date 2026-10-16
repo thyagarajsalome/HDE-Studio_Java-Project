@@ -17353,12 +17353,17 @@ public class HousePlanCADApp extends JFrame {
      * so that corners and T-junctions meet seamlessly without missing notches or corner gaps.
      */
     public double getWallEndpointExtension(Wall w, boolean isStart) {
+        return computeWallEndpointExtension(this.walls, w, isStart);
+    }
+
+    public static double computeWallEndpointExtension(List<Wall> wallList, Wall w, boolean isStart) {
+        if (wallList == null || w == null) return 0;
         double px = isStart ? w.x1 : w.x2;
         double py = isStart ? w.y1 : w.y2;
         double wallThickPx = (w.thicknessInches / 12.0) * FT_PX;
         double thresh = Math.max(16.0, wallThickPx * 1.5);
         double maxExt = 0;
-        for (Wall other : walls) {
+        for (Wall other : wallList) {
             if (other == w) continue;
             double d = Line2D.ptSegDist(other.x1, other.y1, other.x2, other.y2, px, py);
             if (d <= thresh) {

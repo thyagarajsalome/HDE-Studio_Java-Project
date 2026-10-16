@@ -49,13 +49,18 @@ jobs:
           echo "Version is ${VERSION}"
         shell: bash
 
-      - name: Compile Java Application
+      - name: Compile Java Application & Unit Tests
         run: |
           mkdir -p bin dist output
-          javac -encoding UTF-8 -d bin HousePlanCADApp.java
+          javac -encoding UTF-8 -d bin HousePlanCADApp.java test/CADTestSuite.java
           cp -r assets bin/ || true
           jar cvfe dist/HDE-Studio.jar cadstudio.HousePlanCADApp -C bin .
           cp dist/HDE-Studio.jar output/HDE-Studio.jar
+        shell: bash
+
+      - name: Run Automated Regression & Unit Test Suite
+        run: |
+          java -Djava.awt.headless=true -cp bin cadstudio.CADTestSuite
         shell: bash
 
       # --- WINDOWS PACKAGING ---
