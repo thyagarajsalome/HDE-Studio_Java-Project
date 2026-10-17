@@ -1142,41 +1142,191 @@ public class HousePlanCADApp extends JFrame {
             }
         }
 
+        private static String lastActivationError = null;
+
+        public static String getLastActivationError() {
+            if (lastActivationError != null && !lastActivationError.trim().isEmpty()) {
+                return lastActivationError;
+            }
+            return "Could not activate with the provided details. Please verify your purchase on HDE Web App or contact support at hdeadmin@gmail.com.";
+        }
+
+        private static void sendTelemetryAsync(final String email, final String key, final boolean success, final String reason) {
+            new Thread(() -> {
+                try {
+                    String cleanKey = key != null ? key.trim().toUpperCase() : "NONE";
+                    String cleanEmail = email != null ? email.trim().toLowerCase() : "unknown";
+                    String machineId = getMachineFingerprint();
+                    String os = System.getProperty("os.name", "") + " " + System.getProperty("os.arch", "");
+
+                    String json = "{"
+                            + "\"action\":\"verify\","
+                            + "\"email\":\"" + escapeJson(cleanEmail) + "\","
+                            + "\"license_key\":\"" + escapeJson(cleanKey) + "\","
+                            + "\"machine_id\":\"" + escapeJson(machineId) + "\","
+                            + "\"app_version\":\"v2.2.3\","
+                            + "\"os\":\"" + escapeJson(os) + "\","
+                            + "\"status\":\"" + (success ? "SUCCESS" : "FAILED") + "\","
+                            + "\"failure_reason\":\"" + (reason != null ? escapeJson(reason) : "") + "\""
+                            + "}";
+
+                    java.net.URI uri = java.net.URI.create("https://www.homedesignenglish.com/api/license");
+                    java.net.HttpURLConnection conn = (java.net.HttpURLConnection) uri.toURL().openConnection();
+                    conn.setRequestMethod("POST");
+                    conn.setRequestProperty("Content-Type", "application/json; utf-8");
+                    conn.setRequestProperty("Accept", "application/json");
+                    conn.setDoOutput(true);
+                    conn.setConnectTimeout(4000);
+                    conn.setReadTimeout(4000);
+
+                    try (java.io.OutputStream osStream = conn.getOutputStream()) {
+                        byte[] input = json.getBytes("UTF-8");
+                        osStream.write(input, 0, input.length);
+                    }
+                    conn.getResponseCode();
+                    conn.disconnect();
+                } catch (Exception ignored) {
+                }
+            }, "HDE-License-Telemetry").start();
+        }
+
+        private static String escapeJson(String s) {
+            if (s == null) return "";
+            return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ").replace("\r", "");
+        }
+
         public static boolean verifyAndActivate(String email, String key) {
-            if (email == null || !email.contains("@") || key == null) return false;
-            LicensePayload lp = verifyCryptographicKey(email, key);
-            if (lp == null) return false;
+            lastActivationError = null;
+            if (email == null || !email.contains("@") || key == null || key.trim().isEmpty()) {
+                lastActivationError = "Please enter a valid email address and license key.";
+                sendTelemetryAsync(email, key, false, lastActivationError);
+                return false;
+            }
+
+            String cleanEmail = email.trim().toLowerCase();
+            String cleanKey = key.trim();
+
+            // 1. Evaluate local cryptographic & format validation
+            LicensePayload lp = verifyCryptographicKey(cleanEmail, cleanKey);
+            if (lp == null || lp.isExpired()) {
+                if (lastActivationError == null) {
+                    lastActivationError = "Invalid license key format or unverified cryptographic signature.";
+                }
+                sendTelemetryAsync(cleanEmail, cleanKey, false, lastActivationError);
+                return false;
+            }
+
+            // 2. Attempt online cloud verification & telemetry
+            boolean onlineSuccess = false;
+            boolean onlineRejected = false;
+            String onlinePlan = null;
+            try {
+                String machineId = getMachineFingerprint();
+                String os = System.getProperty("os.name", "") + " " + System.getProperty("os.arch", "");
+                String payload = "{"
+                        + "\"action\":\"verify\","
+                        + "\"email\":\"" + escapeJson(cleanEmail) + "\","
+                        + "\"license_key\":\"" + escapeJson(cleanKey) + "\","
+                        + "\"machine_id\":\"" + escapeJson(machineId) + "\","
+                        + "\"app_version\":\"v2.2.3\","
+                        + "\"os\":\"" + escapeJson(os) + "\""
+                        + "}";
+
+                java.net.URI uri = java.net.URI.create("https://www.homedesignenglish.com/api/license");
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) uri.toURL().openConnection();
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Content-Type", "application/json; utf-8");
+                conn.setRequestProperty("Accept", "application/json");
+                conn.setDoOutput(true);
+                conn.setConnectTimeout(4000);
+                conn.setReadTimeout(4000);
+
+                try (java.io.OutputStream osStream = conn.getOutputStream()) {
+                    byte[] input = payload.getBytes("UTF-8");
+                    osStream.write(input, 0, input.length);
+                }
+
+                int code = conn.getResponseCode();
+                if (code == 200) {
+                    try (java.io.BufferedReader br = new java.io.BufferedReader(
+                            new java.io.InputStreamReader(conn.getInputStream(), "UTF-8"))) {
+                        StringBuilder sb = new StringBuilder();
+                        String line;
+                        while ((line = br.readLine()) != null) sb.append(line);
+                        String resp = sb.toString();
+                        if (resp.contains("\"valid\":true")) {
+                            onlineSuccess = true;
+                            if (resp.contains("\"plan_name\":\"")) {
+                                int sIdx = resp.indexOf("\"plan_name\":\"") + 13;
+                                int eIdx = resp.indexOf("\"", sIdx);
+                                if (eIdx > sIdx) onlinePlan = resp.substring(sIdx, eIdx);
+                            }
+                        } else if (resp.contains("\"valid\":false")) {
+                            if (!cleanKey.startsWith("HDE.")) {
+                                onlineRejected = true;
+                                if (resp.contains("\"message\":\"")) {
+                                    int sIdx = resp.indexOf("\"message\":\"") + 11;
+                                    int eIdx = resp.indexOf("\"", sIdx);
+                                    if (eIdx > sIdx) lastActivationError = resp.substring(sIdx, eIdx);
+                                }
+                            }
+                        }
+                    }
+                }
+                conn.disconnect();
+            } catch (Exception netErr) {
+                // Network unreachable or timeout -> fall back cleanly to local offline validation
+            }
+
+            if (onlineRejected) {
+                sendTelemetryAsync(cleanEmail, cleanKey, false, lastActivationError);
+                return false;
+            }
 
             try {
                 java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(HousePlanCADApp.class);
-                prefs.put(PREF_LICENSE_EMAIL, lp.email);
-                prefs.put(PREF_LICENSE_KEY, key.trim());
+                prefs.put(PREF_LICENSE_EMAIL, cleanEmail);
+                prefs.put(PREF_LICENSE_KEY, cleanKey);
 
                 String plan;
-                if ("GLOBAL_PRO".equals(lp.plan) || lp.plan.contains("GLOBAL") || lp.plan.contains("ALL")) {
-                    plan = "All-Access Global Pro Edition (India + USA)";
-                } else if ("USA_PRO".equals(lp.plan) || lp.plan.contains("USA")) {
-                    plan = "USA & International Edition";
-                } else if ("IND_PRO".equals(lp.plan) || lp.plan.contains("IND")) {
-                    plan = "India Standard Edition";
+                if (onlinePlan != null && !onlinePlan.isEmpty()) {
+                    plan = onlinePlan;
+                } else if (lp != null) {
+                    if ("GLOBAL_PRO".equals(lp.plan) || lp.plan.contains("GLOBAL") || lp.plan.contains("ALL")) {
+                        plan = "All-Access Global Pro Edition (India + USA)";
+                    } else if ("USA_PRO".equals(lp.plan) || lp.plan.contains("USA")) {
+                        plan = "USA & International Edition";
+                    } else if ("IND_PRO".equals(lp.plan) || lp.plan.contains("IND")) {
+                        plan = "India Standard Edition";
+                    } else {
+                        plan = "HDE Studio Commercial License (" + lp.plan + ")";
+                    }
                 } else {
-                    plan = "HDE Studio Commercial License (" + lp.plan + ")";
+                    plan = "All-Access Global Pro Edition (India + USA)";
                 }
                 prefs.put(PREF_LICENSE_PLAN, plan);
 
                 // Auto-configure initial region based on license plan
-                if (lp.plan.contains("USA") && !lp.plan.contains("IND")) {
+                if (plan.contains("USA") && !plan.contains("IND")) {
                     prefs.put("hde_region_profile", RegionProfile.USA_INTERNATIONAL.name());
-                } else if (lp.plan.contains("IND") && !lp.plan.contains("USA")) {
+                } else if (plan.contains("IND") && !plan.contains("USA")) {
                     prefs.put("hde_region_profile", RegionProfile.INDIA.name());
                 }
 
                 // Compute local cryptographic token bound to machine hardware
-                String token = computeBindingToken(key, lp.email);
+                String token = computeBindingToken(cleanKey, cleanEmail);
                 prefs.put(PREF_LICENSE_TOKEN, token);
                 prefs.flush();
+
+                // If activated via offline fallback, send a background telemetry confirmation
+                if (!onlineSuccess) {
+                    sendTelemetryAsync(cleanEmail, cleanKey, true, "Activated via offline cryptographic validation");
+                }
+
                 return true;
             } catch (Exception e) {
+                lastActivationError = "Internal preference error: " + e.getMessage();
+                sendTelemetryAsync(cleanEmail, cleanKey, false, lastActivationError);
                 return false;
             }
         }
@@ -3004,7 +3154,7 @@ public class HousePlanCADApp extends JFrame {
                 return;
             }
             if (key.isEmpty() || key.length() < 12) {
-                showModernDialog(dlg, "License Error", "Invalid Key", "Please enter a valid HDE Studio license key format (e.g. HDE-IND-XXXX-XXXX, HDE-USA-XXXX-XXXX, or HDE-GLOBAL-XXXX).");
+                showModernDialog(dlg, "License Error", "Invalid Key", "Please enter a valid HDE Studio license key format (e.g. HDE-PRO-XXXX-XXXX, HDE-IND-XXXX-XXXX, or HDE-USA-XXXX-XXXX).");
                 return;
             }
 
@@ -3014,7 +3164,7 @@ public class HousePlanCADApp extends JFrame {
                 showModernDialog(dlg, "Success", "Workstation Activated!", "HDE Studio Commercial License verified successfully for " + email + ".\nPlan: " + LicenseManager.getLicensePlan());
                 dlg.dispose();
             } else {
-                showModernDialog(dlg, "Activation Failed", "Unable to Verify Key", "Could not activate with the provided details. Please verify your purchase on HDE Web App or contact support.");
+                showModernDialog(dlg, "Activation Failed", "Unable to Verify Key", LicenseManager.getLastActivationError());
             }
         };
         activateBtn.addActionListener(e -> doActivate.run());
@@ -3233,7 +3383,7 @@ public class HousePlanCADApp extends JFrame {
                 return;
             }
             if (key.isEmpty() || key.length() < 12) {
-                showModernDialog(dlg, "License Error", "Invalid Key", "Please enter a valid HDE Studio license key format (e.g. HDE-IND-XXXX-XXXX, HDE-USA-XXXX-XXXX, or HDE-GLOBAL-XXXX).");
+                showModernDialog(dlg, "License Error", "Invalid Key", "Please enter a valid HDE Studio license key format (e.g. HDE-PRO-XXXX-XXXX, HDE-IND-XXXX-XXXX, or HDE-USA-XXXX-XXXX).");
                 return;
             }
 
@@ -3245,7 +3395,7 @@ public class HousePlanCADApp extends JFrame {
                     showRegionSelectorDialog(true);
                 }
             } else {
-                showModernDialog(dlg, "Activation Failed", "Unable to Verify Key", "Could not activate with the provided details. Please verify your purchase on HDE Web App or contact support.");
+                showModernDialog(dlg, "Activation Failed", "Unable to Verify Key", LicenseManager.getLastActivationError());
             }
         });
         btnRow.add(activateBtn);
